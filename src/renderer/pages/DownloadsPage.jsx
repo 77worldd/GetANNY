@@ -147,9 +147,13 @@ function DownloadRow({ item, onConfirm }) {
     [menu, setMenu] = useState(null);
   const Icon =
     item.kind === "torrent" ? LuMagnet : icons[item.category] || LuFile;
-  const pct = item.totalSize
-    ? Math.min(100, (item.downloadedSize / item.totalSize) * 100)
-    : 0;
+  const knownSize = item.totalSize > 0 || item.status === "completed";
+  const pct =
+    item.totalSize > 0
+      ? Math.min(100, (item.downloadedSize / item.totalSize) * 100)
+      : item.status === "completed"
+        ? 100
+        : 0;
   const act = async (action) => {
     setBusy(true);
     try {
@@ -298,23 +302,34 @@ function DownloadRow({ item, onConfirm }) {
         <div className="transfer-numbers">
           <span>
             {bytes(item.downloadedSize)}
-            {item.totalSize ? (
-              <span className="muted"> / {bytes(item.totalSize)}</span>
+            {knownSize ? (
+              <span className="muted">
+                {" "}
+                / {item.approximateSize ? "≈ " : ""}
+                {bytes(item.totalSize)}
+              </span>
             ) : (
               <span className="muted"> / unknown</span>
             )}
           </span>
           <span className="transfer-percent">
-            {item.totalSize ? percent(pct) : "—"}
+            {knownSize
+              ? `${item.approximateSize ? "≈ " : ""}${percent(pct)}`
+              : "—"}
           </span>
         </div>
         <div
-          className={`progress-track ${!item.totalSize && active(item) ? "indeterminate" : ""}`}
+          className={`progress-track ${!knownSize && active(item) ? "indeterminate" : ""}`}
           role="progressbar"
           aria-label={`${item.filename} progress`}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuenow={item.totalSize ? Math.round(pct) : undefined}
+          aria-valuenow={knownSize ? Math.round(pct) : undefined}
+          aria-valuetext={
+            knownSize
+              ? `${item.approximateSize ? "Approximately " : ""}${Math.round(pct)}%`
+              : `${bytes(item.downloadedSize)} transferred; total unknown`
+          }
         >
           <span style={{ width: `${pct}%` }} />
         </div>

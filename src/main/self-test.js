@@ -169,6 +169,38 @@ async function runSelfTest({ services: s, win, app, binPath, userDataPath }) {
         return { renderer: win.webContents.getURL(), version: result.version };
       },
     );
+    await check(
+      "Real window buttons minimize, maximize and restore with correct renderer state",
+      async () => {
+        const click = (label) =>
+          win.webContents.executeJavaScript(
+            `document.querySelector('button[aria-label="${label}"]').click()`,
+          );
+        await click("Maximize window");
+        await until(() => win.isMaximized(), "actual native maximize");
+        await until(
+          () =>
+            win.webContents.executeJavaScript(
+              `!!document.querySelector('button[aria-label="Restore window"]')`,
+            ),
+          "renderer maximized state",
+        );
+        await click("Restore window");
+        await until(() => !win.isMaximized(), "actual native restore");
+        await until(
+          () =>
+            win.webContents.executeJavaScript(
+              `!!document.querySelector('button[aria-label="Maximize window"]')`,
+            ),
+          "renderer restored state",
+        );
+        await click("Minimize window");
+        await until(() => win.isMinimized(), "actual native minimize");
+        win.restore();
+        win.show();
+        await until(() => !win.isMinimized(), "restore after minimization");
+      },
+    );
     await check("HTTP segmented transfer and exact SHA-256", async () => {
       const item = await finish(
         await s.manager.addDownload({

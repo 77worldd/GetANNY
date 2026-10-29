@@ -100,6 +100,8 @@ class BrowserDetector {
           for (const name of names) {
             // chrome.exe also names Helium / Chromium; do not misattribute it to those browsers.
             if (["helium", "chromium"].includes(browser.id)) continue;
+            // launcher.exe is generic; only trust Opera's explicit install paths.
+            if (name.toLowerCase() === "launcher.exe") continue;
             for (const hive of ["HKCU", "HKLM"]) {
               try {
                 const result = await exec(

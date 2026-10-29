@@ -187,8 +187,9 @@ export default function MediaPage({ tools }) {
               </span>
               <h2>{result.title}</h2>
               <p>
-                {result.formats.length} playable formats · Storyboards and
-                duplicates filtered out
+                {result.formats.length} playable{" "}
+                {result.formats.length === 1 ? "format" : "formats"} ·
+                Storyboards and duplicates filtered out
               </p>
             </div>
           </div>

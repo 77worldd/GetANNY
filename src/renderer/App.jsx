@@ -174,7 +174,9 @@ export default function App() {
   };
   useEffect(() => {
     load();
-    const cleanup = api.on("window:state", setMaximized);
+    const cleanup = api.on("window:state", (value) =>
+      setMaximized(!!value.maximized),
+    );
     return cleanup;
   }, []);
   useEffect(() => {

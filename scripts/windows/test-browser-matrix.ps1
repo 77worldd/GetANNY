@@ -23,6 +23,15 @@ function Fetch-Browser([string]$id) {
  if($process.ExitCode -notin @(0,3010)){throw "$id installer exited $($process.ExitCode)"}
  $paths=if($id -eq 'vivaldi'){@("$env:LOCALAPPDATA\Vivaldi\Application\vivaldi.exe","$env:PROGRAMFILES\Vivaldi\Application\vivaldi.exe")}else{@("$env:LOCALAPPDATA\Programs\Opera\opera.exe","$env:PROGRAMFILES\Opera\opera.exe")}
  foreach($candidate in $paths){if(Test-Path $candidate){return $candidate}}
+ if($id -eq 'opera') {
+  # Opera also ships launcher.exe at the root and its actual browser in a
+  # versioned subdirectory. Use the real browser, preserving the CDP pipe.
+  foreach($directory in @("$env:LOCALAPPDATA\Programs\Opera","$env:PROGRAMFILES\Opera","${env:PROGRAMFILES(X86)}\Opera")) {
+   if(-not(Test-Path $directory)){continue}
+   $candidate=Get-ChildItem $directory -Filter opera.exe -File -Recurse | Select-Object -First 1
+   if($candidate){return $candidate.FullName}
+  }
+ }
  throw "$id installed, but its executable was not found"
 }
 foreach($id in @('helium','brave','vivaldi','opera','firefox')) {

@@ -50,6 +50,8 @@ class MediaEngine extends EventEmitter {
           this.tracks.set(key, {
             bytes: Number(value.downloaded_bytes) || 0,
             total: Number(value.total_bytes || value.total_bytes_estimate) || 0,
+            approximate:
+              !value.total_bytes && Number(value.total_bytes_estimate) > 0,
           });
           const tracks = [...this.tracks.values()];
           const downloadedSize = tracks.reduce(
@@ -73,7 +75,8 @@ class MediaEngine extends EventEmitter {
           this.emit("progress", this.id, {
             downloadedSize,
             totalSize,
-            approximateSize: !value.total_bytes,
+            approximateSize:
+              totalSize > 0 && tracks.some((track) => track.approximate),
             speed: Number(value.speed) || 0,
             eta: Number.isFinite(value.eta) ? value.eta : null,
             phase: finalizing
@@ -104,6 +107,7 @@ class MediaEngine extends EventEmitter {
         filename: path.basename(filePath),
         totalSize: stat.size,
         downloadedSize: stat.size,
+        approximateSize: false,
       });
     } catch (error) {
       if (this.wantedState) {

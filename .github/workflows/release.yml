@@ -89,11 +89,11 @@ jobs:
         run: |
           # Check annotations stay readable through GitHub's API even when a
           # development sandbox cannot reach the external Actions log host.
-          function Annotate([string] $title, [string] $text) {
+          function Annotate([string] $title, [string] $text, [string] $level='error') {
             $text = [regex]::Replace($text,'[ \t]+',' ')
             if ($text.Length -gt 3800) { $text = $text.Substring($text.Length - 3800) }
             $text = $text.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
-            Write-Output "::error title=$title::$text"
+            Write-Output "::$level title=$title::$text"
           }
           if (Test-Path test-results/windows/backend-junit.xml) {
             [xml]$junit = Get-Content test-results/windows/backend-junit.xml -Raw
@@ -104,7 +104,10 @@ jobs:
             if ($report.checks) { $report.checks | Where-Object passed -eq $false | ForEach-Object { Annotate $_.name $_.error } }
             elseif ($report.passed -eq $false) { Annotate $_.Name ($report | ConvertTo-Json -Depth 12) }
           }
-          Get-ChildItem test-results/windows -File -Filter '*.log' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'backend-tests.log' -and ($_.Name -ne 'native-launcher.log' -or (Select-String -Path $_.FullName -Pattern 'not ok|ERR!|Error:' -Quiet)) } | ForEach-Object { Annotate $_.Name ((Get-Content $_.FullName -Tail 35) -join "`n") }
+          Get-ChildItem test-results/windows -File -Filter '*.log' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'backend-tests.log' -and ($_.Name -ne 'native-launcher.log' -or (Select-String -Path $_.FullName -Pattern 'not ok|ERR!|Error:' -Quiet)) } | ForEach-Object { Annotate "Diagnostic log $($_.Name)" ((Get-Content $_.FullName -Tail 35) -join "`n") 'notice' }
+      - name: Summarize measured evidence without publishing user secrets
+        if: always()
+        run: node scripts/report-windows-evidence.js
       - name: Retain executable test reports and installation logs even on failure
         if: always()
         uses: actions/upload-artifact@v7

@@ -102,6 +102,9 @@ const browsers = [
       "%LOCALAPPDATA%/Programs/Opera/opera.exe",
       "%PROGRAMFILES%/Opera/opera.exe",
       "%PROGRAMFILES(X86)%/Opera/opera.exe",
+      "%LOCALAPPDATA%/Programs/Opera/launcher.exe",
+      "%PROGRAMFILES%/Opera/launcher.exe",
+      "%PROGRAMFILES(X86)%/Opera/launcher.exe",
     ],
   },
   {

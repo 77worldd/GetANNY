@@ -351,3 +351,58 @@ test("browser review and media requests are acknowledged as review, not fake sta
     false,
   );
 });
+
+test("read-only MSI extension resources and older prepared copies remain updateable without changing installed source", async (t) => {
+  const folder = await temporary(t),
+    source = path.join(folder, "resources");
+  await fs.cp(path.resolve("dist-extension"), source, { recursive: true });
+  const sourceConfig = path.join(source, "chromium", "config.js");
+  await fs.chmod(sourceConfig, 0o444);
+  const installer = new ExtensionInstaller({
+    extensionPath: source,
+    userDataPath: path.join(folder, "user-data"),
+  });
+  const prepared = await installer.install("brave");
+  const destination = path.join(prepared.path, "config.js");
+  assert.match(await fs.readFile(destination, "utf8"), /brave/);
+  assert.equal(
+    (await fs.stat(sourceConfig)).mode & 0o222,
+    0,
+    "installed read-only source must remain untouched",
+  );
+  await fs.chmod(destination, 0o444);
+  await installer.install("brave");
+  await fs.writeFile(destination, "globalThis.GETANNY_BROWSER = 'brave';\n");
+  assert.equal((await installer.check("brave")).prepared, true);
+  await fs.chmod(sourceConfig, 0o600); // portable test teardown only
+});
+
+test("per-user native launcher copies lose MSI read-only flags and can be replaced on update", async (t) => {
+  const folder = await temporary(t),
+    bin = path.join(folder, "bin");
+  await fs.mkdir(bin);
+  // Structural fixture only; actual C# execution has its own mandatory CI gate.
+  const source = path.join(bin, "GetANNY.NativeHost.exe");
+  await fs.writeFile(source, "unit launcher version one");
+  await fs.chmod(source, 0o444);
+  const host = new NativeMessagingHost({
+    platform: "win32",
+    userDataPath: path.join(folder, "data"),
+    binPath: bin,
+    token: "a".repeat(64),
+  });
+  const launcher = await host.prepareLauncher();
+  assert.notEqual((await fs.stat(launcher)).mode & 0o200, 0);
+  assert.equal((await fs.stat(source)).mode & 0o222, 0);
+  await fs.chmod(launcher, 0o444);
+  await fs.chmod(source, 0o600);
+  await fs.writeFile(source, "unit launcher version two");
+  await fs.chmod(source, 0o444);
+  await host.prepareLauncher();
+  assert.equal(
+    await fs.readFile(launcher, "utf8"),
+    "unit launcher version two",
+  );
+  assert.notEqual((await fs.stat(launcher)).mode & 0o200, 0);
+  await fs.chmod(source, 0o600);
+});

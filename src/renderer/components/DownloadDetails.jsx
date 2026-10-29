@@ -7,7 +7,9 @@ export default function DownloadDetails({ item, onClose }) {
     ["Type", item.kind],
     [
       "File size",
-      item.totalSize ? bytes(item.totalSize) : "Not provided by server",
+      item.totalSize > 0 || item.status === "completed"
+        ? `${item.approximateSize ? "Approximately " : ""}${bytes(item.totalSize)}`
+        : "Not provided by server",
     ],
     ["Transferred", bytes(item.downloadedSize)],
     ["Speed", item.speed > 0 ? `${bytes(item.speed)}/s` : "—"],

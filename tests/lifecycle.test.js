@@ -1,7 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { PassThrough } = require("node:stream");
-const fs = require("node:fs/promises");
 const path = require("node:path");
 const { Database } = require("../src/main/database/database");
 const { DownloadsRepo } = require("../src/main/database/downloads-repo");

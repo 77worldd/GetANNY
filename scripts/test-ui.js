@@ -98,6 +98,27 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
         has: page.getByRole("button", { name: failed, exact: true }),
       }),
     ).toContainText("HTTP 404");
+    const emptyName = `Verified empty file ${Date.now()}.bin`;
+    await add(fixture.url + "/empty", emptyName);
+    await nav("All downloads").click();
+    const emptyRow = page.getByRole("listitem").filter({
+      has: page.getByRole("button", { name: emptyName, exact: true }),
+    });
+    await expect(emptyRow.getByText("Completed", { exact: true })).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(emptyRow.locator(".transfer-numbers")).toContainText(
+      "0 B / 0 B",
+    );
+    await expect(emptyRow.locator('[role="progressbar"]')).toHaveAttribute(
+      "aria-valuenow",
+      "100",
+    );
+    const emptyItem = (await invoke("download:get-all")).find(
+      (item) => item.filename === emptyName,
+    );
+    if ((await fs.stat(emptyItem.filePath)).size !== 0)
+      throw new Error("Empty-file completion did not produce zero bytes");
     await nav("Media studio").click();
     await page
       .getByLabel("VIDEO OR AUDIO PAGE")
@@ -233,6 +254,7 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
         "New-download IPC/SSE list updates",
         "HTTP UI pause/resume and hash verification",
         "HTTP 404 failure view",
+        "Actual empty-file completion shows verified zero bytes, not unknown size",
         "Real yt-dlp format analysis and video download",
         "Validated settings affect backend and theme",
         "Responsive pages at 1320,1024,760,480 pixels",

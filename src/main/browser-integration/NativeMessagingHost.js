@@ -112,8 +112,13 @@ class NativeMessagingHost {
         fs.readFile(source),
         fs.readFile(launcher).catch(() => null),
       ]);
-      if (!oldFile || !newFile.equals(oldFile))
+      if (!oldFile || !newFile.equals(oldFile)) {
+        // CopyFile retains MSI's read-only attribute. Our per-user launcher
+        // must remain replaceable on upgrade; never chmod the installed source.
+        if (oldFile) await fs.chmod(launcher, 0o700);
         await fs.copyFile(source, launcher);
+        await fs.chmod(launcher, 0o700);
+      }
       return launcher;
     }
     const launcher = path.join(this.base, "getanny-native-host");

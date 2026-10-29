@@ -184,6 +184,11 @@ for (const page of ["watch.html", "listen.html", "adaptive.mpd"]) {
       assert.equal(failure, undefined, failure?.message);
       assert.equal(engine.status, "completed");
       assert.ok(completed.totalSize > 0);
+      assert.equal(
+        completed.approximateSize,
+        false,
+        "actual output stat is not an estimated network total",
+      );
       assert.ok(progress.some((p) => p.downloadedSize > 0));
       const streams = JSON.parse(
         execFileSync(
@@ -211,7 +216,7 @@ test("adaptive progress never reports the first stream as the entire download", 
       onProgress({
         filename: "video.mp4",
         downloaded_bytes: 100,
-        total_bytes: 100,
+        total_bytes_estimate: 100,
         status: "finished",
       });
       first = events.at(-1);
@@ -245,6 +250,11 @@ test("adaptive progress never reports the first stream as the entire download", 
   assert.notEqual(first.phase, "Finalizing media");
   assert.equal(events[1].totalSize, 130);
   assert.equal(events[1].downloadedSize, 120);
+  assert.equal(
+    events[1].approximateSize,
+    true,
+    "one estimated track makes the combined total an estimate",
+  );
 });
 
 test("an explicitly silent video remains downloadable without requiring a nonexistent audio stream", () => {

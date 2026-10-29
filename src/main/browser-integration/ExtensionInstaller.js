@@ -1,6 +1,22 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { getBrowser } = require("./catalog");
+// MSI resources can be read-only. Only normalize our per-user prepared copies;
+// never change installed resources or the user's browser/profile permissions.
+async function makeWritable(folder) {
+  for (const entry of await fs
+    .readdir(folder, { withFileTypes: true })
+    .catch((error) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    })) {
+    const file = path.join(folder, entry.name);
+    if (entry.isDirectory()) {
+      await fs.chmod(file, 0o700);
+      await makeWritable(file);
+    } else if (entry.isFile()) await fs.chmod(file, 0o600);
+  }
+}
 class ExtensionInstaller {
   constructor({ extensionPath, userDataPath } = {}) {
     this.extensionPath = extensionPath;
@@ -20,7 +36,9 @@ class ExtensionInstaller {
     const target = path.join(this.userDataPath, "extensions", browserId);
     await fs.mkdir(target, { recursive: true });
     // Preserve a stable unpacked extension directory across application updates.
+    await makeWritable(target);
     await fs.cp(source, target, { recursive: true, force: true });
+    await makeWritable(target);
     await fs.writeFile(
       path.join(target, "config.js"),
       `globalThis.GETANNY_BROWSER = ${JSON.stringify(browserId)};\n`,

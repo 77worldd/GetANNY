@@ -130,6 +130,8 @@ export function Dialog({
   const openerRef = useRef(document.activeElement);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
   useEffect(() => {
     const previous = openerRef.current;
     const root = ref.current;
@@ -147,7 +149,7 @@ export function Dialog({
     const keydown = (event) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        closeRef.current?.();
+        if (!busyRef.current) closeRef.current?.();
       }
       if (event.key === "Tab") {
         const items = focusable(),
