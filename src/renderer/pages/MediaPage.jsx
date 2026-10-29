@@ -269,7 +269,9 @@ export default function MediaPage({ tools }) {
                               : item.hasVideo
                                 ? item.audioUnknown
                                   ? "Audio not reported"
-                                  : "Video + audio included"
+                                  : item.hasAudio
+                                    ? "Video + audio included"
+                                    : "Video only · no audio track"
                                 : item.audioChannels
                                   ? `${item.audioChannels} channels`
                                   : "Audio stream",
@@ -315,7 +317,9 @@ export default function MediaPage({ tools }) {
                       ? "Audio only"
                       : format?.audioUnknown
                         ? "Video · tracks unreported"
-                        : "Video with audio"}
+                        : format?.hasAudio || format?.mergeAudio
+                          ? "Video with audio"
+                          : "Video only"}
                   </dd>
                 </div>
                 <div>

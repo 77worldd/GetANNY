@@ -246,3 +246,21 @@ test("adaptive progress never reports the first stream as the entire download", 
   assert.equal(events[1].totalSize, 130);
   assert.equal(events[1].downloadedSize, 120);
 });
+
+test("an explicitly silent video remains downloadable without requiring a nonexistent audio stream", () => {
+  const [format] = normalizeFormats({
+    formats: [
+      {
+        format_id: "silent",
+        url: "https://example.test/silent.mp4",
+        ext: "mp4",
+        vcodec: "avc1",
+        acodec: "none",
+      },
+    ],
+  });
+  assert.equal(format.hasVideo, true);
+  assert.equal(format.hasAudio, false);
+  assert.equal(format.audioUnknown, false);
+  assert.equal(format.mergeAudio, false);
+});

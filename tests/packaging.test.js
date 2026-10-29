@@ -74,7 +74,7 @@ test("real electron-builder MSI template gets safe shortcut components, OS check
   await fs.writeFile(filename, xml);
   await customizeMsi(filename);
   const result = await fs.readFile(filename, "utf8");
-  assert.match(result, /http:\/\/schemas.microsoft.com\/wix\/2006\/wi/);
+  assert.match(result, /http:\/\/wixtoolset.org\/schemas\/v4\/wxs/);
   assert.match(
     result,
     /GETANNY_WINDOWS_BUILD &gt;= 10240|GETANNY_WINDOWS_BUILD >= 10240/,

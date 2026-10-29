@@ -1,6 +1,7 @@
 /* Shared extension implementation. Browser-specific config is generated at packaging. */
 if (typeof importScripts === "function") importScripts("config.js");
 const api = globalThis.browser || globalThis.chrome;
+const action = api.action || api.browserAction;
 const pending = new Map();
 const detected = new Map();
 let nativePort,
@@ -211,7 +212,7 @@ function remember(tabId, media) {
       mimeType: media.mimeType || "",
     });
     detected.set(tabId, list.slice(0, 20));
-    api.action
+    action
       ?.setBadgeText({ tabId, text: String(Math.min(20, list.length)) })
       .catch?.(() => {});
   }
@@ -292,7 +293,7 @@ api.tabs.onRemoved.addListener((tabId) => detected.delete(tabId));
 api.tabs.onUpdated.addListener((tabId, changes) => {
   if (changes.status === "loading") {
     detected.delete(tabId);
-    api.action?.setBadgeText({ tabId, text: "" }).catch?.(() => {});
+    action?.setBadgeText({ tabId, text: "" }).catch?.(() => {});
   }
 });
 api.webRequest?.onHeadersReceived.addListener(

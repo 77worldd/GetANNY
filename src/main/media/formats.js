@@ -15,6 +15,13 @@ function audioCodec(format) {
 }
 function normalizeFormats(info) {
   const seen = new Set();
+  const separateAudio = (info.formats || []).some(
+    (format) =>
+      format.url &&
+      !videoCodec(format) &&
+      audioCodec(format) &&
+      !format.has_drm,
+  );
   return (info.formats || [])
     .filter((format) => {
       const video = videoCodec(format);
@@ -37,7 +44,7 @@ function normalizeFormats(info) {
         group: hasVideo ? "video" : "audio",
         hasVideo,
         hasAudio,
-        mergeAudio: hasVideo && format.acodec === "none",
+        mergeAudio: hasVideo && format.acodec === "none" && separateAudio,
         audioUnknown: hasVideo && !format.acodec,
         quality: hasVideo
           ? format.height

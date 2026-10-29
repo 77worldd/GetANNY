@@ -1,11 +1,8 @@
 const fs = require("node:fs/promises");
 module.exports = async (filename) => {
   let xml = await fs.readFile(filename, "utf8");
-  // electron-builder's bundled candle/light toolchain consumes the WiX 3 schema.
-  xml = xml.replace(
-    "http://wixtoolset.org/schemas/v4/wxs",
-    "http://schemas.microsoft.com/wix/2006/wi",
-  );
+  // Preserve the bundled candle toolchain's own schema. Its WiX 4 preview
+  // still uses Product, but explicitly requires the v4 namespace.
   // MSI can report VersionNT=603 on Windows 10/11. Check the real OS build,
   // not a compatibility-virtualized VersionNT value.
   xml = xml

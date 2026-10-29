@@ -28,10 +28,27 @@ jobs:
           cache: npm
       - name: Install locked dependencies (no early Electron ABI rebuild)
         run: npm ci --ignore-scripts
+      - name: Restore Node-ABI native modules (never Electron-ABI binaries)
+        id: node-natives
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            node_modules/better-sqlite3/build/Release/*.node
+            node_modules/node-datachannel/build/Release/*
+          key: node22-windows-x64-native-${{ hashFiles('package-lock.json') }}
       - name: Native dependencies for Node test runner
+        if: steps.node-natives.outputs.cache-hit != 'true'
         run: |
           npm rebuild better-sqlite3
           npm rebuild node-datachannel
+      - name: Save Node ABI before any Electron rebuild
+        if: steps.node-natives.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules/better-sqlite3/build/Release/*.node
+            node_modules/node-datachannel/build/Release/*
+          key: node22-windows-x64-native-${{ hashFiles('package-lock.json') }}
       - name: Fetch pinned, checksum-verified tools and compile Windows native host
         run: npm run prepare:tools
       - name: Build all browser packages

@@ -21,6 +21,7 @@ let win,
   tray,
   exiting = false,
   shutdownFinished = false;
+if (process.platform === "win32") app.setAppUserModelId("com.getanny.app");
 const selfTest = process.argv.includes("--self-test");
 if (selfTest) app.disableHardwareAcceleration();
 const setupOnly = process.argv.includes("--setup-browser-hosts");
