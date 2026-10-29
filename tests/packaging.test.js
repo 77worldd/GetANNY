@@ -118,3 +118,49 @@ test("checked-in Chromium public key derives the allowlisted extension ID", asyn
   );
   assert.ok(manifest.permissions.includes("nativeMessaging"));
 });
+
+test("afterPack verifies the real SQLite N-API layout, torrent binary and worker; missing payloads fail closed", async (t) => {
+  const afterPack = require("../scripts/verify-installed-resources");
+  const root = await temporary(t),
+    resources = path.join(root, "resources");
+  const files = [
+    "bin/yt-dlp.exe",
+    "bin/ffmpeg.exe",
+    "bin/ffprobe.exe",
+    "bin/GetANNY.NativeHost.exe",
+    "bin/FFmpeg-LICENSE.txt",
+    "bin/FFmpeg-SOURCE.txt",
+    "native-host/native-host.js",
+    "native-host/node_modules/ws/index.js",
+    "native-host/node_modules/ws/lib/websocket.js",
+    "extension/chromium/manifest.json",
+    "extension/firefox/manifest.json",
+    "app.asar.unpacked/node_modules/better-sqlite3/prebuilds/win32-x64.node",
+    "app.asar.unpacked/node_modules/node-datachannel/build/Release/node_datachannel.node",
+    "app.asar.unpacked/src/main/engine/chunk-worker.js",
+  ];
+  // Structural fixtures only. Real executable loading is a separate installed
+  // Windows gate; a two-byte MZ fixture does not establish PE validity.
+  for (const file of files) {
+    const target = path.join(resources, file);
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(
+      target,
+      file.endsWith(".exe") ? "MZunit-fixture" : "structural unit fixture",
+    );
+  }
+  const context = { electronPlatformName: "win32", appOutDir: root };
+  await afterPack(context);
+  for (const file of files.slice(-3)) {
+    const target = path.join(resources, file),
+      body = await fs.readFile(target);
+    await fs.rm(target);
+    await assert.rejects(afterPack(context), /Packaged resource missing/);
+    await fs.writeFile(target, body);
+  }
+  await fs.writeFile(
+    path.join(resources, "bin/GetANNY.NativeHost.exe"),
+    "invalid header",
+  );
+  await assert.rejects(afterPack(context), /Not a real Windows executable/);
+});

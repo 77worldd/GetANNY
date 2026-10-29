@@ -15,7 +15,8 @@ module.exports = async (context) => {
     "native-host/node_modules/ws/lib/websocket.js",
     "extension/chromium/manifest.json",
     "extension/firefox/manifest.json",
-    "app.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+    "app.asar.unpacked/node_modules/better-sqlite3/prebuilds/win32-x64.node",
+    "app.asar.unpacked/node_modules/node-datachannel/build/Release/node_datachannel.node",
     "app.asar.unpacked/src/main/engine/chunk-worker.js",
   ])
     await fs.access(path.join(resources, file)).catch(() => {

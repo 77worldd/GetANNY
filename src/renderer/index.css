@@ -2822,10 +2822,9 @@ small {
     padding: 28px 25px;
   }
   .download-row {
-    grid-template-columns: 32px minmax(100px, 1fr) minmax(
-        150px,
-        185px
-      ) 96px 62px;
+    grid-template-columns:
+      32px minmax(100px, 1fr) minmax(150px, 185px)
+      96px 62px;
     gap: 10px;
     padding: 17px 14px;
   }

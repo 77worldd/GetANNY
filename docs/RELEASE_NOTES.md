@@ -22,7 +22,7 @@ A functional repair and cohesive desktop redesign, not just a screenshot reskin.
 
 - Packages are unsigned unless the attached Authenticode report explicitly says Valid. No signing identity was supplied during development.
 - Firefox ZIP is **unsigned development source**, not a Mozilla-signed production XPI. Regular Firefox permanent installation requires authorized signing. Chromium packages are unpacked developer-mode packages, not signed store CRXs or silently installed extensions. No extension-store update service is configured.
-- Chromium automated integration is not certification of Chrome, Helium, Brave, Firefox, Vivaldi, Opera or Edge. Those browsers require individual manual connection/download tests.
+- Read the attached `browser-matrix/matrix.json` for individually executed browser results. Chromium success alone does not certify any branded browser. Available Helium, Brave, Vivaldi, Opera and Firefox binaries are exercised separately; unavailable downloads are explicitly unverified. Google Chrome / Edge require manual approval and individual verification.
 - The Windows runner is not a pristine consumer VM; interactive wizard/shortcut/UAC flows, real cross-version v1 upgrades and clean-machine dependency checks remain manual.
 - Local HTML5 / DASH media tests verify real extraction/download/merging but do not certify every live website, authenticated media, regional access, DRM or playlist support. DRM and playlist downloading are not provided.
 - Per-download bandwidth / connection changes apply to new/resumed jobs. The limit is explicitly **per transfer**, not a misrepresented global limit.

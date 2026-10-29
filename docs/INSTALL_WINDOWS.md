@@ -40,16 +40,16 @@ Node 22.22+, npm, Visual Studio C++ build tools, Python for node-gyp, Windows SD
 
 ```powershell
 npm ci --ignore-scripts
-npm rebuild better-sqlite3
 npm rebuild node-datachannel
 npm run prepare:tools
 npm run build-extension
 npm test
 npm audit --audit-level=high
 npm run build:renderer
-npx electron-rebuild --force --only better-sqlite3
 npm run build:win
 ```
+
+The locked SQLite 13 dependency includes a Windows x64 N-API prebuild shared by Node and Electron; no legacy ABI swap is required. C++/Python tools are used only if a native dependency needs source compilation.
 
 Outputs: `dist/GetANNY Setup.exe` and `dist/GetANNY Setup.msi`. Missing tools, mismatched pinned binary hashes or missing extension/renderer resources fail packaging. Generated binaries are ignored by Git. Do not commit `bin/` executable tools, dependencies, installers, database files or browser profiles.
 

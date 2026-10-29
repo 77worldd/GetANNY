@@ -53,7 +53,7 @@ Single desktop titlebar, cohesive dark controls, keyboard-friendly dialogs, expl
 
 ## Development
 
-Use **Node 22.22+** and npm. Windows builds require Visual Studio C++ build tools (SQLite), .NET Framework's C# compiler (native launcher), and access to GitHub Releases. GitHub's `windows-latest` runner supplies these build tools.
+Use **Node 22.22+** and npm. Windows builds require Visual Studio C++ build tools / Python (if native fallback compilation is needed), .NET Framework's C# compiler (native launcher), and access to GitHub Releases. GitHub's `windows-latest` runner supplies these build tools.
 
 ```sh
 npm ci                         # downloads Electron / builds native modules
@@ -62,15 +62,14 @@ npm run build-extension        # unpacked resources + browser-specific ZIP packa
 npm run dev                    # Vite + Electron
 ```
 
-If you installed with `--ignore-scripts`, explicitly run `npm rebuild node-datachannel`, rebuild SQLite for Node before `npm test`, and rebuild it for Electron before launching/packaging. SQLite binaries for Node and Electron use different ABIs.
+If you installed with `--ignore-scripts`, explicitly run `npm rebuild node-datachannel`. The locked better-sqlite3 13 package supplies platform N-API prebuilds compatible with both Node 22 and the packaged Electron runtime; it does not require switching legacy Node/Electron ABI binaries. Installed-app tests still verify actual SQLite loading and persistence.
 
 ```sh
-npm rebuild better-sqlite3                 # Node test ABI
+npm rebuild node-datachannel               # if installed with --ignore-scripts
 npm run build-extension
 npm test
 npm audit --audit-level=high
 npm run build:renderer
-npx electron-rebuild --force --only better-sqlite3
 npm run build:win                          # actual EXE + MSI, no automatic publication
 ```
 
@@ -79,7 +78,6 @@ npm run build:win                          # actual EXE + MSI, no automatic publ
 ### Real web preview
 
 ```sh
-npm rebuild better-sqlite3   # Node ABI, if necessary
 npm run dev:web
 npm run test:ui             # in another terminal
 ```

@@ -4,10 +4,10 @@ Date: 29 October 2026. The baseline was `f74fea83`. This file distinguishes exec
 
 ## Executed in the Linux Arena workspace
 
-- Latest executed full Linux suite before Windows packaging iteration: **51/51 passed, 0 skipped, 14.8 seconds**. Additional silent-format regression tested separately (9/9 media tests); final delivery records the final combined count.
-- **Windows Node suite: 51/51 passed** in run [40972125952](https://github.com/77worldd/GetANNY/actions/runs/40972125952). That run failed later at MSI compilation, not at the tests; it is not an installed-app pass.
+- Latest executed full Linux suite: **55/55 passed, 0 skipped, 22.02 seconds**. Includes explicit Quit/cold-launch/EOF behavior, registration-only history preservation and the real SQLite N-API / torrent / worker packaging contract. Process-launch intent tests use a documented spy; actual download evidence uses real processes and transfers.
+- **Windows Node suite and compiled C# native launcher passed** in run [40974371770](https://github.com/77worldd/GetANNY/actions/runs/40974371770). That run failed later at an incorrect SQLite resource-path assertion, not at the tests; it is not an installed-app pass. Both actual installer formats previously built in [40972729146](https://github.com/77worldd/GetANNY/actions/runs/40972729146), whose installed native handshake failed; do not confuse a successful build with verified installation.
 - **Production renderer build and all 8 extension ZIP builds passed** after the latest UI/bridge changes.
-- Node 22.22.3; SQLite built against available local Node headers.
+- Node 22.22.3; actual better-sqlite3 13 platform N-API prebuild loaded and persistence verified.
 - Actual local HTTP and HTTPS servers; TLS certificate generated at test time (not a checked-in private key). Certificate rejection and explicit test-CA trust tested separately. Runtime TLS validation is never disabled globally.
 - 128 MiB HTTP range download, streamed through workers, exact final byte count and SHA-256 verified. Not a multi-terabyte stress test.
 - One-connection and segmented pause/resume; writers/workers settled before restart; changed-ETag continuation safely restarted; cancellation cleanup; real 404 / truncated-body / bad-range failures; unsupported HEAD and ignored Range fallback; chunked unknown length; empty files; retry / queue limits / concurrent naming.
@@ -16,15 +16,15 @@ Date: 29 October 2026. The baseline was `f74fea83`. This file distinguishes exec
 - Local fixture tests used registry-distributed development FFmpeg/ffprobe because the sandbox blocks GitHub's release-assets host. Windows production builds instead require the pinned SHA-256-verified tools in `scripts/tools-manifest.json`; there is no silent production fallback.
 - Actual native-protocol subprocess → authenticated local WebSocket → SQLite manager → hash-verified file. This local process is Node on Linux, **not** the Windows C# launcher and **not** an installed branded browser.
 - All seven target extension preparations / correct manifests / permissions; prepared does not assert installed. Auth failures and untrusted origins are rejected.
-- Live-backend UI test script uses real Chromium and the actual preview services, not mocked IPC. It checks onboarding, add/pause/resume/failure, real media analysis/download, settings, keyboard dialogs and window widths 1320/1024/760/480. See `.arena/ui-test/report.json` for the latest executed result. **Latest executed run: 9 checks passed; 16 screenshots, no uncaught renderer errors.**
+- Live-backend UI test script uses real Chromium and the actual preview services, not mocked IPC. It checks onboarding, add/pause/resume/failure, real media analysis/download, settings, keyboard dialogs and window widths 1320/1024/760/480. See `.arena/ui-test/report.json` for the latest executed result. **Latest executed run: 9 checks passed; 16 screenshots, no uncaught renderer errors (2026-10-29T23:39:39.787Z).** Shift+Tab/Tab focus trapping and focus return are asserted, not inferred from screenshots.
 - Root `npm audit` after dependency updates / removal reports zero known vulnerabilities. This is not a guarantee of absence of vulnerabilities.
 
 ## Windows CI gates (must actually pass before publishing)
 
 The workflow runs on **windows-latest**, not on this Linux sandbox. A green job requires:
 
-1. Locked dependency install; Node-ABI unit/integration tests with actual pinned media tools.
-2. Stable Chromium installation for real extension testing; SQLite rebuilt for Electron.
+1. Locked dependency install; real compiled C# smoke and Node unit/integration tests with actual pinned media tools.
+2. Stable Chromium installation for real extension testing; packaged SQLite N-API payload verified.
 3. Real **GetANNY Setup.exe** and **GetANNY Setup.msi** generated, with mandatory resources and binary hash verification.
 4. EXE install; launch its **installed** executable; exercise isolated preload/IPC/renderer, HTTP/HTTPS, pause/resume/cancel/failure, yt-dlp video/audio/merge, local TCP WebTorrent, C# executable/native/WS chain, persistent history/settings and actual layout capture.
 5. EXE same-version reinstall and process restart, preserving SQLite markers/history; actual uninstall.
