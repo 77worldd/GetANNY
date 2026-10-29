@@ -1,1 +1,12 @@
-import{create}from'zustand';const useSettingsStore=create((set,get)=>({settings:{},load:async()=>{const settings=await window.getanny.invoke('settings:get-all');set({settings});return settings},save:async(key,value)=>{await window.getanny.invoke('settings:set',{key,value});set(s=>({settings:{...s.settings,[key]:value}}))}}));export default useSettingsStore;
+import { create } from "zustand";
+import { api } from "../api";
+const useSettingsStore = create((set) => ({
+  settings: {},
+  setSettings: (settings) => set({ settings }),
+  save: async (key, value) => {
+    const settings = await api.invoke("settings:set", { key, value });
+    set({ settings });
+    return settings;
+  },
+}));
+export default useSettingsStore;

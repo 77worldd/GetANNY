@@ -1,1 +1,81 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="popup.css"><title>GetANNY</title></head><body><header><img src="icons/icon48.png"><div><b>GetANNY</b><small>Download assistant</small></div></header><main><div id="status" class="status">Checking desktop app…</div><label for="url">Download URL</label><input id="url" type="url" placeholder="https://example.com/file.zip"><button id="send">Send to GetANNY</button><button id="tab" class="secondary">Use current page</button><p id="message"></p></main><script src="popup.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="stylesheet" href="popup.css" />
+    <title>GetANNY · Browser assistant</title>
+  </head>
+  <body>
+    <header>
+      <img src="icons/icon48.png" alt="" />
+      <div><strong>GetANNY</strong><span>Browser assistant</span></div>
+      <button
+        id="reconnect"
+        class="icon"
+        title="Reconnect to desktop"
+        aria-label="Reconnect to desktop"
+      >
+        ↻
+      </button>
+    </header>
+    <main>
+      <div id="status" class="connection" role="status">
+        Checking desktop connection…
+      </div>
+      <div class="section-heading">
+        <h1>Send to your desktop</h1>
+        <button id="tab" class="text-button">Use this page</button>
+      </div>
+      <form id="download-form">
+        <label for="url">File or media URL</label
+        ><input
+          id="url"
+          type="url"
+          required
+          placeholder="https://"
+          autocomplete="off"
+        /><label for="kind">Action</label
+        ><select id="kind">
+          <option value="file">Download a file</option>
+          <option value="media">Analyze video or audio page</option></select
+        ><button id="send" class="primary" type="submit">
+          Send to GetANNY <span>↗</span>
+        </button>
+      </form>
+      <p id="message" role="status"></p>
+      <section id="detected-section" hidden>
+        <h2>Detected on this page</h2>
+        <div id="detected"></div>
+      </section>
+      <details>
+        <summary>Connection &amp; pairing</summary>
+        <p>
+          Prefer the native host: run Browser integration in GetANNY, then
+          reconnect. If unavailable, copy the desktop pairing key here. Never
+          share this key.
+        </p>
+        <label for="browser">This browser</label
+        ><select id="browser">
+          <option value="helium">Helium</option>
+          <option value="chrome">Google Chrome</option>
+          <option value="chromium">Chromium</option>
+          <option value="brave">Brave</option>
+          <option value="firefox">Firefox</option>
+          <option value="vivaldi">Vivaldi</option>
+          <option value="opera">Opera</option>
+          <option value="edge">Microsoft Edge</option></select
+        ><label for="pairing">Pairing key (optional with native host)</label
+        ><input
+          id="pairing"
+          type="password"
+          autocomplete="off"
+          placeholder="Paste key from desktop"
+        /><button id="pair" class="secondary">Save &amp; connect</button>
+      </details>
+    </main>
+    <footer>Real downloads. Your control.</footer>
+    <script src="config.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

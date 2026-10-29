@@ -1,11 +1,382 @@
-import React,{useEffect,useMemo,useState}from'react';import{useIPC}from'./hooks/useIPC';import useDownloadStore from'./stores/useDownloadStore';import useSettingsStore from'./stores/useSettingsStore';import useUIStore from'./stores/useUIStore';import{bytes,percent}from'./utils/format';
-const tabs=[['all','All downloads'],['active','Active'],['completed','Completed'],['media','Media'],['torrent','Torrents'],['browser','Browser setup'],['settings','Settings']];
-function Button({children,onClick,primary=false,disabled=false,className=''}){return <button className={`btn ${primary?'primary':''} ${className}`} onClick={onClick} disabled={disabled}>{children}</button>}
-function AddModal({close,notify}){const [url,setUrl]=useState(''),[filename,setFilename]=useState(''),[savePath,setSavePath]=useState(''),[busy,setBusy]=useState(false);useEffect(()=>{window.getanny.invoke('app:get-download-path').then(x=>setSavePath(x.path)).catch(()=>{})},[]);const choose=async()=>{const p=await window.getanny.invoke('dialog:select-folder');if(p)setSavePath(p)};const submit=async e=>{e.preventDefault();setBusy(true);try{await window.getanny.invoke('download:add',{url,filename:filename||undefined,savePath});close();notify('Download added to queue')}catch(err){notify(err.message)}finally{setBusy(false)}};return <div className="modal-backdrop" onMouseDown={e=>e.target===e.currentTarget&&close()}><form className="modal" onSubmit={submit}><h2>Add a download</h2><div className="field"><label>Download URL</label><input type="url" required autoFocus placeholder="https://example.com/file.zip" value={url} onChange={e=>setUrl(e.target.value)}/></div><div className="field"><label>File name (optional)</label><input value={filename} onChange={e=>setFilename(e.target.value)} placeholder="Use server-provided filename"/></div><div className="field"><label>Save to</label><div className="field-with-button"><input required value={savePath} onChange={e=>setSavePath(e.target.value)}/><Button onClick={choose}>Browse</Button></div></div><div className="modal-actions"><Button onClick={close}>Cancel</Button><Button primary disabled={busy}>{busy?'Adding…':'Add download'}</Button></div></form></div>}
-function DownloadRow({d,notify}){const act=async(action,...args)=>{try{await window.getanny.invoke(action,...args)}catch(e){notify(e.message)}};const pct=d.totalSize?100*d.downloadedSize/d.totalSize:0;return <div className="download-row"><div><div className="download-name" title={d.filename}>{d.filename||'Download'}</div><div className="download-url" title={d.url}>{d.url}</div><div className="status-pill" style={{marginTop:7}}>{d.status}{d.error?` · ${d.error}`:''}</div></div><div><div className="row-meta"><span>{bytes(d.downloadedSize)}{d.totalSize?` / ${bytes(d.totalSize)}`:''}</span><span>{d.speed>0?`${bytes(d.speed)}/s`:percent(pct)}</span></div><div className="progress-line"><span style={{width:`${pct}%`}}/></div><div className="row-meta"><span>{d.category||'File'}</span><span>{d.status==='completed'?'Complete':d.status==='downloading'?`${percent(pct)} · ${bytes(d.speed)}/s`:''}</span></div></div><div className="row-actions">{d.status==='downloading'?<button className="icon-btn" title="Pause" onClick={()=>act(d.kind==='torrent'?'torrent:pause':'download:pause',d.id)}>Ⅱ</button>:['paused','failed','queued'].includes(d.status)?<button className="icon-btn" title="Resume" onClick={()=>act(d.kind==='torrent'?'torrent:resume':d.status==='failed'?'download:retry':'download:resume',d.id)}>▶</button>:null}{d.status==='completed'&&<button className="icon-btn" title="Open file" onClick={()=>act('download:open-file',`${d.savePath}/${d.filename}`)}>↗</button>}<button className="icon-btn" title="Show folder" onClick={()=>act('download:open-folder',d.savePath)}>▣</button><button className="icon-btn" title="Remove" onClick={()=>act(d.kind==='torrent'?'torrent:remove':'download:remove',d.kind==='torrent'?d.id:{id:d.id})}>×</button></div></div>}
-function Downloads({filter,notify}){const items=useDownloadStore(s=>s.downloads);const addTorrent=async()=>{const torrent=window.prompt('Paste a magnet link or local .torrent file path');if(!torrent)return;try{const selected=await window.getanny.invoke('dialog:select-folder');const fallback=await window.getanny.invoke('app:get-download-path');await window.getanny.invoke('download:add-torrent',{torrent,savePath:selected||fallback.path});notify('Torrent added')}catch(e){notify(e.message)}};const rows=items.filter(d=>filter==='all'||(filter==='active'&&['downloading','queued','paused'].includes(d.status))||(filter==='completed'&&d.status==='completed')||(filter==='torrent'&&d.kind==='torrent'));return <><div className="page-heading"><div><h1>{filter==='all'?'All downloads':filter==='active'?'Active downloads':filter==='completed'?'Completed downloads':'Torrents'}</h1><div className="muted">Manage, pause, resume and open your downloads.</div></div>{filter==='torrent'?<Button primary onClick={addTorrent}>＋ Add torrent</Button>:<Button primary onClick={()=>useUIStore.getState().setAddModal(true)}>＋ Add download</Button>}</div><div className="stats"><Stat label="TOTAL" value={items.length}/><Stat label="ACTIVE" value={items.filter(d=>d.status==='downloading').length}/><Stat label="COMPLETED" value={items.filter(d=>d.status==='completed').length}/><Stat label="CURRENT SPEED" value={`${bytes(items.reduce((s,d)=>s+(+d.speed||0),0))}/s`}/></div><div className="panel" style={{padding:0,overflow:'hidden'}}><div className="table-head"><span>File / status</span><span>Progress</span><span>Actions</span></div>{rows.length?rows.map(d=><DownloadRow key={d.id} d={d} notify={notify}/>):<div className="empty"><strong>{filter==='completed'?'No completed downloads yet':'Your download list is empty'}</strong>Use Add download to start downloading a file.</div>}</div></>}
-function Stat({label,value}){return <div className="stat"><div className="stat-label">{label}</div><div className="stat-value">{value}</div></div>}
-function Media({notify}){const [url,setUrl]=useState(''),[formats,setFormats]=useState(null),[busy,setBusy]=useState(false);const [path,setPath]=useState('');useEffect(()=>{window.getanny.invoke('app:get-download-path').then(r=>setPath(r.path))},[]);const get=async()=>{setBusy(true);try{setFormats(await window.getanny.invoke('media:get-formats',url))}catch(e){notify(e.message)}finally{setBusy(false)}};const download=async f=>{try{await window.getanny.invoke('media:download',{url,formatId:f.formatId,savePath:path});notify('Media download started')}catch(e){notify(e.message)}};return <><div className="page-heading"><div><h1>Media extractor</h1><div className="muted">Inspect supported video and audio pages using the bundled yt-dlp engine.</div></div></div><div className="panel"><div className="field"><label>Media page URL</label><div className="field-with-button"><input value={url} onChange={e=>setUrl(e.target.value)} placeholder="Paste a video or audio URL"/><Button primary disabled={!url||busy} onClick={get}>{busy?'Inspecting…':'Get formats'}</Button></div></div>{formats&&<><h3>{formats.title}</h3><div className="muted">Destination: {path}</div><div className="quality-list">{formats.formats.map(f=><div className="quality" key={f.formatId}><span>{f.quality} · {f.ext} {f.filesize?`· ${bytes(f.filesize)}`:''}</span><Button onClick={()=>download(f)}>Download</Button></div>)}</div>{!formats.formats.length&&<p className="muted">No downloadable formats were returned. Check the URL and yt-dlp availability.</p>}</>}</div></>}
-function Browser({notify}){const [browsers,setBrowsers]=useState([]);const [ws,setWs]=useState({});const refresh=()=>Promise.all([window.getanny.invoke('browser:detect'),window.getanny.invoke('browser:status')]).then(([b,s])=>{setBrowsers(b);setWs(s.websocket)}).catch(e=>notify(e.message));useEffect(()=>{refresh()},[]);const doAction=async(id,action)=>{try{const r=await window.getanny.invoke(action,id);notify(r.instructions||`Completed: ${r.path||id}`);refresh()}catch(e){notify(e.message)}};return <><div className="page-heading"><div><h1>Browser integration</h1><div className="muted">Connect the browser extension to GetANNY via the local WebSocket service.</div></div><Button onClick={refresh}>Refresh</Button></div><div className="panel"><div className="setting-row"><div><h3>Local WebSocket service</h3><p>Listening on 127.0.0.1:29615 · {ws.clients||0} connected clients</p></div><span className="status-pill">{ws.running?'RUNNING':'OFFLINE'}</span></div><p className="muted">Install an unpacked extension, then register the native messaging host if you want to use the optional host bridge.</p>{browsers.map(b=><div className="browser-card" key={b.id}><div><strong>{b.name}</strong><div className="muted">{b.installed?'Browser detected':'Not detected'} · Extension package can be copied for manual loading.</div></div><div style={{display:'flex',gap:8}}><Button onClick={()=>doAction(b.id,'browser:install-extension')}>Prepare extension</Button><Button onClick={()=>doAction(b.id,'browser:setup-native-messaging')}>Register host</Button></div></div>)}</div></>}
-function Settings(){const [settings,setSettings]=useState({});const [platform,setPlatform]=useState('');useEffect(()=>{window.getanny.invoke('settings:get-all').then(setSettings);window.getanny.invoke('app:get-platform').then(x=>setPlatform(x.platform))},[]);const save=async(k,v)=>{setSettings(s=>({...s,[k]:v}));try{await window.getanny.invoke('settings:set',{key:k,value:v})}catch(e){alert(e.message)}};const pick=async()=>{const p=await window.getanny.invoke('dialog:select-folder');if(p)save('defaultDownloadPath',p)};return <><div className="page-heading"><div><h1>Settings</h1><div className="muted">Configure download behavior and storage.</div></div></div><div className="panel"><div className="setting-row"><div><h3>Default download folder</h3><p>{settings.defaultDownloadPath||'System Downloads'}</p></div><Button onClick={pick}>Choose folder</Button></div><div className="setting-row"><div><h3>Concurrent downloads</h3><p>Maximum number of simultaneous transfers.</p></div><select value={settings.maxConcurrentDownloads||3} onChange={e=>save('maxConcurrentDownloads',Number(e.target.value))}>{[1,2,3,4,5,8].map(n=><option key={n}>{n}</option>)}</select></div><div className="setting-row"><div><h3>Speed limit</h3><p>Limit total download speed in bytes per second. Zero means unlimited.</p></div><input type="number" min="0" value={settings.speedLimit||0} onChange={e=>save('speedLimit',Number(e.target.value))}/></div><div className="setting-row"><div><h3>Platform</h3><p>Application runtime platform.</p></div><span>{platform}</span></div></div></>}
-export default function App(){useIPC();const [version,setVersion]=useState('');const [service,setService]=useState({running:false,clients:0});const activeTab=useUIStore(s=>s.activeTab),setTab=useUIStore(s=>s.setActiveTab),showAdd=useUIStore(s=>s.addModal),setAdd=useUIStore(s=>s.setAddModal),toast=useUIStore(s=>s.toast),notify=useUIStore(s=>s.notify);useEffect(()=>{useDownloadStore.getState();window.getanny.invoke('download:get-all').then(useDownloadStore.getState().setDownloads).catch(e=>notify(e.message));window.getanny.invoke('app:get-version').then(v=>setVersion(v.version));window.getanny.invoke('browser:status').then(v=>setService(v.websocket)).catch(()=>{});useSettingsStore.getState().load().catch(()=>{})},[]);const page=activeTab==='media'?<Media notify={notify}/>:activeTab==='browser'?<Browser notify={notify}/>:activeTab==='settings'?<Settings/>:<Downloads filter={activeTab} notify={notify}/>;return <div className="window"><header className="topbar"><div className="brand"><img src="./icon.png" onError={e=>{e.currentTarget.style.display='none'}}/><span>GetANNY</span></div><div className="top-actions"><Button onClick={()=>setAdd(true)}>＋ New download</Button><button className="icon-btn" aria-label="Minimize" onClick={()=>window.getanny.window.minimize()}>—</button><button className="icon-btn" aria-label="Maximize" onClick={()=>window.getanny.window.maximize()}>□</button><button className="icon-btn" aria-label="Close" onClick={()=>window.getanny.window.close()}>×</button></div></header><div className="content"><aside className="sidebar">{tabs.map(([id,label])=><button className={`nav ${activeTab===id?'active':''}`} key={id} onClick={()=>setTab(id)}><span>{({'all':'⇩','active':'◉','completed':'✓','media':'♫','torrent':'◈','browser':'◎','settings':'⚙'})[id]}</span>{label}</button>)}<div className="nav-footer">GetANNY {version&&`v${version}`}<br/>Fast downloads. Clear control.</div></aside><main className="main">{page}</main></div><footer className="footer"><span>SERVICE: <b style={{color:service.running?'#77d991':'#ef8888'}}>{service.running?'READY':'OFFLINE'}</b>　·　WEBSOCKET: 29615</span><span>{bytes(useDownloadStore.getState().stats().speed)}/s　·　{version?'v'+version:'GetANNY'}</span></footer>{showAdd&&<AddModal close={()=>setAdd(false)} notify={notify}/ >}{toast&&<div className="toast">{toast}</div>}</div>}
+import React, { useEffect, useState } from "react";
+import {
+  LuArrowDownToLine,
+  LuArrowDown,
+  LuActivity,
+  LuCircleCheck,
+  LuPause,
+  LuCircleAlert,
+  LuFilm,
+  LuMagnet,
+  LuGlobe,
+  LuSettings2,
+  LuMinus,
+  LuSquare,
+  LuCopy,
+  LuX,
+  LuPlus,
+  LuFolderOpen,
+  LuChevronRight,
+  LuLink,
+  LuMonitor,
+  LuWifiOff,
+  LuLoaderCircle,
+  LuRefreshCw,
+} from "react-icons/lu";
+import { api, errorMessage } from "./api";
+import { useIPC } from "./hooks/useIPC";
+import useDownloadStore from "./stores/useDownloadStore";
+import useSettingsStore from "./stores/useSettingsStore";
+import useUIStore from "./stores/useUIStore";
+import DownloadsPage from "./pages/DownloadsPage";
+import MediaPage from "./pages/MediaPage";
+import BrowserPage from "./pages/BrowserPage";
+import SettingsPage from "./pages/SettingsPage";
+import AddDownloadDialog from "./components/AddDownloadDialog";
+import DownloadDetails from "./components/DownloadDetails";
+import { Button, IconButton, Toasts } from "./components/ui";
+import { active, bytes } from "./utils/format";
+const navigation = [
+  ["all", LuArrowDownToLine, "All downloads"],
+  ["active", LuActivity, "Active"],
+  ["completed", LuCircleCheck, "Completed"],
+  ["paused", LuPause, "Paused"],
+  ["failed", LuCircleAlert, "Failed"],
+];
+function Sidebar({ bridge, version }) {
+  const tab = useUIStore((state) => state.activeTab),
+    setTab = useUIStore((state) => state.setActiveTab);
+  const downloads = useDownloadStore((state) => state.downloads),
+    settings = useSettingsStore((state) => state.settings);
+  const count = (key) =>
+    downloads.filter((item) =>
+      key === "all"
+        ? true
+        : key === "active"
+          ? active(item) || ["queued", "retrying"].includes(item.status)
+          : item.status === key,
+    ).length;
+  const Nav = ({ id, icon: Icon, label, count: amount }) => (
+    <button
+      className={`nav-item ${tab === id ? "selected" : ""}`}
+      aria-current={tab === id ? "page" : undefined}
+      title={label}
+      onClick={() => setTab(id)}
+    >
+      <Icon />
+      <span>{label}</span>
+      {amount > 0 && <b>{amount}</b>}
+    </button>
+  );
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-top">
+        <div className="workspace-label">PERSONAL WORKSPACE</div>
+        <Button
+          icon={LuPlus}
+          variant="primary"
+          className="sidebar-add"
+          onClick={() => useUIStore.getState().setAddModal({})}
+        >
+          New download<kbd>⌘ / Ctrl N</kbd>
+        </Button>
+      </div>
+      <nav aria-label="Main navigation">
+        <div className="nav-group-label">LIBRARY</div>
+        {navigation.map(([id, Icon, label]) => (
+          <Nav key={id} id={id} icon={Icon} label={label} count={count(id)} />
+        ))}
+        <div className="nav-group-label tools-label">TOOLS</div>
+        <Nav id="media" icon={LuFilm} label="Media studio" />
+        <Nav
+          id="torrent"
+          icon={LuMagnet}
+          label="Torrents"
+          count={
+            downloads.filter((item) => item.kind === "torrent" && active(item))
+              .length
+          }
+        />
+      </nav>
+      <div className="sidebar-bottom">
+        <button
+          className="save-location"
+          onClick={() => setTab("settings")}
+          title={settings.defaultDownloadPath}
+        >
+          <LuFolderOpen />
+          <div>
+            <small>DEFAULT LOCATION</small>
+            <span>
+              {settings.defaultDownloadPath
+                ?.split(/[\\/]/)
+                .filter(Boolean)
+                .at(-1) || "Downloads"}
+            </span>
+          </div>
+          <LuChevronRight />
+        </button>
+        <Nav id="browser" icon={LuGlobe} label="Browser integration" />
+        <Nav id="settings" icon={LuSettings2} label="Settings" />
+        <button
+          className="sidebar-connection"
+          onClick={() => setTab("browser")}
+        >
+          <span className={`live-dot ${bridge.clients > 0 ? "live" : ""}`} />
+          <span>
+            {bridge.clients > 0
+              ? `${bridge.clients} browser${bridge.clients > 1 ? "s" : ""} connected`
+              : bridge.running && bridge.enabled
+                ? "No browser connected"
+                : "Browser bridge offline"}
+          </span>
+          <LuChevronRight />
+        </button>
+        <div className="sidebar-version">
+          GETANNY <span>{version}</span>
+        </div>
+      </div>
+    </aside>
+  );
+}
+export default function App() {
+  useIPC();
+  const [boot, setBoot] = useState(null),
+    [error, setError] = useState(""),
+    [bridge, setBridge] = useState({
+      running: false,
+      enabled: true,
+      clients: 0,
+    }),
+    [maximized, setMaximized] = useState(false);
+  const tab = useUIStore((state) => state.activeTab),
+    addModal = useUIStore((state) => state.addModal),
+    setAddModal = useUIStore((state) => state.setAddModal),
+    detailId = useUIStore((state) => state.details),
+    requests = useUIStore((state) => state.browserRequests);
+  const downloads = useDownloadStore((state) => state.downloads),
+    settings = useSettingsStore((state) => state.settings);
+  const load = async () => {
+    setError("");
+    try {
+      const data = await api.invoke("app:bootstrap");
+      useDownloadStore.getState().setDownloads(data.downloads);
+      useSettingsStore.getState().setSettings(data.settings);
+      setBridge(data.bridge);
+      setBoot(data);
+      for (const request of data.pendingRequests)
+        useUIStore.getState().addRequest(request);
+      if (!data.settings.firstRunCompleted)
+        useUIStore.getState().setActiveTab("browser");
+    } catch (error) {
+      setError(errorMessage(error));
+    }
+  };
+  useEffect(() => {
+    load();
+    const cleanup = api.on("window:state", setMaximized);
+    return cleanup;
+  }, []);
+  useEffect(() => {
+    if (!boot) return;
+    const poll = () =>
+      api
+        .invoke("browser:status")
+        .then((value) => setBridge(value.websocket))
+        .catch(() =>
+          setBridge((old) => ({ ...old, running: false, clients: 0 })),
+        );
+    const timer = setInterval(poll, 6000);
+    const cleanup = api.on("browser:changed", setBridge);
+    return () => {
+      clearInterval(timer);
+      cleanup();
+    };
+  }, [!!boot]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = settings.theme || "graphite";
+    document.documentElement.dataset.motion = settings.reduceMotion
+      ? "reduced"
+      : "full";
+    document.documentElement.dataset.density = settings.compactList
+      ? "compact"
+      : "comfortable";
+  }, [settings.theme, settings.reduceMotion, settings.compactList]);
+  const detail = downloads.find((item) => item.id === detailId);
+  const review = (request) => {
+    if (request.kind === "media") useUIStore.getState().openMedia(request.url);
+    else
+      setAddModal({
+        url: request.url,
+        source: request.source,
+        filename: request.filename,
+      });
+    useUIStore.getState().removeRequest(request.id);
+    api
+      .invoke("browser:ack-request", request.id)
+      .catch((error) =>
+        useUIStore.getState().notify(errorMessage(error), "error"),
+      );
+  };
+  const speed = downloads
+    .filter((item) => item.status === "downloading")
+    .reduce((sum, item) => sum + (item.speed || 0), 0);
+  useEffect(() => {
+    if (boot && requests[0]?.kind === "media" && !addModal && !detailId)
+      review(requests[0]);
+  }, [!!boot, requests[0]?.id, !!addModal, detailId]);
+  return (
+    <div className="app-shell">
+      <header className="titlebar">
+        <div className="app-brand">
+          <img src="./icon.png" alt="" />
+          <strong>GetANNY</strong>
+          <span className="brand-divider" />
+          <span className="app-caption">Download manager</span>
+        </div>
+        <div className="titlebar-right">
+          {!api.desktop && (
+            <span className="preview-label">
+              <LuMonitor />
+              LIVE WEB PREVIEW
+            </span>
+          )}
+          {api.desktop && boot?.platform !== "darwin" && (
+            <div className="window-controls">
+              <button
+                aria-label="Minimize window"
+                onClick={() => api.window.minimize()}
+              >
+                <LuMinus />
+              </button>
+              <button
+                aria-label={maximized ? "Restore window" : "Maximize window"}
+                onClick={() => api.window.maximize()}
+              >
+                {maximized ? <LuCopy /> : <LuSquare />}
+              </button>
+              <button
+                aria-label="Close window"
+                className="window-close"
+                onClick={() => api.window.close()}
+              >
+                <LuX />
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+      {boot ? (
+        <>
+          <div className="app-body">
+            <Sidebar bridge={bridge} version={boot.version} />
+            <main className="main-content" id="main-content">
+              {!api.desktop && (
+                <div className="preview-strip">
+                  <LuMonitor />
+                  Sandbox preview · Real transfers and persistence · OS dialogs
+                  and browser registration need the desktop app.
+                </div>
+              )}
+              {requests.length > 0 && (
+                <div className="browser-request">
+                  <LuLink />
+                  <div>
+                    <strong>
+                      {requests[0].kind === "media"
+                        ? "Media page received"
+                        : "Download link received"}{" "}
+                      from {requests[0].source}
+                    </strong>
+                    <span>{requests[0].url}</span>
+                  </div>
+                  <Button variant="primary" onClick={() => review(requests[0])}>
+                    {requests[0].kind === "media"
+                      ? "Analyze page"
+                      : "Review download"}
+                  </Button>
+                  <IconButton
+                    label="Dismiss browser request"
+                    onClick={() => {
+                      const request = requests[0];
+                      useUIStore.getState().removeRequest(request.id);
+                      api
+                        .invoke("browser:ack-request", request.id)
+                        .catch(() => {});
+                    }}
+                  >
+                    <LuX />
+                  </IconButton>
+                </div>
+              )}
+              {tab === "media" ? (
+                <MediaPage tools={boot.tools} />
+              ) : tab === "browser" ? (
+                <BrowserPage />
+              ) : tab === "settings" ? (
+                <SettingsPage
+                  capabilities={boot.capabilities}
+                  version={boot.version}
+                />
+              ) : (
+                <DownloadsPage filter={tab} />
+              )}
+            </main>
+          </div>
+          <footer className="statusbar">
+            <div>
+              <span
+                className={`live-dot ${downloads.some(active) ? "live" : ""}`}
+              />
+              {downloads.some(active)
+                ? `${downloads.filter(active).length} active transfers`
+                : "Ready for your next download"}
+              <span className="status-separator">/</span>
+              <span>
+                {downloads.filter((item) => item.status === "queued").length}{" "}
+                queued
+              </span>
+            </div>
+            <div>
+              <LuArrowDown />
+              {speed > 0 ? `${bytes(speed)}/s` : "0 B/s"}
+              <span className="status-separator">/</span>
+              <span>Stored locally · {boot.version}</span>
+            </div>
+          </footer>
+        </>
+      ) : (
+        <div className="startup-screen">
+          <img src="./icon.png" alt="GetANNY" />
+          <h1>GetANNY</h1>
+          {error ? (
+            <>
+              <p className="error-text">{error}</p>
+              <Button icon={LuRefreshCw} onClick={load}>
+                Try again
+              </Button>
+            </>
+          ) : (
+            <>
+              <LuLoaderCircle className="spin" />
+              <p>Opening your workspace…</p>
+            </>
+          )}
+        </div>
+      )}
+      {addModal && (
+        <AddDownloadDialog
+          initial={addModal}
+          onClose={() => setAddModal(null)}
+        />
+      )}
+      {detail && (
+        <DownloadDetails
+          item={detail}
+          onClose={() => useUIStore.getState().setDetails(null)}
+        />
+      )}
+      <Toasts />
+    </div>
+  );
+}

@@ -1,7 +1,225 @@
-const WebSocket=require('ws');
-class WebSocketServer{
- constructor({port=29615,onMediaDetected=()=>{},onDownloadRequest=async()=>({success:false,error:'Download handler unavailable'})}={}){this.port=port;this.onMediaDetected=onMediaDetected;this.onDownloadRequest=onDownloadRequest;this.clients=new Set();this.server=new WebSocket.Server({host:'127.0.0.1',port,maxPayload:1024*1024,verifyClient:({origin})=>!origin||origin.startsWith('chrome-extension://')||origin.startsWith('moz-extension://')});this.server.on('connection',ws=>{this.clients.add(ws);ws.on('close',()=>this.clients.delete(ws));ws.on('error',()=>this.clients.delete(ws));ws.on('message',async raw=>{let msg;try{msg=JSON.parse(raw.toString())}catch{return this.reply(ws,{type:'error',error:'Invalid JSON'})}try{if(msg.type==='media-detected'&&msg.url){this.onMediaDetected({...msg,detectedAt:Date.now()});this.reply(ws,{type:'ack'});}else if(msg.type==='download'){this.reply(ws,{type:'download-result',requestId:msg.requestId,...await this.onDownloadRequest(msg)});}else if(msg.type==='ping')this.reply(ws,{type:'pong'});else this.reply(ws,{type:'error',error:'Unsupported message type'});}catch(e){this.reply(ws,{type:'error',requestId:msg?.requestId,error:e.message})}})});this.server.on('error',err=>{this.error=err;});}
- reply(ws,data){if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(data))} broadcast(data){for(const c of this.clients)this.reply(c,data)} status(){return {running:this.server?.address()!=null,port:this.port,clients:this.clients.size,error:this.error?.message||null}}
- close(){for(const c of this.clients)c.close(1001,'Application closing');this.clients.clear();this.server?.close();}
+const WebSocket = require("ws");
+const { timingSafeEqual, randomBytes } = require("node:crypto");
+const { getBrowser, CHROMIUM_ID, FIREFOX_ID } = require("./catalog");
+function equalSecret(a, b) {
+  if (
+    typeof a !== "string" ||
+    typeof b !== "string" ||
+    Buffer.byteLength(a) !== Buffer.byteLength(b)
+  )
+    return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
-module.exports={WebSocketServer};
+class WebSocketServer {
+  constructor({
+    port = 29615,
+    token = randomBytes(32).toString("hex"),
+    enabled = true,
+    onMediaDetected = () => {},
+    onDownloadRequest = async () => {
+      throw new Error("Download handler unavailable.");
+    },
+    onHello = () => {},
+  } = {}) {
+    Object.assign(this, {
+      port,
+      token,
+      enabled,
+      onMediaDetected,
+      onDownloadRequest,
+      onHello,
+    });
+    this.clients = new Map();
+    this.server = new WebSocket.Server({
+      host: "127.0.0.1",
+      port,
+      maxPayload: 128 * 1024,
+      verifyClient: ({ origin }) =>
+        !origin ||
+        origin === `chrome-extension://${CHROMIUM_ID}` ||
+        /^moz-extension:\/\/[a-f0-9-]+$/i.test(origin),
+    });
+    this.server.on("listening", () => {
+      this.port = this.server.address().port;
+    });
+    this.server.on("error", (error) => {
+      this.error = error;
+    });
+    this.server.on("connection", (socket, request) => {
+      const state = {
+        authenticated: false,
+        lastSeen: Date.now(),
+        origin: request.headers.origin || null,
+      };
+      this.clients.set(socket, state);
+      const authTimeout = setTimeout(() => {
+        if (!state.authenticated) socket.close(1008, "Pairing required");
+      }, 10000);
+      socket.on("close", () => {
+        clearTimeout(authTimeout);
+        this.clients.delete(socket);
+      });
+      socket.on("error", () => {
+        clearTimeout(authTimeout);
+        this.clients.delete(socket);
+      });
+      socket.on("message", (raw) => this.handle(socket, state, raw));
+    });
+    this.heartbeat = setInterval(() => {
+      for (const [socket, state] of this.clients)
+        if (Date.now() - state.lastSeen > 65000) socket.terminate();
+    }, 15000);
+    this.heartbeat.unref?.();
+  }
+  async handle(socket, state, raw) {
+    let message;
+    try {
+      message = JSON.parse(raw.toString());
+      if (!message || typeof message !== "object" || Array.isArray(message))
+        throw new Error("Invalid bridge message.");
+      state.lastSeen = Date.now();
+      if (message.type === "authenticate") {
+        if (!this.enabled)
+          throw new Error(
+            "Browser integration is disabled in GetANNY settings.",
+          );
+        if (!equalSecret(message.token, this.token)) {
+          this.reply(socket, {
+            type: "authentication-error",
+            success: false,
+            error:
+              "Pairing key is incorrect. Copy the key from Browser integration in GetANNY.",
+          });
+          socket.close(1008, "Invalid pairing");
+          return;
+        }
+        state.authenticated = true;
+        state.transport =
+          message.transport === "native" && !state.origin
+            ? "native"
+            : "websocket";
+        this.reply(socket, { type: "authenticated", success: true });
+        return;
+      }
+      if (message.type === "ping") {
+        this.reply(socket, {
+          type: "pong",
+          requestId: message.requestId,
+          authenticated: state.authenticated && !!state.browserId,
+        });
+        return;
+      }
+      if (!this.enabled || !state.authenticated)
+        throw new Error(
+          "Connect through the registered native host or pair this extension first.",
+        );
+      if (message.type === "hello") {
+        getBrowser(message.browserId);
+        if (![CHROMIUM_ID, FIREFOX_ID].includes(message.extensionId))
+          throw new Error("Unrecognized GetANNY extension identity.");
+        if (
+          message.browserId === "firefox" &&
+          message.extensionId !== FIREFOX_ID
+        )
+          throw new Error("Use the Firefox extension build.");
+        state.browserId = message.browserId;
+        state.extensionId = message.extensionId;
+        state.version = String(message.version || "").slice(0, 40);
+        this.onHello({ ...state });
+        this.reply(socket, {
+          type: "hello-result",
+          requestId: message.requestId,
+          success: true,
+          connected: true,
+          browserId: state.browserId,
+          transport: state.transport,
+        });
+      } else if (!state.browserId)
+        throw new Error(
+          "Extension handshake is incomplete. Reconnect the extension.",
+        );
+      else if (message.type === "download") {
+        if (state.busy)
+          throw new Error(
+            "A browser download request is already awaiting confirmation.",
+          );
+        state.busy = true;
+        try {
+          const result = await this.onDownloadRequest({
+            url: message.url,
+            filename: message.filename,
+            kind: message.kind === "media" ? "media" : "file",
+            source: state.browserId,
+          });
+          this.reply(socket, {
+            type: "download-result",
+            requestId: message.requestId,
+            success: true,
+            ...result,
+          });
+        } finally {
+          state.busy = false;
+        }
+      } else if (message.type === "media-detected") {
+        if (
+          typeof message.url === "string" &&
+          /^https?:\/\//.test(message.url) &&
+          message.url.length < 8192
+        )
+          this.onMediaDetected({
+            url: message.url,
+            pageUrl: message.pageUrl,
+            title: String(message.title || "").slice(0, 240),
+            source: state.browserId,
+            detectedAt: Date.now(),
+          });
+      } else throw new Error("Unsupported bridge action.");
+    } catch (error) {
+      this.reply(socket, {
+        type: "error",
+        requestId: message?.requestId,
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+  reply(socket, data) {
+    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(data));
+  }
+  status() {
+    const sessions = [...this.clients.values()]
+      .filter(
+        (client) =>
+          client.authenticated &&
+          client.browserId &&
+          Date.now() - client.lastSeen < 65000,
+      )
+      .map(({ browserId, transport, version, lastSeen }) => ({
+        browserId,
+        transport,
+        version,
+        lastSeen,
+      }));
+    return {
+      running: !!this.server?.address(),
+      enabled: this.enabled,
+      port: this.port,
+      clients: sessions.length,
+      sessions,
+      error: this.error?.message || null,
+    };
+  }
+  setEnabled(enabled) {
+    this.enabled = enabled;
+    if (!enabled)
+      for (const socket of this.clients.keys())
+        socket.close(1008, "Browser integration disabled");
+  }
+  async close() {
+    clearInterval(this.heartbeat);
+    for (const socket of this.clients.keys()) socket.terminate();
+    this.clients.clear();
+    await new Promise((resolve) => this.server.close(resolve));
+  }
+}
+module.exports = { WebSocketServer, equalSecret };

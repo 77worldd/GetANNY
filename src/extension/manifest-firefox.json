@@ -1,1 +1,48 @@
-{"manifest_version":2,"name":"GetANNY Download Assistant","version":"1.0.0","browser_specific_settings":{"gecko":{"id":"getanny@getanny.app","strict_min_version":"109.0"}},"description":"Send downloads and detected media to GetANNY.","permissions":["storage","tabs","<all_urls>","http://127.0.0.1:29615/*"],"background":{"scripts":["background.js"]},"browser_action":{"default_title":"GetANNY","default_popup":"popup.html","default_icon":{"16":"icons/icon16.png","48":"icons/icon48.png","128":"icons/icon128.png"}},"icons":{"16":"icons/icon16.png","48":"icons/icon48.png","128":"icons/icon128.png"},"content_scripts":[{"matches":["<all_urls>"],"js":["content.js","injector.js"],"run_at":"document_idle"}]}
+{
+  "name": "GetANNY · Browser Assistant",
+  "version": "2.0.0.1",
+  "description": "Send files and supported media pages to your GetANNY desktop download manager. Authenticated native connection and explicit user control.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "nativeMessaging",
+    "contextMenus",
+    "webRequest",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js", "injector.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "manifest_version": 2,
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "getanny@getanny.app",
+      "strict_min_version": "128.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+  "background": {
+    "scripts": ["config.js", "background.js"]
+  },
+  "browser_action": {
+    "default_title": "GetANNY",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
+}

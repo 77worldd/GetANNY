@@ -1,0 +1,200 @@
+import React, { useState } from "react";
+import {
+  LuArrowDownToLine,
+  LuLink,
+  LuFolderOpen,
+  LuMagnet,
+  LuArrowUpRight,
+} from "react-icons/lu";
+import { api, errorMessage } from "../api";
+import { Button, Dialog, Field, FolderField, ErrorBanner } from "./ui";
+import useSettingsStore from "../stores/useSettingsStore";
+import useUIStore from "../stores/useUIStore";
+export default function AddDownloadDialog({ initial = {}, onClose }) {
+  const settings = useSettingsStore((state) => state.settings);
+  const [kind, setKind] = useState(initial.torrent ? "torrent" : "file");
+  const [url, setUrl] = useState(initial.url || "");
+  const [filename, setFilename] = useState(initial.filename || "");
+  const [folder, setFolder] = useState(settings.defaultDownloadPath || "");
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      if (kind === "file" && !/^https?:\/\//i.test(url.trim()))
+        throw new Error(
+          "Enter an HTTP or HTTPS file URL. Use Media studio for a video page.",
+        );
+      await api.invoke(
+        kind === "torrent" ? "download:add-torrent" : "download:add",
+        kind === "torrent"
+          ? { torrent: url.trim(), savePath: folder }
+          : {
+              url: url.trim(),
+              filename: filename || undefined,
+              ...(folder !== settings.defaultDownloadPath
+                ? { savePath: folder }
+                : {}),
+            },
+      );
+      useUIStore
+        .getState()
+        .notify(
+          settings.autoStartDownloads
+            ? "Download added to the queue."
+            : "Download added in paused state. Start it when you’re ready.",
+        );
+      useUIStore
+        .getState()
+        .setActiveTab(kind === "torrent" ? "torrent" : "all");
+      onClose();
+    } catch (error) {
+      setError(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog
+      title="New download"
+      description={
+        initial.source
+          ? `Sent from ${initial.source}. Review the file and destination.`
+          : "A direct link. A destination. You’re in control."
+      }
+      onClose={() => !busy && onClose()}
+      busy={busy}
+    >
+      <form onSubmit={submit}>
+        <div className="dialog-body">
+          <div className="segmented">
+            <button
+              type="button"
+              className={kind === "file" ? "selected" : ""}
+              onClick={() => {
+                setKind("file");
+                setError("");
+              }}
+            >
+              <LuLink />
+              File URL
+            </button>
+            <button
+              type="button"
+              className={kind === "torrent" ? "selected" : ""}
+              onClick={() => {
+                setKind("torrent");
+                setError("");
+              }}
+            >
+              <LuMagnet />
+              Torrent
+            </button>
+          </div>
+          {error && <ErrorBanner>{error}</ErrorBanner>}
+          <Field
+            label={
+              kind === "file" ? "Download link" : "Magnet link or torrent file"
+            }
+            id="download-url"
+            hint={
+              kind === "file"
+                ? "Paste the direct HTTP(S) link to a file, not a website’s download page."
+                : "Transfers depend on available peers. Pausing disconnects the torrent; resuming rechecks saved pieces."
+            }
+          >
+            <div className="input-group">
+              <LuLink />
+              <input
+                autoFocus
+                id="download-url"
+                required
+                type={kind === "file" ? "url" : "text"}
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                placeholder={
+                  kind === "file"
+                    ? "https://example.com/file.zip"
+                    : "magnet:?xt=urn:btih:…"
+                }
+                autoComplete="off"
+                spellCheck="false"
+              />
+              {kind === "torrent" && api.desktop && (
+                <Button
+                  variant="ghost"
+                  icon={LuFolderOpen}
+                  onClick={async () => {
+                    try {
+                      const file = await api.invoke("dialog:select-torrent");
+                      if (file) setUrl(file);
+                    } catch (error) {
+                      setError(errorMessage(error));
+                    }
+                  }}
+                >
+                  Choose file
+                </Button>
+              )}
+            </div>
+          </Field>
+          {kind === "file" && (
+            <Field
+              label="File name"
+              id="download-name"
+              hint="Optional. Leave blank to use the name provided by the server."
+            >
+              <input
+                id="download-name"
+                value={filename}
+                onChange={(event) => setFilename(event.target.value)}
+                placeholder="Automatic"
+                maxLength={220}
+              />
+            </Field>
+          )}
+          <FolderField value={folder} onChange={setFolder} />
+          <div className="form-note">
+            <LuArrowDownToLine />
+            <span>
+              {settings.maxConnectionsPerDownload || 8} connections when
+              supported ·{" "}
+              {settings.autoStartDownloads
+                ? "Starts automatically"
+                : "Starts paused"}
+              <br />
+              Existing files are never overwritten.
+            </span>
+          </div>
+          {kind === "file" && (
+            <button
+              type="button"
+              className="text-link"
+              onClick={() => {
+                useUIStore.getState().openMedia(url);
+                onClose();
+              }}
+            >
+              Downloading video or audio? Open Media studio <LuArrowUpRight />
+            </button>
+          )}
+        </div>
+        <footer className="dialog-footer">
+          <Button disabled={busy} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            icon={LuArrowDownToLine}
+            busy={busy}
+          >
+            {settings.autoStartDownloads ? "Start download" : "Add download"}
+          </Button>
+        </footer>
+      </form>
+    </Dialog>
+  );
+}

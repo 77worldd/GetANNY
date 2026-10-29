@@ -1,1 +1,84 @@
-(()=>{const selector='[data-getanny-button]';function add(video){const parent=video.parentElement;if(!parent||parent.querySelector(selector))return;const button=document.createElement('button');button.dataset.getannyButton='true';button.textContent='GetANNY ↓';button.type='button';button.title='Send this media to GetANNY';button.style.cssText='position:absolute;z-index:2147483647;top:14px;right:14px;background:#0a0a0a;color:#fff;border:1px solid #fff;border-radius:4px;padding:8px 12px;font:600 12px system-ui;cursor:pointer;opacity:.92';const computed=getComputedStyle(parent);if(computed.position==='static')parent.style.position='relative';button.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const url=video.currentSrc||video.src;if(!url)return;chrome.runtime.sendMessage({type:'download',url,filename:url.split('/').pop().split('?')[0]},r=>{button.textContent=r?.success?'Added ✓':r?.error||'Open GetANNY';setTimeout(()=>button.textContent='GetANNY ↓',2500)})});parent.appendChild(button)}function scan(){document.querySelectorAll('video').forEach(add)}scan();new MutationObserver(scan).observe(document.documentElement,{childList:true,subtree:true});})();
+(() => {
+  const api = globalThis.browser || globalThis.chrome;
+  const provider =
+    /(^|\.)(youtube\.com|youtu\.be|vimeo\.com|twitch\.tv|dailymotion\.com|soundcloud\.com)$/i.test(
+      location.hostname,
+    );
+  const host = document.createElement("div");
+  host.style.cssText = "position:fixed;z-index:2147483647;display:none;";
+  const shadow = host.attachShadow({ mode: "closed" });
+  shadow.innerHTML =
+    '<style>button{all:initial;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:9px 12px;background:#171d23;color:#e9f1f5;border:1px solid #43535e;border-radius:6px;font:600 12px system-ui;cursor:pointer;box-shadow:0 3px 12px #0006}button:hover{background:#24313b;border-color:#80ccb2}button:focus-visible{outline:2px solid #80ccb2;outline-offset:2px}button:disabled{opacity:.65;cursor:wait}</style><button type="button" aria-label="Send media to GetANNY">↓ GetANNY</button>';
+  document.documentElement.appendChild(host);
+  const button = shadow.querySelector("button");
+  let current;
+  function place() {
+    if (!current || !current.isConnected) {
+      host.style.display = "none";
+      return;
+    }
+    const box = current.getBoundingClientRect();
+    if (
+      box.width < 180 ||
+      box.height < 100 ||
+      box.bottom < 40 ||
+      box.top > innerHeight - 40
+    ) {
+      host.style.display = "none";
+      return;
+    }
+    host.style.display = "block";
+    host.style.top = `${Math.max(8, box.top + 12)}px`;
+    host.style.left = `${Math.max(8, Math.min(innerWidth - 132, box.right - 130))}px`;
+  }
+  document.addEventListener(
+    "pointerover",
+    (event) => {
+      if (event.target instanceof HTMLVideoElement) {
+        current = event.target;
+        place();
+      }
+    },
+    true,
+  );
+  document.addEventListener(
+    "play",
+    (event) => {
+      if (event.target instanceof HTMLVideoElement) {
+        current = event.target;
+        place();
+      }
+    },
+    true,
+  );
+  addEventListener("scroll", place, { passive: true });
+  addEventListener("resize", place);
+  button.addEventListener("click", async () => {
+    if (!current) return;
+    const source = current.currentSrc || current.src;
+    const media = provider || !/^https?:\/\//.test(source);
+    button.disabled = true;
+    button.textContent = "Sending…";
+    try {
+      const result = await api.runtime.sendMessage({
+        type: "download",
+        url: media ? location.href : source,
+        kind: media ? "media" : "file",
+      });
+      button.textContent = result?.success
+        ? result.action === "queued"
+          ? "✓ Download queued"
+          : "✓ Review in GetANNY"
+        : "Could not send";
+      button.title = result?.error || "Open GetANNY to manage this request.";
+    } catch (error) {
+      button.textContent = "Open GetANNY";
+      button.title = error.message;
+    } finally {
+      button.disabled = false;
+      setTimeout(() => {
+        button.textContent = "↓ GetANNY";
+      }, 3500);
+    }
+  });
+})();

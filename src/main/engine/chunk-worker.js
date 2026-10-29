@@ -1,1 +1,84 @@
-const{parentPort,workerData}=require('node:worker_threads');const{Transform}=require('node:stream');const fs=require('node:fs');const http=require('node:http');const https=require('node:https');const{URL}=require('node:url');let req;let stopped=false;function request(url,start,end,redirects=0){if(stopped)return Promise.reject(new Error('stopped'));return new Promise((resolve,reject)=>{const u=new URL(url),mod=u.protocol==='https:'?https:http;req=mod.get(u,{headers:{'User-Agent':'GetANNY/1.0',...workerData.headers,Range:`bytes=${start}-${end}`},timeout:30000},res=>{if([301,302,303,307,308].includes(res.statusCode)&&res.headers.location){res.resume();if(redirects>8)return reject(Error('Too many redirects'));return resolve(request(new URL(res.headers.location,url).href,start,end,redirects+1))}if(res.statusCode!==206){res.resume();return reject(Error(`Range request returned HTTP ${res.statusCode}`))}const out=fs.createWriteStream(workerData.file,{flags:workerData.existing?'a':'w'});let count=0;res.on('data',b=>{count+=b.length;parentPort.postMessage({type:'progress',bytes:b.length})});if(workerData.speedLimit>0){let bytes=0,started=Date.now();const limiter=new Transform({transform(chunk,_enc,cb){bytes+=chunk.length;setTimeout(()=>cb(null,chunk),Math.max(0,started+bytes*1000/workerData.speedLimit-Date.now()))}});res.pipe(limiter).pipe(out)}else res.pipe(out);out.on('finish',()=>resolve(count));out.on('error',reject);res.on('error',reject)});req.on('error',reject);req.setTimeout(30000,()=>req.destroy(Error('Chunk request timed out')))});}parentPort.on('message',m=>{if(m==='cancel'){stopped=true;req?.destroy();process.exit(0)}});request(workerData.url,workerData.start+workerData.existing,workerData.end).then(bytes=>{parentPort.postMessage({type:'done',bytes});parentPort.close()}).catch(e=>{parentPort.postMessage({type:'error',error:e.message});parentPort.close()});
+const { parentPort, workerData: data } = require("node:worker_threads");
+const fs = require("node:fs");
+const { Transform } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
+const { request, validateRange, httpError } = require("./http");
+const controller = new AbortController();
+const pending = new Map();
+let counter = 0;
+parentPort.on("message", (message) => {
+  if (message.type === "grant") {
+    pending.get(message.requestId)?.();
+    pending.delete(message.requestId);
+  }
+  if (message.type === "cancel") {
+    controller.abort();
+    for (const resolve of pending.values()) resolve();
+    pending.clear();
+  }
+});
+async function run() {
+  const start = data.start + data.existing;
+  const headers = { ...data.headers, Range: `bytes=${start}-${data.end}` };
+  if (data.etag || data.lastModified)
+    headers["If-Range"] = data.etag || data.lastModified;
+  const { response } = await request(data.url, {
+    headers,
+    timeout: data.timeout,
+    signal: controller.signal,
+    requestOptions: data.requestOptions,
+  });
+  if (response.statusCode >= 400) {
+    response.destroy();
+    throw httpError(response.statusCode);
+  }
+  validateRange(response, start, data.end, data.totalSize);
+  if (
+    response.headers["content-encoding"] &&
+    response.headers["content-encoding"] !== "identity"
+  ) {
+    response.destroy();
+    throw new Error("Encoded range responses are not safe to assemble.");
+  }
+  let received = 0;
+  const meter = new Transform({
+    transform(chunk, _encoding, callback) {
+      const requestId = ++counter;
+      new Promise((resolve) => {
+        pending.set(requestId, resolve);
+        parentPort.postMessage({
+          type: "throttle",
+          bytes: chunk.length,
+          requestId,
+        });
+      })
+        .then(() => {
+          controller.signal.throwIfAborted();
+          received += chunk.length;
+          if (received > data.end - start + 1)
+            throw new Error("Segment exceeds its requested byte range.");
+          parentPort.postMessage({ type: "progress", bytes: chunk.length });
+          callback(null, chunk);
+        })
+        .catch(callback);
+    },
+  });
+  await pipeline(
+    response,
+    meter,
+    fs.createWriteStream(data.file, { flags: data.existing ? "a" : "w" }),
+    { signal: controller.signal },
+  );
+  if (received !== data.end - start + 1)
+    throw new Error("Segment ended before all requested bytes arrived.");
+  parentPort.postMessage({ type: "done" });
+}
+run()
+  .catch((error) =>
+    parentPort.postMessage({
+      type: "error",
+      error: error.message,
+      retryable: !!error.retryable,
+    }),
+  )
+  .finally(() => parentPort.close());

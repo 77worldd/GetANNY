@@ -1,4 +1,58 @@
-const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const os=require('node:os');const path=require('node:path');const {Database}=require('../database/database');const {DownloadsRepo}=require('../database/downloads-repo');const {SettingsRepo}=require('../database/settings-repo');const {sanitizeFilename,getFilenameFromURL,formatBytes}=require('./utils');const {DownloadManager}=require('./DownloadManager');
-test('download metadata helpers sanitize and format safely',()=>{assert.equal(sanitizeFilename('../bad:name?.mp4'),'_bad_name_.mp4');assert.equal(getFilenameFromURL('https://example.test/path%20name.zip'),'path name.zip');assert.equal(formatBytes(1536),'1.5 KB')});
-test('SQLite repositories persist, filter, update and delete records',async t=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'getanny-test-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const db=new Database(dir);await db.initialize();t.after(()=>db.close());const downloads=new DownloadsRepo(db);const settings=new SettingsRepo(db);downloads.save({id:'a',url:'https://example.test/a',filename:'a',savePath:dir,status:'completed',totalSize:10,downloadedSize:10});assert.equal(downloads.get('a').status,'completed');assert.equal(downloads.stats().completed,1);assert.equal(downloads.clearCompleted(),1);settings.set('theme','dark');assert.equal(settings.get('theme'),'dark');assert.deepEqual(settings.getAll(),{theme:'dark'})});
-test('download manager rejects unsupported protocols before queueing',async()=>{const manager=new DownloadManager({settings:{},downloadsRepo:{save(){}}});await assert.rejects(manager.addDownload({url:'file:///etc/passwd'}),/HTTP or HTTPS/);assert.equal(manager.queue.length,0);await manager.shutdown()});
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { Database } = require("../database/database");
+const { DownloadsRepo } = require("../database/downloads-repo");
+const { SettingsRepo } = require("../database/settings-repo");
+const {
+  sanitizeFilename,
+  getFilenameFromURL,
+  formatBytes,
+} = require("./utils");
+const { DownloadManager } = require("./DownloadManager");
+test("download metadata helpers sanitize and format safely", () => {
+  assert.equal(sanitizeFilename("../bad:name?.mp4"), "_bad_name_.mp4");
+  assert.equal(
+    getFilenameFromURL("https://example.test/path%20name.zip"),
+    "path name.zip",
+  );
+  assert.equal(formatBytes(1536), "1.5 KB");
+});
+test("SQLite repositories persist, filter, update and delete records", async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "getanny-test-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const db = new Database(dir);
+  await db.initialize();
+  t.after(() => db.close());
+  const downloads = new DownloadsRepo(db);
+  const settings = new SettingsRepo(db);
+  downloads.save({
+    id: "a",
+    url: "https://example.test/a",
+    filename: "a",
+    savePath: dir,
+    status: "completed",
+    totalSize: 10,
+    downloadedSize: 10,
+  });
+  assert.equal(downloads.get("a").status, "completed");
+  assert.equal(downloads.stats().completed, 1);
+  assert.equal(downloads.clearCompleted(), 1);
+  settings.set("theme", "dark");
+  assert.equal(settings.get("theme"), "dark");
+  assert.deepEqual(settings.getAll(), { theme: "dark" });
+});
+test("download manager rejects unsupported protocols before queueing", async () => {
+  const manager = new DownloadManager({
+    settings: {},
+    downloadsRepo: { save() {} },
+  });
+  await assert.rejects(
+    manager.addDownload({ url: "file:///etc/passwd" }),
+    /HTTP or HTTPS/,
+  );
+  assert.equal(manager.queue.length, 0);
+  await manager.shutdown();
+});

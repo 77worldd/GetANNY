@@ -1,8 +1,222 @@
-const fs=require('node:fs/promises');const path=require('node:path');const os=require('node:os');const {execFile,execFileSync}=require('node:child_process');
-const HOST_ID='com.getanny.native';const CHROME_ID='oocncjjghijimkajhmdjcgdffkfojpbg';
-class NativeMessagingHost{
- constructor({userDataPath,appPath,isPackaged=false}={}){this.userDataPath=userDataPath||process.cwd();this.appPath=appPath||process.execPath;this.isPackaged=isPackaged;this.sourceHost=path.resolve(__dirname,'native-host.js');}
- findNode(){if(process.env.GETANNY_NODE_PATH)return process.env.GETANNY_NODE_PATH;if(!process.versions.electron)return process.execPath;try{const command=process.platform==='win32'?'where.exe':'which';return execFileSync(command,['node'],{encoding:'utf8'}).split(/\r?\n/).find(Boolean)?.trim()||null}catch{return null}}
- async register(browserId='chrome'){if(!['chrome','edge','brave','firefox'].includes(browserId))throw new Error('Unsupported browser');const integrated=this.isPackaged;const nodePath=integrated?this.appPath:this.findNode();if(!nodePath)throw new Error('A standalone Node.js executable is needed to register the Native Messaging Host during development. The packaged app runs its host directly.');const plat=process.platform;const base=browserId==='firefox'?path.join(os.homedir(),'.mozilla','native-messaging-hosts'):plat==='darwin'?path.join(os.homedir(),'Library','Application Support',browserId==='chrome'?'Google/Chrome':browserId==='edge'?'Microsoft Edge':'BraveSoftware/Brave-Browser','NativeMessagingHosts'):plat==='win32'?path.join(this.userDataPath,'native-messaging',browserId):path.join(os.homedir(),'.config',browserId==='chrome'?'google-chrome':browserId==='edge'?'microsoft-edge':'BraveSoftware/Brave-Browser','NativeMessagingHosts');await fs.mkdir(base,{recursive:true});const manifest={name:HOST_ID,description:'GetANNY browser communication bridge',path:nodePath,args:integrated?['--native-messaging-host']:[this.sourceHost],type:'stdio'};if(browserId==='firefox')manifest.allowed_extensions=['getanny@getanny.app'];else manifest.allowed_origins=[`chrome-extension://${CHROME_ID}/`];const file=path.join(base,`${HOST_ID}.json`);await fs.writeFile(file,JSON.stringify(manifest,null,2));if(plat==='win32'){const key=browserId==='firefox'?'Mozilla':browserId==='edge'?'Microsoft\\Edge':browserId==='brave'?'BraveSoftware\\Brave-Browser':'Google\\Chrome';await new Promise((resolve,reject)=>execFile('reg',['add',`HKCU\\Software\\${key}\\NativeMessagingHosts\\${HOST_ID}`,'/ve','/t','REG_SZ','/d',file,'/f'],err=>err?reject(err):resolve()));}return{success:true,path:file,nodePath,hostPath:integrated?this.appPath:this.sourceHost,note:'Native Messaging Host registered; the extension can also use the localhost WebSocket bridge on port 29615.'};}
+const fs = require("node:fs/promises");
+const path = require("node:path");
+const os = require("node:os");
+const { execFile } = require("node:child_process");
+const { promisify } = require("node:util");
+const {
+  getBrowser,
+  browsers,
+  CHROMIUM_ID,
+  FIREFOX_ID,
+  HOST_ID,
+} = require("./catalog");
+const exec = promisify(execFile);
+const shellQuote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
+
+class NativeMessagingHost {
+  constructor({
+    userDataPath,
+    appPath = process.execPath,
+    isPackaged = false,
+    binPath,
+    token,
+    port = 29615,
+    platform = process.platform,
+    home = os.homedir(),
+  } = {}) {
+    Object.assign(this, {
+      userDataPath,
+      appPath,
+      isPackaged,
+      binPath,
+      token,
+      port,
+      platform,
+      home,
+    });
+    this.base = path.join(userDataPath, "native-messaging");
+    this.sourceHost = path.resolve(__dirname, "native-host.js");
+  }
+  manifestFile(browserId) {
+    const browser = getBrowser(browserId);
+    if (this.platform === "win32")
+      return path.join(this.base, `${HOST_ID}.${browser.family}.json`);
+    if (browser.family === "firefox")
+      return path.join(
+        this.home,
+        ...(this.platform === "darwin"
+          ? [
+              "Library",
+              "Application Support",
+              "Mozilla",
+              "NativeMessagingHosts",
+            ]
+          : [".mozilla", "native-messaging-hosts"]),
+        `${HOST_ID}.json`,
+      );
+    return path.join(
+      this.home,
+      ...(this.platform === "darwin"
+        ? [
+            "Library",
+            "Application Support",
+            browser.id === "chrome" ? "Google/Chrome" : browser.mac,
+            "NativeMessagingHosts",
+          ]
+        : [".config", browser.config, "NativeMessagingHosts"]),
+      `${HOST_ID}.json`,
+    );
+  }
+  async prepareLauncher() {
+    if (!this.token)
+      throw new Error("The browser bridge identity has not been initialized.");
+    await fs.mkdir(this.base, { recursive: true });
+    const config = path.join(this.base, "bridge-config.json");
+    await fs.writeFile(
+      config,
+      JSON.stringify(
+        {
+          token: this.token,
+          port: this.port,
+          executable: this.appPath,
+          script: this.sourceHost,
+          appPath: this.isPackaged ? this.appPath : null,
+        },
+        null,
+        2,
+      ),
+      { mode: 0o600 },
+    );
+    if (this.platform === "win32") {
+      const launcher = path.join(this.base, "GetANNY.NativeHost.exe");
+      const source = path.join(this.binPath || "", "GetANNY.NativeHost.exe");
+      await fs.access(source).catch(() => {
+        throw new Error(
+          "The Windows native-host executable is missing. Run scripts/windows/build-native-host.ps1 or reinstall GetANNY.",
+        );
+      });
+      // Do not replace a running host when identical; Windows locks active EXEs.
+      const [newFile, oldFile] = await Promise.all([
+        fs.readFile(source),
+        fs.readFile(launcher).catch(() => null),
+      ]);
+      if (!oldFile || !newFile.equals(oldFile))
+        await fs.copyFile(source, launcher);
+      return launcher;
+    }
+    const launcher = path.join(this.base, "getanny-native-host");
+    const runAsNode = this.isPackaged || !!process.versions.electron;
+    const command = `#!/bin/sh\n${runAsNode ? "export ELECTRON_RUN_AS_NODE=1\n" : ""}exec ${shellQuote(this.appPath)} ${shellQuote(this.sourceHost)} --config ${shellQuote(config)}\n`;
+    await fs.writeFile(launcher, command, { mode: 0o700 });
+    await fs.chmod(launcher, 0o700);
+    return launcher;
+  }
+  async register(browserId) {
+    const browser = getBrowser(browserId);
+    const launcher = await this.prepareLauncher();
+    const manifest = {
+      name: HOST_ID,
+      description: "GetANNY authenticated desktop download bridge",
+      path: launcher,
+      type: "stdio",
+      ...(browser.family === "firefox"
+        ? { allowed_extensions: [FIREFOX_ID] }
+        : { allowed_origins: [`chrome-extension://${CHROMIUM_ID}/`] }),
+    };
+    const file = this.manifestFile(browserId);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, JSON.stringify(manifest, null, 2), {
+      mode: 0o600,
+    });
+    if (this.platform === "win32") {
+      for (const vendor of browser.registry)
+        await exec(
+          "reg.exe",
+          [
+            "add",
+            `HKCU\\Software\\${vendor}\\NativeMessagingHosts\\${HOST_ID}`,
+            "/ve",
+            "/t",
+            "REG_SZ",
+            "/d",
+            file,
+            "/f",
+          ],
+          { windowsHide: true },
+        );
+    }
+    return {
+      registered: true,
+      browserId,
+      path: file,
+      hostPath: launcher,
+      note: "Native host registered for the current user. This does not install or enable the browser extension. Open its popup to verify a real connection.",
+    };
+  }
+  async check(browserId) {
+    const browser = getBrowser(browserId);
+    const file = this.manifestFile(browserId);
+    try {
+      const manifest = JSON.parse(await fs.readFile(file, "utf8"));
+      await fs.access(manifest.path);
+      if (this.platform === "win32") {
+        let matching = false;
+        for (const vendor of browser.registry) {
+          try {
+            const result = await exec(
+              "reg.exe",
+              [
+                "query",
+                `HKCU\\Software\\${vendor}\\NativeMessagingHosts\\${HOST_ID}`,
+                "/ve",
+              ],
+              { windowsHide: true },
+            );
+            if (result.stdout.includes(file)) matching = true;
+          } catch {
+            /* absent */
+          }
+        }
+        if (!matching) return { registered: false, path: file };
+      }
+      return { registered: manifest.name === HOST_ID, path: file };
+    } catch {
+      return { registered: false, path: file };
+    }
+  }
+  async unregisterAll() {
+    const errors = [];
+    for (const browser of browsers) {
+      const file = this.manifestFile(browser.id);
+      if (this.platform === "win32") {
+        for (const vendor of browser.registry) {
+          const key = `HKCU\\Software\\${vendor}\\NativeMessagingHosts\\${HOST_ID}`;
+          try {
+            const { stdout } = await exec("reg.exe", ["query", key, "/ve"], {
+              windowsHide: true,
+            });
+            if (stdout.includes(this.base))
+              await exec("reg.exe", ["delete", key, "/f"], {
+                windowsHide: true,
+              });
+          } catch {
+            /* absent or already removed */
+          }
+        }
+      } else {
+        try {
+          const manifest = JSON.parse(await fs.readFile(file, "utf8"));
+          if (manifest.path.startsWith(this.base + path.sep))
+            await fs.rm(file, { force: true });
+        } catch {
+          /* absent */
+        }
+      }
+    }
+    await fs
+      .rm(this.base, { force: true, recursive: true })
+      .catch((error) => errors.push(error.message));
+    return { removed: errors.length === 0, errors };
+  }
 }
-module.exports={NativeMessagingHost};
+module.exports = { NativeMessagingHost, shellQuote };

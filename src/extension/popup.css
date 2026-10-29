@@ -1,1 +1,213 @@
-*{box-sizing:border-box}body{margin:0;width:300px;background:#101010;color:#f5f5f5;font:13px system-ui}header{display:flex;align-items:center;gap:11px;padding:15px;border-bottom:1px solid #292929}header img{width:34px;height:34px}header b{display:block;font-size:15px}header small{color:#888}main{padding:15px}.status{font-size:11px;color:#aaa;margin-bottom:15px}label{display:block;color:#aaa;font-size:11px;margin-bottom:6px}input{width:100%;background:#080808;border:1px solid #333;color:white;padding:10px;border-radius:4px}button{width:100%;margin-top:9px;background:#f2f2f2;color:#111;border:0;padding:10px;border-radius:4px;font-weight:650;cursor:pointer}.secondary{background:#222;color:#eee;border:1px solid #383838}#message{color:#aaa;font-size:11px;min-height:15px}
+:root {
+  color-scheme: dark;
+  font:
+    13px/1.5 "Segoe UI",
+    system-ui,
+    sans-serif;
+  background: #101418;
+  color: #e8edf0;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  width: 370px;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  border-bottom: 1px solid #293037;
+}
+header img {
+  width: 34px;
+  height: 34px;
+}
+header strong {
+  display: block;
+  font-size: 17px;
+  letter-spacing: -0.5px;
+}
+header span {
+  display: block;
+  color: #8a98a4;
+  font-size: 11px;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+button:active {
+  transform: translateY(1px);
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 2px solid #8ad7b6;
+  outline-offset: 3px;
+}
+.icon {
+  margin-left: auto;
+  background: none;
+  color: #a5b1ba;
+  border: 1px solid #333e47;
+  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  font-size: 20px;
+}
+main {
+  padding: 18px 20px;
+}
+.connection {
+  padding: 10px 12px;
+  background: #1b242a;
+  color: #a5b5c1;
+  border: 1px solid #303c45;
+  border-radius: 6px;
+  font-size: 11px;
+  margin-bottom: 23px;
+  overflow-wrap: anywhere;
+}
+.connection.online {
+  border-color: #365446;
+  color: #91d3b5;
+  background: #18271f;
+}
+.connection.offline {
+  color: #dfb98b;
+}
+h1 {
+  font-size: 14px;
+  margin: 0;
+  font-weight: 600;
+}
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.text-button {
+  background: none;
+  border: 0;
+  color: #8ad7b6;
+  font-size: 11px;
+  padding: 2px;
+}
+label {
+  display: block;
+  color: #93a0aa;
+  font-size: 11px;
+  margin: 12px 0 6px;
+}
+input,
+select {
+  font: inherit;
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid #35404a;
+  border-radius: 6px;
+  background: #151b20;
+  color: #e8edf0;
+}
+input::placeholder {
+  color: #667580;
+}
+.primary,
+.secondary {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid #91d5b5;
+  border-radius: 6px;
+  background: #9addbb;
+  color: #11231a;
+  font-weight: 650;
+  margin-top: 15px;
+}
+.primary:hover {
+  background: #b0e7cd;
+}
+.secondary {
+  background: #222d35;
+  color: #d2dde5;
+  border-color: #394651;
+  justify-content: center;
+}
+.secondary:hover,
+.detected-item:hover {
+  background: #2a3943;
+}
+#message {
+  font-size: 11px;
+  color: #9ed7b9;
+  min-height: 18px;
+  overflow-wrap: anywhere;
+  margin: 13px 0;
+}
+.error {
+  color: #ecaa9e !important;
+}
+details {
+  border-top: 1px solid #2b343c;
+  margin-top: 18px;
+  padding-top: 15px;
+}
+summary {
+  cursor: pointer;
+  color: #95a4af;
+  font-size: 12px;
+}
+details p {
+  font-size: 11px;
+  color: #8a98a4;
+}
+h2 {
+  font-size: 11px;
+  color: #98a6b0;
+  font-weight: 500;
+}
+#detected {
+  max-height: 130px;
+  overflow: auto;
+}
+.detected-item {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  background: #1c242a;
+  color: #ccd6dd;
+  border: 1px solid #303c44;
+  border-radius: 5px;
+  padding: 8px;
+  margin: 5px 0;
+  font-size: 11px;
+}
+footer {
+  padding: 13px 20px;
+  border-top: 1px solid #293037;
+  font-size: 10px;
+  color: #667682;
+}
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-thumb {
+  background: #3a4955;
+  border-radius: 5px;
+}

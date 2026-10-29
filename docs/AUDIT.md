@@ -1,0 +1,29 @@
+# GetANNY implementation audit
+
+Audit baseline: `f74fea83`, 29 October 2026. Screenshots supplied by the owner were reviewed alongside every source module, build script and existing test.
+
+## Confirmed defects (not assumptions based on the README)
+
+| Area                  | Root cause at baseline                                                                                                                       | Remediation target                                                                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Download visibility   | Manager emits `added`, but main never forwards it; removing / clearing history does not update the in-memory queue                           | One lifecycle/event contract and authoritative snapshot                                                                   |
+| HTTP integrity        | Ranges and assembled length not verified; no entity validators; partial names collide; unsafe overwrite; workers survive sibling failures    | Validate responses, entity metadata, exact byte counts, isolated partials, atomic no-clobber completion                   |
+| Resume / cancellation | Pause does not wait for workers / stream closure; fallback ignores explicit filenames; retry can enqueue active items twice                  | Await engine settlement before releasing slots; persist resumable metadata                                                |
+| Persistence           | Fixed SQLite columns discard `filenameExplicit`, file path, validators and media selections; stale speeds survive restart                    | Backward-compatible metadata migration, interrupted-state recovery                                                        |
+| Media                 | yt-dlp spawn bypasses manager and database, blocks IPC until exit, parses progress on the wrong stream; no ffmpeg distribution               | Queued, persistent, cancellable media engine with machine-readable progress and verified output                           |
+| Formats               | Only checks URL / ID, therefore includes MHTML storyboards; video-only selection omits audio; unknown sizes become zero                      | Filter playable codecs / DRM, group audio/video, explicit merging and size uncertainty                                    |
+| Extension             | `nativeMessaging` permission missing; code refuses downloads without WebSocket even with native port; no authenticated handshake             | Native-first transport with real response correlation, authenticated fallback, honest health state                        |
+| Native host           | Nonstandard manifest `args` ignored by browsers; points at Electron / Node without a real executable launcher                                | Dedicated Windows executable; executable Unix launcher; no unsupported manifest fields                                    |
+| Browser setup         | Profile-file presence mistaken for installed executable; copied folder mistaken for installed extension; only four browser IDs               | Executable detection, seven requested targets plus Edge, prepared vs connected status, explicit user-consent installation |
+| WebSocket             | Any extension origin and originless local process can send unauthenticated requests; stale connection counted as healthy                     | Strict origin rules, per-user secret, authenticated sessions / heartbeat, bounded payloads                                |
+| Settings              | Defaults not returned; unvalidated arbitrary keys; most defaults unused; reset does not update runtime                                       | Validated persisted settings with actual behavioral consumers                                                             |
+| Window / UI           | Native title + native menu + custom controls; form helper buttons default to submit; fixed-size layouts, raw inputs, no failure/paused views | Single window chrome, accessible components, cohesive responsive dark design, complete workflow                           |
+| Shutdown              | Electron does not await async `before-quit`; database can close before streams settle                                                        | Explicit asynchronous shutdown guard                                                                                      |
+| Torrent               | No authoritative pause state/history; unhandled EventEmitter `error`; paused torrents restarted automatically; no metadata timeout           | Unified managed torrent lifecycle, safe stop / restore, actionable errors                                                 |
+| Packaging             | Only NSIS; bundled tools not mandatory; native rebuild disabled; workflow targets an obsolete branch; no installed-app test                  | EXE + MSI, tool verification, branch CI, installed-app checks, release checksums                                          |
+
+## Security and scope
+
+Never silently install browser extensions, modify browser profiles, or use enterprise policies. Browsers do not expose a trustworthy external installed/enabled query: **no connection means unknown**, not “not installed”. Firefox production installation requires Mozilla signing. Unsigned unpacked Chromium packages require explicit developer-mode consent. Local tests and mocked external process tests are not evidence that a live media website, browser or Windows installation works.
+
+See `TESTING.md` and the generated CI test artifacts for measured results and remaining validation gates.

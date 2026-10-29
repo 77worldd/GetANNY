@@ -1,2 +1,42 @@
-import{useEffect}from'react';import useDownloadStore from'../stores/useDownloadStore';import useUIStore from'../stores/useUIStore';
-export function useIPC(){useEffect(()=>{const api=window.getanny;if(!api)return;const cleanups=[api.on('menu:add-download',()=>useUIStore.getState().setAddModal(true)),api.on('update:status',v=>{if(v.status==='available')useUIStore.getState().notify(`Update ${v.version} is available`)}),api.on('download:progress',({id,...p})=>useDownloadStore.getState().update(id,p)),api.on('download:status',({id,...p})=>useDownloadStore.getState().update(id,p)),api.on('download:complete',({id,...p})=>useDownloadStore.getState().update(id,{...p,status:'completed',speed:0})),api.on('download:error',({id,error})=>{useDownloadStore.getState().update(id,{status:'failed',error});useUIStore.getState().notify(error)}),api.on('download:added',d=>useDownloadStore.getState().upsert(d)),api.on('media:detected',m=>useUIStore.getState().notify(`Media detected: ${m.filename||m.title||m.url}`)),api.on('torrent:progress',v=>useDownloadStore.getState().update(v.id,{...v,status:'downloading',kind:'torrent'})),api.on('torrent:complete',v=>useDownloadStore.getState().update(v.id,{...v,status:'completed',speed:0,kind:'torrent'}))];return()=>cleanups.forEach(fn=>fn())},[])}
+import { useEffect } from "react";
+import { api } from "../api";
+import useDownloadStore from "../stores/useDownloadStore";
+import useSettingsStore from "../stores/useSettingsStore";
+import useUIStore from "../stores/useUIStore";
+export function useIPC() {
+  useEffect(() => {
+    const cleanups = [
+      api.on("downloads:changed", (downloads) =>
+        useDownloadStore.getState().setDownloads(downloads),
+      ),
+      api.on("download:progress", ({ id, ...data }) =>
+        useDownloadStore.getState().update(id, data),
+      ),
+      api.on("download:complete", (data) => {
+        if (
+          !["all", "active", "completed"].includes(
+            useUIStore.getState().activeTab,
+          )
+        )
+          useUIStore.getState().notify(`Downloaded ${data.filename}`);
+      }),
+      api.on("download:error", (data) => {
+        if (
+          !["all", "active", "failed"].includes(useUIStore.getState().activeTab)
+        )
+          useUIStore.getState().notify(data.error, "error");
+      }),
+      api.on("settings:changed", (settings) =>
+        useSettingsStore.getState().setSettings(settings),
+      ),
+      api.on("browser:request", (request) =>
+        useUIStore.getState().addRequest(request),
+      ),
+      api.on("menu:add-download", () => useUIStore.getState().setAddModal({})),
+      api.on("menu:settings", () =>
+        useUIStore.getState().setActiveTab("settings"),
+      ),
+    ];
+    return () => cleanups.forEach((cleanup) => cleanup());
+  }, []);
+}

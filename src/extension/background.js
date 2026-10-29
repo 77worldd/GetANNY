@@ -1,1 +1,341 @@
-const api=globalThis.browser||globalThis.chrome;let socket,nativePort,retry=1000;const pending=new Map();function connected(value){api.storage?.local?.set({connected:value})}function deliver(message){if(message.requestId&&pending.has(message.requestId)){const done=pending.get(message.requestId);pending.delete(message.requestId);done(message)}}function connectWebSocket(){if(socket&&socket.readyState<2)return;socket=new WebSocket('ws://127.0.0.1:29615');socket.onopen=()=>{retry=1000;connected(true)};socket.onclose=()=>{connected(false);setTimeout(connectWebSocket,retry);retry=Math.min(retry*2,30000)};socket.onerror=()=>socket.close();socket.onmessage=e=>{try{deliver(JSON.parse(e.data))}catch{}}}function connectNative(){if(nativePort)return true;try{nativePort=api.runtime.connectNative('com.getanny.native');nativePort.onMessage.addListener(deliver);nativePort.onDisconnect.addListener(()=>{nativePort=null;try{void api.runtime.lastError}catch{}});return true}catch{return false}}connectWebSocket();connectNative();api.runtime.onMessage.addListener((message,_sender,respond)=>{if(message.type==='media-detected'){const payload={type:'media-detected',...message.media};if(nativePort)nativePort.postMessage(payload);else if(socket?.readyState===1)socket.send(JSON.stringify(payload));respond({ok:true});return}if(message.type==='download'){const requestId=crypto.randomUUID();if(!socket||socket.readyState!==1){respond({success:false,error:'GetANNY desktop app is not running'});return}pending.set(requestId,respond);const payload={type:'download',requestId,url:message.url,filename:message.filename};if(nativePort)nativePort.postMessage(payload);else socket.send(JSON.stringify(payload));setTimeout(()=>{if(pending.has(requestId)){pending.delete(requestId);respond({success:false,error:'GetANNY did not respond'})}},10000);return true}if(message.type==='status'){respond({connected:socket?.readyState===1,native:!!nativePort});return}});
+/* Shared extension implementation. Browser-specific config is generated at packaging. */
+if (typeof importScripts === "function") importScripts("config.js");
+const api = globalThis.browser || globalThis.chrome;
+const pending = new Map();
+const detected = new Map();
+let nativePort,
+  socket,
+  connecting,
+  connectResolve,
+  connectReject,
+  connectTimeout,
+  heartbeat;
+let state = { connected: false, transport: null, error: null };
+let browserId = globalThis.GETANNY_BROWSER || "chrome";
+let pairingKey = "";
+const validUrl = (value) => {
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+};
+const requestId = () => crypto.randomUUID();
+function update(next) {
+  state = { ...state, ...next };
+}
+function rejectPending(error) {
+  for (const entry of pending.values()) {
+    clearTimeout(entry.timer);
+    entry.reject(new Error(error));
+  }
+  pending.clear();
+}
+function sendRaw(message) {
+  if (nativePort) nativePort.postMessage(message);
+  else if (socket?.readyState === WebSocket.OPEN)
+    socket.send(JSON.stringify(message));
+  else throw new Error("GetANNY is not connected.");
+}
+function hello() {
+  sendRaw({
+    type: "hello",
+    requestId: requestId(),
+    browserId,
+    extensionId: api.runtime.id,
+    version: api.runtime.getManifest().version,
+  });
+}
+function deliver(message) {
+  if (message.type === "hello-result" && message.success) {
+    clearTimeout(connectTimeout);
+    update({ connected: true, transport: message.transport, error: null });
+    connectResolve?.(state);
+    connecting = null;
+    connectResolve = null;
+    connectReject = null;
+    clearInterval(heartbeat);
+    heartbeat = setInterval(() => {
+      try {
+        sendRaw({ type: "ping", requestId: requestId() });
+      } catch {
+        disconnected("Desktop connection lost.");
+      }
+    }, 25000);
+  } else if (
+    message.type === "transport-error" ||
+    message.type === "authentication-error"
+  ) {
+    disconnected(message.error || "Desktop bridge unavailable.");
+    return;
+  }
+  const entry = pending.get(message.requestId);
+  if (entry) {
+    clearTimeout(entry.timer);
+    pending.delete(message.requestId);
+    message.success
+      ? entry.resolve(message)
+      : entry.reject(
+          new Error(message.error || "GetANNY rejected the request."),
+        );
+  }
+}
+function disconnected(error) {
+  clearInterval(heartbeat);
+  update({ connected: false, transport: null, error });
+  rejectPending(error);
+}
+function connectWebSocket() {
+  if (!pairingKey) {
+    connectReject?.(
+      new Error(
+        state.error ||
+          "Native host not available. Run browser setup in GetANNY, or enter its pairing key.",
+      ),
+    );
+    clearTimeout(connectTimeout);
+    connecting = null;
+    connectResolve = null;
+    connectReject = null;
+    return;
+  }
+  if (socket) {
+    socket.onclose = null;
+    socket.close();
+  }
+  socket = new WebSocket("ws://127.0.0.1:29615");
+  socket.onopen = () =>
+    socket.send(
+      JSON.stringify({
+        type: "authenticate",
+        token: pairingKey,
+        transport: "websocket",
+      }),
+    );
+  socket.onmessage = (event) => {
+    try {
+      const message = JSON.parse(event.data);
+      if (message.type === "authenticated") hello();
+      else deliver(message);
+    } catch {
+      disconnected("Invalid desktop response.");
+    }
+  };
+  socket.onerror = () =>
+    update({
+      error:
+        "Could not reach GetANNY. Start the desktop app and check Browser integration.",
+    });
+  socket.onclose = () => {
+    disconnected(state.error || "Desktop connection closed.");
+    connectReject?.(new Error(state.error));
+    connecting = null;
+    connectResolve = null;
+    connectReject = null;
+  };
+}
+async function connect() {
+  if (state.connected) return state;
+  if (connecting) return connecting;
+  const saved = await api.storage.local.get(["browserId", "pairingKey"]);
+  browserId = saved.browserId || globalThis.GETANNY_BROWSER || "chrome";
+  pairingKey = saved.pairingKey || "";
+  if (connecting) return connecting;
+  connecting = new Promise((resolve, reject) => {
+    connectResolve = resolve;
+    connectReject = reject;
+  });
+  const result = connecting;
+  connectTimeout = setTimeout(() => {
+    disconnected(
+      "No handshake from GetANNY. Start the app, register the host, or use a pairing key.",
+    );
+    connectReject?.(new Error(state.error));
+    connecting = null;
+    connectResolve = null;
+    connectReject = null;
+    nativePort?.disconnect();
+    nativePort = null;
+  }, 8000);
+  try {
+    if (nativePort) nativePort.disconnect();
+    const port = api.runtime.connectNative("com.getanny.native");
+    nativePort = port;
+    port.onMessage.addListener(deliver);
+    port.onDisconnect.addListener(() => {
+      if (nativePort !== port) return;
+      const error =
+        api.runtime.lastError?.message || "Native host disconnected.";
+      nativePort = null;
+      disconnected(error);
+      if (connecting) connectWebSocket();
+    });
+    hello();
+  } catch (error) {
+    nativePort = null;
+    update({ error: error.message });
+    connectWebSocket();
+  }
+  return result;
+}
+async function request(message) {
+  await connect();
+  return new Promise((resolve, reject) => {
+    const id = requestId();
+    const timer = setTimeout(() => {
+      pending.delete(id);
+      reject(
+        new Error(
+          "GetANNY did not acknowledge the request. Check the desktop application.",
+        ),
+      );
+    }, 15000);
+    pending.set(id, { resolve, reject, timer });
+    try {
+      sendRaw({ ...message, requestId: id });
+    } catch (error) {
+      clearTimeout(timer);
+      pending.delete(id);
+      reject(error);
+    }
+  });
+}
+function remember(tabId, media) {
+  if (tabId < 0 || !validUrl(media.url)) return;
+  const list = detected.get(tabId) || [];
+  if (!list.some((item) => item.url === media.url)) {
+    list.unshift({
+      url: media.url,
+      title: String(media.title || "").slice(0, 160),
+      kind: media.kind === "media" ? "media" : "file",
+      mimeType: media.mimeType || "",
+    });
+    detected.set(tabId, list.slice(0, 20));
+    api.action
+      ?.setBadgeText({ tabId, text: String(Math.min(20, list.length)) })
+      .catch?.(() => {});
+  }
+}
+api.runtime.onMessage.addListener((message, sender, respond) => {
+  const ui = sender.url?.startsWith(api.runtime.getURL(""));
+  (async () => {
+    if (message.type === "status") {
+      if (!state.connected)
+        connect().catch((error) => update({ error: error.message }));
+      return { ...state, browserId };
+    }
+    if (message.type === "reconnect" && ui) {
+      if (nativePort) {
+        nativePort.disconnect();
+        nativePort = null;
+      }
+      if (socket) {
+        socket.onclose = null;
+        socket.close();
+        socket = null;
+      }
+      update({ connected: false });
+      return connect();
+    }
+    if (message.type === "configure" && ui) {
+      if (
+        ![
+          "helium",
+          "chrome",
+          "chromium",
+          "brave",
+          "firefox",
+          "vivaldi",
+          "opera",
+          "edge",
+        ].includes(message.browserId)
+      )
+        throw new Error("Choose a supported browser.");
+      if (message.pairingKey && !/^[a-f0-9]{64}$/i.test(message.pairingKey))
+        throw new Error("Copy the complete pairing key from GetANNY.");
+      await api.storage.local.set({
+        browserId: message.browserId,
+        pairingKey: message.pairingKey.trim(),
+      });
+      if (nativePort) {
+        nativePort.disconnect();
+        nativePort = null;
+      }
+      update({ connected: false });
+      return connect();
+    }
+    if (message.type === "media-detected") {
+      remember(sender.tab?.id ?? -1, message.media || {});
+      return { success: true };
+    }
+    if (message.type === "detected" && ui)
+      return { items: detected.get(message.tabId) || [] };
+    if (message.type === "download") {
+      if (!validUrl(message.url))
+        throw new Error(
+          "Only HTTP and HTTPS downloads are supported. Blob URLs must be analyzed using the original media page.",
+        );
+      return request({
+        type: "download",
+        url: message.url,
+        kind: message.kind === "media" ? "media" : "file",
+        filename: message.filename,
+      });
+    }
+    throw new Error("Unsupported extension action.");
+  })().then(respond, (error) =>
+    respond({ success: false, error: error.message }),
+  );
+  return true;
+});
+api.tabs.onRemoved.addListener((tabId) => detected.delete(tabId));
+api.tabs.onUpdated.addListener((tabId, changes) => {
+  if (changes.status === "loading") {
+    detected.delete(tabId);
+    api.action?.setBadgeText({ tabId, text: "" }).catch?.(() => {});
+  }
+});
+api.webRequest?.onHeadersReceived.addListener(
+  (details) => {
+    const type =
+      details.responseHeaders?.find(
+        (header) => header.name.toLowerCase() === "content-type",
+      )?.value || "";
+    if (
+      /^(video|audio)\/|application\/(vnd\.apple\.mpegurl|x-mpegurl|dash\+xml)/i.test(
+        type,
+      )
+    )
+      remember(details.tabId, {
+        url: details.url,
+        mimeType: type,
+        title: "Detected media stream",
+        kind: /mpegurl|dash\+xml/.test(type) ? "media" : "file",
+      });
+  },
+  { urls: ["http://*/*", "https://*/*"] },
+  ["responseHeaders"],
+);
+api.runtime.onInstalled.addListener(() => {
+  Promise.resolve(api.contextMenus.removeAll()).then(() => {
+    api.contextMenus.create({
+      id: "getanny-link",
+      title: "Download with GetANNY",
+      contexts: ["link", "video", "audio"],
+    });
+    api.contextMenus.create({
+      id: "getanny-page",
+      title: "Analyze media in GetANNY",
+      contexts: ["page"],
+    });
+  });
+});
+api.contextMenus.onClicked.addListener((info, tab) => {
+  const media = info.menuItemId === "getanny-page";
+  const url = media ? tab.url : info.linkUrl || info.srcUrl;
+  if (validUrl(url))
+    request({ type: "download", url, kind: media ? "media" : "file" }).catch(
+      (error) => update({ error: error.message }),
+    );
+});
+connect().catch((error) => update({ error: error.message }));

@@ -1,54 +1,54 @@
 {
   "name": "getanny",
-  "version": "1.0.1",
-  "description": "GetANNY — Advanced Download Manager",
+  "version": "2.0.0-rc.1",
+  "description": "GetANNY — reliable downloads, clear control",
   "main": "src/main/main.js",
   "author": "GetANNY Team",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "concurrently -k \"vite --host 0.0.0.0\" \"wait-on http://127.0.0.1:5173 && electron .\"",
-    "build": "npm run build-extension && vite build && electron-builder",
-    "build:win": "npm run build-extension && vite build && electron-builder --win",
-    "build:mac": "npm run build-extension && vite build && electron-builder --mac",
-    "build:linux": "npm run build-extension && vite build && electron-builder --linux",
-    "test": "node --test",
-    "preview": "vite preview --host 0.0.0.0",
-    "postinstall": "electron-builder install-app-deps",
+    "dev:web": "node scripts/dev-web.js",
+    "build:renderer": "vite build",
+    "build-extension": "node scripts/build-extension.js",
     "download-ytdlp": "node scripts/download-ytdlp.js",
-    "build-extension": "node scripts/build-extension.js"
+    "prepare:tools": "node scripts/prepare-tools.js",
+    "build": "npm run build-extension && npm run build:renderer && electron-builder --publish never",
+    "build:win": "npm run build-extension && npm run build:renderer && electron-builder --win nsis msi --publish never",
+    "build:linux": "npm run build-extension && npm run build:renderer && electron-builder --linux --publish never",
+    "test": "node --test --test-concurrency=1 tests/*.test.js src/main/**/*.test.js",
+    "test:ui": "node scripts/test-ui.js",
+    "format": "prettier --write src scripts tests docs README.md electron-builder.yml .github/workflows/*.yml",
+    "postinstall": "electron-builder install-app-deps",
+    "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "better-sqlite3": "^11.7.0",
-    "electron-updater": "^6.3.9",
-    "webtorrent": "^2.5.1",
-    "parse-torrent": "^11.0.18",
-    "mime-types": "^2.1.35",
+    "better-sqlite3": "^13.0.3",
     "content-disposition": "^0.5.4",
-    "uuid": "^10.0.0",
-    "ws": "^8.18.0",
-    "electron-store": "^10.0.0",
-    "got": "^11.8.6",
-    "piscina": "^4.7.0"
+    "electron-updater": "^6.8.9",
+    "webtorrent": "^3.0.21",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
+    "@playwright/test": "^1.64.1",
+    "@sparticuz/chromium": "^153.0.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.0",
-    "electron": "^33.2.0",
-    "electron-builder": "^25.1.8",
-    "postcss": "^8.4.49",
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0",
+    "fflate": "^0.8.2",
+    "prettier": "^3.6.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-icons": "^5.4.0",
-    "react-router-dom": "^7.1.0",
-    "tailwindcss": "^3.4.17",
-    "vite": "^6.0.5",
+    "vite": "^6.4.1",
     "wait-on": "^8.0.1",
-    "zustand": "^5.0.2",
-    "framer-motion": "^11.15.0",
-    "react-hot-toast": "^2.4.1"
+    "zustand": "^5.0.2"
   },
   "build": {
     "extends": "electron-builder.yml"
+  },
+  "overrides": {
+    "ip": "npm:@webpod/ip@^0.6.1"
   }
 }

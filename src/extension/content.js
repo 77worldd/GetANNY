@@ -1,1 +1,45 @@
-(()=>{const sent=new Set();const media=/\.(mp4|m4v|webm|mkv|mov|mp3|m4a|aac|ogg|opus|wav|flac)(?:$|[?#])/i;function report(url,type=''){try{const value=new URL(url,location.href);if(!['http:','https:'].includes(value.protocol)||sent.has(value.href)||(!media.test(value.href)&&!/^video\/|^audio\//i.test(type)))return;sent.add(value.href);chrome.runtime.sendMessage({type:'media-detected',media:{url:value.href,mimeType:type,filename:value.pathname.split('/').pop()||document.title,title:document.title,pageUrl:location.href}})}catch{}}function scan(){document.querySelectorAll('video,audio').forEach(el=>{report(el.currentSrc||el.src);el.querySelectorAll('source').forEach(s=>report(s.src,s.type))})}scan();new MutationObserver(scan).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});document.addEventListener('play',e=>{if(e.target instanceof HTMLMediaElement)report(e.target.currentSrc||e.target.src)},true);})();
+(() => {
+  const api = globalThis.browser || globalThis.chrome;
+  const seen = new Set();
+  const send = (media) => {
+    if (!media.url || seen.has(media.url)) return;
+    try {
+      const url = new URL(media.url, location.href);
+      if (!["http:", "https:"].includes(url.protocol)) return;
+      seen.add(url.href);
+      api.runtime
+        .sendMessage({
+          type: "media-detected",
+          media: { ...media, url: url.href, title: document.title },
+        })
+        .catch(() => {});
+    } catch {
+      /* non-downloadable URL */
+    }
+  };
+  function scan() {
+    for (const element of document.querySelectorAll("video,audio")) {
+      const url = element.currentSrc || element.src;
+      if (url && !url.startsWith("blob:")) send({ url, kind: "file" });
+      else send({ url: location.href, kind: "media" });
+      for (const source of element.querySelectorAll("source"))
+        send({
+          url: source.src,
+          mimeType: source.type,
+          kind: /mpegurl|dash/.test(source.type) ? "media" : "file",
+        });
+    }
+  }
+  let timer;
+  new MutationObserver(() => {
+    clearTimeout(timer);
+    timer = setTimeout(scan, 400);
+  }).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["src"],
+  });
+  document.addEventListener("play", scan, true);
+  scan();
+})();
