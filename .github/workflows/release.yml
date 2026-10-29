@@ -19,18 +19,28 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
 
       - name: Install dependencies
-        run: npm install
+        shell: pwsh
+        run: |
+          npm install
+          if ($LASTEXITCODE -ne 0) {
+            $log = Get-ChildItem "$env:LOCALAPPDATA\npm-cache\_logs\*-debug-0.log" | Sort-Object LastWriteTime | Select-Object -Last 1
+            if ($log) {
+              $details = (Get-Content $log.FullName -Tail 35) -join ' | '
+              Write-Output "::error title=npm install failure::$details"
+            }
+            exit 1
+          }
 
       - name: Download yt-dlp
         run: node scripts/download-ytdlp.js
