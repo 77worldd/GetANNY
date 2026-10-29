@@ -30,15 +30,11 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        shell: pwsh
-        run: |
-          npm install 2>&1 | Tee-Object -FilePath npm-install.log
-          $installExit = $LASTEXITCODE
-          if ($installExit -ne 0) {
-            $details = (Get-Content npm-install.log -Tail 25) -join ' | '
-            Write-Error "npm install failed with exit code $installExit. $details"
-            exit 1
-          }
+        run: npm install
+        env:
+          # electron-builder rebuilds native modules for Electron during packaging.
+          # Skipping install lifecycle scripts avoids an early rebuild before Electron is staged.
+          npm_config_ignore_scripts: 'true'
 
       - name: Download yt-dlp
         run: node scripts/download-ytdlp.js
