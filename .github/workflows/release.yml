@@ -48,8 +48,8 @@ jobs:
           npx electron-builder --win nsis 2>&1 | Tee-Object -FilePath electron-builder.log
           $buildExit = $LASTEXITCODE
           if ($buildExit -ne 0) {
-            $details = (Get-Content electron-builder.log -Tail 35) -join ' | '
-            Write-Error "electron-builder failed with exit code $buildExit. $details"
+            $details = (Get-Content electron-builder.log -Tail 35 -ErrorAction SilentlyContinue) -join ' | '
+            Write-Host "::error title=electron-builder failure::exit=$buildExit $details"
             exit 1
           }
 
