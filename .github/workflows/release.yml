@@ -37,7 +37,11 @@ jobs:
       - name: Build all browser packages
         run: npm run build-extension
       - name: Real backend, media and bridge tests
-        run: npm test
+        shell: pwsh
+        run: |
+          New-Item test-results/windows -ItemType Directory -Force | Out-Null
+          npm test 2>&1 | Tee-Object test-results/windows/backend-tests.log
+          exit $LASTEXITCODE
       - name: Dependency security audit
         run: npm audit --audit-level=high
       - name: Build renderer
@@ -47,13 +51,28 @@ jobs:
       - name: Rebuild SQLite for the packaged Electron ABI
         run: npx electron-rebuild --force --only better-sqlite3
       - name: Build branded EXE and MSI installers
-        run: npx electron-builder --win nsis msi --publish never
+        shell: pwsh
+        run: |
+          npx electron-builder --win nsis msi --publish never 2>&1 | Tee-Object test-results/windows/build.log
+          exit $LASTEXITCODE
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
       - name: Install, launch, download, integrate, restart, reinstall and uninstall both packages
         shell: pwsh
-        run: ./scripts/windows/test-installers.ps1
+        run: |
+          ./scripts/windows/test-installers.ps1 *>&1 | Tee-Object test-results/windows/installed-tests.log
+      - name: Report actual failures through check annotations
+        if: failure()
+        shell: pwsh
+        run: |
+          # Check annotations stay readable through GitHub's API even when a
+          # development sandbox cannot reach the external Actions log host.
+          Get-ChildItem test-results/windows -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @('.json','.log') } | ForEach-Object {
+            $text = (Get-Content $_.FullName -Tail 140) -join "`n"
+            $text = $text.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=$($_.Name)::$text"
+          }
       - name: Retain executable test reports and installation logs even on failure
         if: always()
         uses: actions/upload-artifact@v4

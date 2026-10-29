@@ -342,3 +342,27 @@ test("concurrent name reservations cannot collide before files are created", asy
     3,
   );
 });
+
+test("a resumed URL without entity validators restarts rather than mixing changed bytes", async (t) => {
+  const server = await fixtureServer(t, { size: 4 * 1024 * 1024, delay: 8 });
+  const dir = await temporary(t);
+  const options = {
+    id: "missing-validators",
+    url: server.url + "/no-validators",
+    savePath: dir,
+    connections: 4,
+  };
+  const first = new ChunkDownloader(options),
+    task = run(first);
+  await waitFor(() => first.downloadedSize > 256 * 1024);
+  await first.pause();
+  await task;
+  server.state.data.fill(31);
+  const next = new ChunkDownloader(options);
+  assert.equal(await run(next), undefined);
+  assert.equal(next.status, "completed");
+  assert.equal(
+    checksum(await fs.readFile(path.join(dir, next.filename))),
+    checksum(server.state.data),
+  );
+});

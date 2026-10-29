@@ -201,3 +201,48 @@ for (const page of ["watch.html", "listen.html", "adaptive.mpd"]) {
     },
   );
 }
+
+test("adaptive progress never reports the first stream as the entire download", async (t) => {
+  const dir = await temporary(t);
+  const output = path.join(dir, "Adaptive [progress].mp4");
+  let first;
+  const wrapper = {
+    async download({ onProgress, onFile }) {
+      onProgress({
+        filename: "video.mp4",
+        downloaded_bytes: 100,
+        total_bytes: 100,
+        status: "finished",
+      });
+      first = events.at(-1);
+      onProgress({
+        filename: "audio.m4a",
+        downloaded_bytes: 20,
+        total_bytes: 30,
+        status: "downloading",
+      });
+      await fs.writeFile(output, Buffer.from("actual fixture bytes"));
+      onFile(output);
+    },
+  };
+  const engine = new MediaEngine(
+      {
+        id: "progress",
+        url: "https://example.com/watch",
+        savePath: dir,
+        media: { title: "Adaptive", formatId: "v1", mergeAudio: true },
+        timeout: 30000,
+      },
+      wrapper,
+    ),
+    events = [];
+  engine.on("progress", (_id, event) => events.push(event));
+  engine.on("error", (_id, error) => {
+    throw error;
+  });
+  await engine.start();
+  assert.equal(first.totalSize, 0);
+  assert.notEqual(first.phase, "Finalizing media");
+  assert.equal(events[1].totalSize, 130);
+  assert.equal(events[1].downloadedSize, 120);
+});

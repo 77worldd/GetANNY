@@ -121,6 +121,7 @@ class DownloadEngine extends EventEmitter {
       /* first attempt */
     }
     const valid =
+      (info.etag || info.lastModified) &&
       info.resumable &&
       state?.url === info.url &&
       state.totalSize === info.totalSize &&

@@ -222,11 +222,7 @@ export function ConfirmDialog({
     >
       <div className="dialog-body">
         {error && <ErrorBanner>{error}</ErrorBanner>}
-        <p className="muted">
-          {destructive
-            ? "This action cannot be undone."
-            : "Your partial files and download history will be preserved."}
-        </p>
+        {destructive && <p className="muted">This action cannot be undone.</p>}
       </div>
       <footer className="dialog-footer">
         <Button disabled={busy} onClick={onClose}>

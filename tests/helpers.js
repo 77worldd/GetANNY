@@ -76,7 +76,7 @@ async function fixtureServer(
     const unknown = url.pathname === "/unknown";
     let start = 0,
       end = length - 1;
-    res.setHeader("ETag", state.etag);
+    if (url.pathname !== "/no-validators") res.setHeader("ETag", state.etag);
     res.setHeader("Content-Type", "application/octet-stream");
     res.setHeader(
       "Content-Disposition",

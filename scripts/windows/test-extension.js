@@ -16,7 +16,12 @@ const exec = promisify(execFile);
       "Usage: node test-extension.js installed.exe report-folder",
     );
   await fs.mkdir(root, { recursive: true });
-  const userData = path.join(root, "extension-app-data"),
+  const work = path.join(
+    process.env.RUNNER_TEMP || require("node:os").tmpdir(),
+    `getanny-browser-${process.pid}`,
+  );
+  await fs.mkdir(work, { recursive: true });
+  const userData = path.join(work, "extension-app-data"),
     cleanups = [];
   const t = {
     after: (fn) => cleanups.push(fn),
@@ -70,11 +75,11 @@ const exec = promisify(execFile);
     });
     await invoke("settings:set", {
       key: "defaultDownloadPath",
-      value: path.join(root, "browser-downloads"),
+      value: path.join(work, "browser-downloads"),
     });
     const prepared = await invoke("browser:prepare", "chromium");
     browser = await chromium.launchPersistentContext(
-      path.join(root, "chromium-profile"),
+      path.join(work, "chromium-profile"),
       {
         channel: "chromium",
         headless: true,
@@ -228,6 +233,12 @@ const exec = promisify(execFile);
       "--quiet",
     ]).catch(() => {});
     for (const cleanup of cleanups.reverse()) await cleanup();
+    await fs.rm(work, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   }
 })().catch((error) => {
   console.error(error);

@@ -56,12 +56,19 @@ class MediaEngine extends EventEmitter {
             (sum, track) => sum + track.bytes,
             0,
           );
-          const totalSize = tracks.every((track) => track.total > 0)
-            ? tracks.reduce((sum, track) => sum + track.total, 0)
-            : 0;
+          // A finished video track is not the whole adaptive download.
+          // Until both track totals are known, show unknown instead of a false 100%.
+          const totalSize =
+            tracks.length >= (media.mergeAudio ? 2 : 1) &&
+            tracks.every((track) => track.total > 0)
+              ? tracks.reduce((sum, track) => sum + track.total, 0)
+              : 0;
           if (value.status === "downloading" && this.status !== "downloading")
             this.setStatus("downloading");
-          if (value.status === "finished")
+          const finalizing =
+            value.status === "finished" &&
+            tracks.length >= (media.mergeAudio ? 2 : 1);
+          if (finalizing)
             this.setStatus("processing", { phase: "Finalizing media" });
           this.emit("progress", this.id, {
             downloadedSize,
@@ -69,9 +76,10 @@ class MediaEngine extends EventEmitter {
             approximateSize: !value.total_bytes,
             speed: Number(value.speed) || 0,
             eta: Number.isFinite(value.eta) ? value.eta : null,
-            phase:
-              value.status === "finished"
-                ? "Finalizing media"
+            phase: finalizing
+              ? "Finalizing media"
+              : media.mergeAudio && tracks.length < 2
+                ? "Downloading video; audio follows"
                 : "Downloading media",
           });
         },
