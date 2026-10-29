@@ -37,6 +37,7 @@ nsis:
   installerIcon: assets/icon.ico
   uninstallerIcon: assets/icon.ico
 asar: true
+npmRebuild: false
 publish:
   provider: github
   owner: 77worldd
