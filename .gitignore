@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-renderer/
+dist-extension/
+bin/yt-dlp
+bin/yt-dlp.exe
+bin/yt-dlp_macos
+bin/yt-dlp-python/
+*.log
+*.db
+*.db-shm
+*.db-wal
+.DS_Store

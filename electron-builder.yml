@@ -1,0 +1,47 @@
+appId: com.getanny.app
+productName: GetANNY
+copyright: Copyright © 2025 GetANNY
+directories:
+  output: dist
+  buildResources: assets
+files:
+  - src/main/**/*
+  - package.json
+  - node_modules/**/*
+  - dist-renderer/**/*
+  - assets/**/*
+  - '!src/renderer/**/*'
+extraResources:
+  - from: bin/
+    to: bin/
+    filter: ['**/*']
+  - from: dist-extension/
+    to: extension/
+    filter: ['**/*']
+win:
+  target: [{ target: nsis, arch: [x64] }]
+  icon: assets/icon.ico
+mac:
+  target: [{ target: dmg, arch: [x64, arm64] }]
+  icon: assets/icon.icns
+  category: public.app-category.utilities
+linux:
+  target: [{ target: AppImage, arch: [x64] }]
+  icon: assets/icon.png
+  category: Network
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+asar: true
+publish:
+  provider: github
+  owner: 77worldd
+  repo: GetANNY
+asarUnpack:
+  - '**/better-sqlite3/**'
+  - '**/webtorrent/**'
+  - 'src/main/engine/chunk-worker.js'

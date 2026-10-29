@@ -1,0 +1,1 @@
+import{create}from'zustand';const useSettingsStore=create((set,get)=>({settings:{},load:async()=>{const settings=await window.getanny.invoke('settings:get-all');set({settings});return settings},save:async(key,value)=>{await window.getanny.invoke('settings:set',{key,value});set(s=>({settings:{...s.settings,[key]:value}}))}}));export default useSettingsStore;

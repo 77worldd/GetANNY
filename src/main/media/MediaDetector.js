@@ -1,0 +1,3 @@
+const {YtDlpWrapper}=require('./YtDlpWrapper');const {StreamSniffer}=require('./StreamSniffer');
+class MediaDetector{constructor({binPath,onMedia}={}){this.ytdlp=new YtDlpWrapper({binPath});this.sniffer=new StreamSniffer({onMedia});}async detect(url){try{const info=await this.ytdlp.getInfo(url);return {title:info.title,url:info.webpage_url||url,thumbnail:info.thumbnail,duration:info.duration,extractor:info.extractor,formats:info.formats||[]};}catch(e){return {url,error:e.message,formats:[]}}}async getFormats(url){return this.ytdlp.getFormats(url)}async download(options){return this.ytdlp.download(options)}inspect(details){return this.sniffer.inspect(details)}}
+module.exports={MediaDetector};
