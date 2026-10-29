@@ -1,6 +1,6 @@
 {
   "name": "getanny",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "GetANNY — Advanced Download Manager",
   "main": "src/main/main.js",
   "author": "GetANNY Team",
@@ -48,5 +48,7 @@
     "framer-motion": "^11.15.0",
     "react-hot-toast": "^2.4.1"
   },
-  "build": { "extends": "electron-builder.yml" }
+  "build": {
+    "extends": "electron-builder.yml"
+  }
 }
