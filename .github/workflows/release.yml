@@ -43,7 +43,15 @@ jobs:
         run: node scripts/build-extension.js
 
       - name: Build Windows NSIS installer
-        run: npx electron-builder --win nsis
+        shell: pwsh
+        run: |
+          npx electron-builder --win nsis 2>&1 | Tee-Object -FilePath electron-builder.log
+          $buildExit = $LASTEXITCODE
+          if ($buildExit -ne 0) {
+            $details = (Get-Content electron-builder.log -Tail 35) -join ' | '
+            Write-Error "electron-builder failed with exit code $buildExit. $details"
+            exit 1
+          }
 
       - name: Select release tag
         id: release
