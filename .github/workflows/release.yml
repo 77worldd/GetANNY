@@ -32,13 +32,11 @@ jobs:
       - name: Install dependencies
         shell: pwsh
         run: |
-          npm install
-          if ($LASTEXITCODE -ne 0) {
-            $log = Get-ChildItem "$env:LOCALAPPDATA\npm-cache\_logs\*-debug-0.log" | Sort-Object LastWriteTime | Select-Object -Last 1
-            if ($log) {
-              $details = (Get-Content $log.FullName -Tail 35) -join ' | '
-              Write-Output "::error title=npm install failure::$details"
-            }
+          npm install 2>&1 | Tee-Object -FilePath npm-install.log
+          $installExit = $LASTEXITCODE
+          if ($installExit -ne 0) {
+            $details = (Get-Content npm-install.log -Tail 25) -join ' | '
+            Write-Error "npm install failed with exit code $installExit. $details"
             exit 1
           }
 
