@@ -1,0 +1,3 @@
+const MEDIA=/^(video|audio)\//i;const EXT=/\.(mp4|m4v|webm|mkv|mov|mp3|m4a|aac|ogg|opus|wav|flac)(?:$|[?#])/i;
+class StreamSniffer{constructor({onMedia=()=>{}}={}){this.onMedia=onMedia;this.seen=new Set();}inspect(details){try{const u=new URL(details.url);if(!['http:','https:'].includes(u.protocol)||this.seen.has(u.href))return null;const type=details.responseHeaders?.['content-type']||details.mimeType||'';if(!MEDIA.test(type)&&!EXT.test(u.href))return null;this.seen.add(u.href);const media={url:u.href,mimeType:type.split(';')[0],filename:u.pathname.split('/').pop()||'media',source:'web-request',detectedAt:Date.now()};this.onMedia(media);return media;}catch{return null;}}}
+module.exports={StreamSniffer};

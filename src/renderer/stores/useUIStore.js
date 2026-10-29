@@ -1,0 +1,1 @@
+import{create}from'zustand';const useUIStore=create(set=>({activeTab:'all',setActiveTab:activeTab=>set({activeTab}),addModal:false,setAddModal:addModal=>set({addModal}),toast:'',notify:toast=>{set({toast});setTimeout(()=>set({toast:''}),3000)}}));export default useUIStore;

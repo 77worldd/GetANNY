@@ -1,0 +1,54 @@
+{
+  "name": "getanny",
+  "version": "1.0.1",
+  "description": "GetANNY — Advanced Download Manager",
+  "main": "src/main/main.js",
+  "author": "GetANNY Team",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 0.0.0.0\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "build": "npm run build-extension && vite build && electron-builder",
+    "build:win": "npm run build-extension && vite build && electron-builder --win",
+    "build:mac": "npm run build-extension && vite build && electron-builder --mac",
+    "build:linux": "npm run build-extension && vite build && electron-builder --linux",
+    "test": "node --test",
+    "preview": "vite preview --host 0.0.0.0",
+    "postinstall": "electron-builder install-app-deps",
+    "download-ytdlp": "node scripts/download-ytdlp.js",
+    "build-extension": "node scripts/build-extension.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "electron-updater": "^6.3.9",
+    "webtorrent": "^2.5.1",
+    "parse-torrent": "^11.0.18",
+    "mime-types": "^2.1.35",
+    "content-disposition": "^0.5.4",
+    "uuid": "^10.0.0",
+    "ws": "^8.18.0",
+    "electron-store": "^10.0.0",
+    "got": "^11.8.6",
+    "piscina": "^4.7.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "postcss": "^8.4.49",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-icons": "^5.4.0",
+    "react-router-dom": "^7.1.0",
+    "tailwindcss": "^3.4.17",
+    "vite": "^6.0.5",
+    "wait-on": "^8.0.1",
+    "zustand": "^5.0.2",
+    "framer-motion": "^11.15.0",
+    "react-hot-toast": "^2.4.1"
+  },
+  "build": {
+    "extends": "electron-builder.yml"
+  }
+}

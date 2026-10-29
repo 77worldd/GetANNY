@@ -1,0 +1,1 @@
+Run `npm run download-ytdlp` to populate this directory with the platform-specific yt-dlp executable before packaging media-extraction support. The downloader script applies executable permissions on Unix-like systems.
