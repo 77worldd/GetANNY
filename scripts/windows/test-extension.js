@@ -10,7 +10,8 @@ const { mediaFixture } = require("../../tests/media-fixture");
 const { CHROMIUM_ID } = require("../../src/main/browser-integration/catalog");
 const exec = promisify(execFile);
 (async () => {
-  const [executable, root] = process.argv.slice(2);
+  const [executable, root, browserId = "chromium", browserExecutable] =
+    process.argv.slice(2);
   if (!executable || !root)
     throw new Error(
       "Usage: node test-extension.js installed.exe report-folder",
@@ -57,11 +58,18 @@ const exec = promisify(execFile);
       "installed Electron remote debugging",
     );
     electron = await chromium.connectOverCDP("http://127.0.0.1:9223");
-    const page = electron
-      .contexts()[0]
-      .pages()
-      .find((page) => page.url().startsWith("file://"));
-    if (!page) throw new Error("No installed renderer page");
+    let page;
+    await waitFor(
+      () => {
+        page = electron
+          .contexts()[0]
+          ?.pages()
+          .find((page) => page.url().startsWith("file://"));
+        return !!page;
+      },
+      30000,
+      "installed renderer page",
+    );
     await page.waitForSelector(".sidebar");
     const invoke = (channel, ...args) =>
       page.evaluate(
@@ -77,11 +85,13 @@ const exec = promisify(execFile);
       key: "defaultDownloadPath",
       value: path.join(work, "browser-downloads"),
     });
-    const prepared = await invoke("browser:prepare", "chromium");
+    const prepared = await invoke("browser:prepare", browserId);
     browser = await chromium.launchPersistentContext(
       path.join(work, "chromium-profile"),
       {
-        channel: "chromium",
+        ...(browserExecutable
+          ? { executablePath: browserExecutable }
+          : { channel: "chromium" }),
         headless: true,
         ignoreDefaultArgs: ["--disable-extensions"],
         args: [
@@ -106,10 +116,10 @@ const exec = promisify(execFile);
     if (
       !status.websocket.sessions.some(
         (session) =>
-          session.browserId === "chromium" && session.transport === "native",
+          session.browserId === browserId && session.transport === "native",
       )
     )
-      throw new Error("No verified native Chromium session");
+      throw new Error(`No verified native ${browserId} session`);
     await popup.locator("#url").fill(fixture.url + "/file.bin");
     await popup.locator("#send").click();
     await expect(popup.locator("#message")).toHaveText(
@@ -183,7 +193,12 @@ const exec = promisify(execFile);
       JSON.stringify(
         {
           passed: true,
-          browser: "Playwright Chromium (actual browser, not Google Chrome)",
+          browser:
+            browserId === "chromium"
+              ? "Playwright Chromium (not Google Chrome)"
+              : browserId,
+          browserExecutable: browserExecutable || "Playwright bundled Chromium",
+          browserVersion: await browser.browser().version(),
           extensionId: CHROMIUM_ID,
           transport:
             "Native Messaging → C# executable → Electron Node → authenticated WebSocket → installed Electron → SQLite/download engine",
@@ -194,15 +209,8 @@ const exec = promisify(execFile);
             "Content script detects actual HTML5 media",
             "Popup-origin media request analyzes and downloads through desktop UI",
           ],
-          unverifiedBrowsers: [
-            "Helium",
-            "Google Chrome",
-            "Brave",
-            "Mozilla Firefox",
-            "Vivaldi",
-            "Opera",
-            "Microsoft Edge",
-          ],
+          scope:
+            "One real browser binary with a new isolated test profile. This is not proof of permanent/store installation or other browser brands.",
           date: new Date().toISOString(),
         },
         null,

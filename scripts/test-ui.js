@@ -17,6 +17,7 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
   const media = await mediaFixture(t);
   const output = path.resolve(".arena/ui-test");
   await fs.mkdir(output, { recursive: true });
+  await fs.rm(path.join(output, "report.json"), { force: true });
   const browser = await chromium.launch(await launchOptions());
   const page = await browser.newPage({
     viewport: { width: 1320, height: 860 },
@@ -40,6 +41,8 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
   try {
     await invoke("settings:set", { key: "firstRunCompleted", value: false });
     await invoke("settings:set", { key: "autoStartDownloads", value: true });
+    await invoke("settings:set", { key: "maxConcurrentDownloads", value: 3 });
+    await invoke("settings:set", { key: "theme", value: "graphite" });
     await page.goto(base);
     await expect(
       page.getByRole("heading", { name: "Browser integration", exact: true }),
@@ -63,11 +66,9 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
     }
     const filename = `HTTP range verification ${Date.now()}.bin`;
     await add(fixture.url + "/file.bin", filename);
-    const row = page
-      .getByRole("listitem")
-      .filter({
-        has: page.getByRole("button", { name: filename, exact: true }),
-      });
+    const row = page.getByRole("listitem").filter({
+      has: page.getByRole("button", { name: filename, exact: true }),
+    });
     await expect(row).toBeVisible();
     await expect(row.getByText("Downloading", { exact: true })).toBeVisible();
     await row
@@ -93,11 +94,9 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
     await add(fixture.url + "/missing", failed);
     await nav("Failed").click();
     await expect(
-      page
-        .getByRole("listitem")
-        .filter({
-          has: page.getByRole("button", { name: failed, exact: true }),
-        }),
+      page.getByRole("listitem").filter({
+        has: page.getByRole("button", { name: failed, exact: true }),
+      }),
     ).toContainText("HTTP 404");
     await nav("Media studio").click();
     await page
@@ -208,8 +207,23 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
     await page
       .getByLabel("Download link", { exact: true })
       .fill(fixture.url + "/file.bin");
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByRole("button", { name: "Close dialog", exact: true })
+      .focus();
+    await page.keyboard.press("Shift+Tab");
+    await expect(
+      dialog.getByRole("button", { name: "Start download", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      dialog.getByRole("button", { name: "Close dialog", exact: true }),
+    ).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "New download", exact: true }),
+    ).toBeFocused();
     if (errors.length) throw new Error(errors.join("\n"));
     const report = {
       passed: true,
@@ -225,7 +239,9 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
         "Keyboard Escape and focusable dialogs",
         "No uncaught renderer errors",
       ],
-      screenshots: await fs.readdir(output),
+      screenshots: (await fs.readdir(output)).filter((file) =>
+        file.endsWith(".png"),
+      ),
     };
     await fs.writeFile(
       path.join(output, "report.json"),
@@ -236,7 +252,17 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
     await browser.close();
     for (const fn of cleanup.reverse()) await fn();
   }
-})().catch((error) => {
+})().catch(async (error) => {
+  await fs
+    .writeFile(
+      path.resolve(".arena/ui-test/report.json"),
+      JSON.stringify(
+        { passed: false, error: error.stack, date: new Date().toISOString() },
+        null,
+        2,
+      ),
+    )
+    .catch(() => {});
   console.error(error);
   process.exitCode = 1;
 });

@@ -14,6 +14,12 @@ files:
   - LICENSE
   - docs/THIRD_PARTY.md
 extraResources:
+  # Native CLI entrypoint must be a real file, not an ASAR virtual path.
+  - from: src/main/browser-integration/native-host.js
+    to: native-host/native-host.js
+  - from: node_modules/ws/
+    to: native-host/node_modules/ws/
+    filter: ["package.json", "index.js", "lib/**/*.js"]
   - from: bin/
     to: bin/
     filter:
@@ -60,6 +66,7 @@ msi:
   warningsAsErrors: true
 msiProjectCreated: scripts/windows/customize-msi.js
 beforePack: scripts/verify-package.js
+afterPack: scripts/verify-installed-resources.js
 linux:
   target: [{ target: AppImage, arch: [x64] }]
   icon: assets/icon.png

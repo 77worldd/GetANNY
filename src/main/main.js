@@ -168,6 +168,15 @@ async function init() {
     app.exit(result.some((value) => value.error) ? 1 : 0);
     return;
   }
+  if (
+    !selfTest &&
+    testDataIndex < 0 &&
+    ["win32", "darwin"].includes(process.platform)
+  )
+    app.setLoginItemSettings({
+      openAtLogin: services.settings.get("launchAtLogin"),
+      path: process.execPath,
+    });
   services.events.on("event", send);
   services.events.on("event", (channel, data) => {
     if (

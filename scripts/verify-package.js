@@ -4,6 +4,9 @@ module.exports = async (context) => {
   const root = context.packager.projectDir;
   const platform = context.electronPlatformName;
   const required = [
+    "src/main/browser-integration/native-host.js",
+    "node_modules/ws/index.js",
+    "node_modules/ws/package.json",
     "dist-renderer/index.html",
     "dist-extension/chromium/manifest.json",
     "dist-extension/firefox/manifest.json",

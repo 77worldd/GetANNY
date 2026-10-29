@@ -18,6 +18,9 @@ test("Windows packaging fails closed when required runtime resources are absent"
 test("Windows packaging rejects existing but checksum-invalid tools", async (t) => {
   const root = await temporary(t);
   for (const file of [
+    "src/main/browser-integration/native-host.js",
+    "node_modules/ws/index.js",
+    "node_modules/ws/package.json",
     "dist-renderer/index.html",
     "dist-extension/chromium/manifest.json",
     "dist-extension/firefox/manifest.json",

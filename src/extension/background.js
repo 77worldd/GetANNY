@@ -221,7 +221,7 @@ api.runtime.onMessage.addListener((message, sender, respond) => {
   const ui = sender.url?.startsWith(api.runtime.getURL(""));
   (async () => {
     if (message.type === "status") {
-      if (!state.connected)
+      if (!state.connected && !nativePort)
         connect().catch((error) => update({ error: error.message }));
       return { ...state, browserId };
     }

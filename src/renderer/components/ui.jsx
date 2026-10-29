@@ -126,10 +126,12 @@ export function Dialog({
   busy = false,
 }) {
   const ref = useRef();
+  // Capture before mounting/focusing the dialog, not on each StrictMode effect.
+  const openerRef = useRef(document.activeElement);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
-    const previous = document.activeElement;
+    const previous = openerRef.current;
     const root = ref.current;
     const focusable = () =>
       [

@@ -18,7 +18,8 @@ function runNativeHost({
     closed = false,
     authenticated = false,
     timer,
-    launched = false;
+    launched = false,
+    hadDesktop = false;
   const queue = [];
   let lastHello;
   function send(message) {
@@ -39,15 +40,16 @@ function runNativeHost({
     if (closed) return;
     authenticated = false;
     socket = new WebSocket(`ws://127.0.0.1:${config.port || 29615}`);
-    socket.on("open", () =>
+    socket.on("open", () => {
+      hadDesktop = true;
       socket.send(
         JSON.stringify({
           type: "authenticate",
           token: config.token,
           transport: "native",
         }),
-      ),
-    );
+      );
+    });
     socket.on("message", (raw) => {
       try {
         const message = JSON.parse(raw.toString());
@@ -72,23 +74,29 @@ function runNativeHost({
       send({
         type: "transport-error",
         success: false,
-        error:
-          "Desktop bridge is offline. Starting or reconnecting to GetANNY…",
+        error: hadDesktop
+          ? "GetANNY desktop connection closed. Open the app or choose Reconnect."
+          : config.appPath
+            ? "Starting or reconnecting to GetANNY…"
+            : "GetANNY desktop bridge is offline. Start the app.",
       });
-      if (!launched && config.appPath) {
-        launched = true;
-        const env = { ...process.env };
-        delete env.ELECTRON_RUN_AS_NODE;
-        const child = spawn(config.appPath, ["--from-browser"], {
-          env,
-          detached: true,
-          stdio: "ignore",
-          windowsHide: false,
-        });
-        child.on("error", () => {});
-        child.unref();
-      }
-      timer = setTimeout(connect, 1500);
+      timer = setTimeout(() => {
+        if (closed) return;
+        if (!launched && !hadDesktop && config.appPath) {
+          launched = true;
+          const env = { ...process.env };
+          delete env.ELECTRON_RUN_AS_NODE;
+          const child = spawn(config.appPath, ["--from-browser"], {
+            env,
+            detached: true,
+            stdio: "ignore",
+            windowsHide: false,
+          });
+          child.on("error", () => {});
+          child.unref();
+        }
+        connect();
+      }, 1500);
     });
   }
   input.on("data", (data) => {

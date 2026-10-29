@@ -53,6 +53,13 @@ jobs:
         run: npm run prepare:tools
       - name: Build all browser packages
         run: npm run build-extension
+      - name: Exercise actual compiled C# launcher before packaging
+        shell: pwsh
+        run: |
+          New-Item test-results/windows -ItemType Directory -Force | Out-Null
+          $env:GETANNY_NATIVE_LAUNCHER='1'
+          node --test --test-concurrency=1 tests/browser.test.js 2>&1 | Tee-Object test-results/windows/native-launcher.log
+          exit $LASTEXITCODE
       - name: Real backend, media and bridge tests
         shell: pwsh
         run: |
@@ -86,6 +93,7 @@ jobs:
           # Check annotations stay readable through GitHub's API even when a
           # development sandbox cannot reach the external Actions log host.
           function Annotate([string] $title, [string] $text) {
+            $text = [regex]::Replace($text,'[ \t]+',' ')
             if ($text.Length -gt 3800) { $text = $text.Substring($text.Length - 3800) }
             $text = $text.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
             Write-Output "::error title=$title::$text"

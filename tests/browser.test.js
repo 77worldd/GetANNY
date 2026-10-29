@@ -194,23 +194,38 @@ test(
       await fs.rm(dir, { recursive: true, force: true });
     });
     await services.settings.set("confirmBrowserDownloads", false);
-    const config = path.join(dir, "native-test-config.json");
+    const compiledHost = process.env.GETANNY_NATIVE_LAUNCHER === "1";
+    const config = path.join(
+      dir,
+      compiledHost ? "bridge-config.json" : "native-test-config.json",
+    );
     await fs.writeFile(
       config,
       JSON.stringify({
         token: services.identity.token,
         port: services.wsServer.status().port,
+        executable: process.execPath,
+        script: path.resolve("src/main/browser-integration/native-host.js"),
       }),
     );
+    const launcher = path.join(dir, "GetANNY.NativeHost.exe");
+    if (compiledHost)
+      await fs.copyFile(path.resolve("bin/GetANNY.NativeHost.exe"), launcher);
     const child = spawn(
-      process.execPath,
-      [
-        path.resolve("src/main/browser-integration/native-host.js"),
-        "--config",
-        config,
-      ],
-      { stdio: ["pipe", "pipe", "pipe"] },
+      compiledHost ? launcher : process.execPath,
+      compiledHost
+        ? []
+        : [
+            path.resolve("src/main/browser-integration/native-host.js"),
+            "--config",
+            config,
+          ],
+      { stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
     );
+    let childStderr = "";
+    child.stderr.on("data", (chunk) => {
+      childStderr += chunk.toString();
+    });
     t.after(() => child.kill());
     const messages = [];
     let input = Buffer.alloc(0);
@@ -244,9 +259,15 @@ test(
       },
       true,
     );
-    await waitFor(() =>
-      messages.some((m) => m.type === "hello-result" && m.success),
-    );
+    await waitFor(() => {
+      if (child.exitCode !== null)
+        throw new Error(`Native host exited ${child.exitCode}: ${childStderr}`);
+      return messages.some((m) => m.type === "hello-result" && m.success);
+    }).catch((error) => {
+      throw new Error(
+        `${error.message}\nNative stderr: ${childStderr}; frames: ${JSON.stringify(messages)}`,
+      );
+    });
     assert.equal(services.wsServer.status().sessions[0].transport, "native");
     send({
       type: "download",

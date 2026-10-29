@@ -35,7 +35,14 @@ class NativeMessagingHost {
       home,
     });
     this.base = path.join(userDataPath, "native-messaging");
-    this.sourceHost = path.resolve(__dirname, "native-host.js");
+    this.sourceHost = isPackaged
+      ? path.join(
+          process.resourcesPath ||
+            path.join(path.dirname(appPath), "resources"),
+          "native-host",
+          "native-host.js",
+        )
+      : path.resolve(__dirname, "native-host.js");
   }
   manifestFile(browserId) {
     const browser = getBrowser(browserId);
@@ -70,6 +77,11 @@ class NativeMessagingHost {
   async prepareLauncher() {
     if (!this.token)
       throw new Error("The browser bridge identity has not been initialized.");
+    await fs.access(this.sourceHost).catch(() => {
+      throw new Error(
+        "The native bridge script is missing. Reinstall the complete GetANNY package.",
+      );
+    });
     await fs.mkdir(this.base, { recursive: true });
     const config = path.join(this.base, "bridge-config.json");
     await fs.writeFile(

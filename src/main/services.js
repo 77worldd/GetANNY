@@ -136,7 +136,7 @@ async function createServices({
     port: wsServer.status().port,
   });
   if (!startTransfers) manager.stopped = true;
-  await manager.restoreDownloads();
+  else await manager.restoreDownloads();
   async function browserStatus() {
     const websocket = wsServer.status();
     const evidence = settingsRepo.get("integrationEvidence") || {};

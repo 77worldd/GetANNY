@@ -4,7 +4,8 @@ Date: 29 October 2026. The baseline was `f74fea83`. This file distinguishes exec
 
 ## Executed in the Linux Arena workspace
 
-- **`npm test`: 45/45 passed, 0 skipped, 15.0 seconds** on the final Linux run before the first Windows CI submission.
+- Latest executed full Linux suite before Windows packaging iteration: **51/51 passed, 0 skipped, 14.8 seconds**. Additional silent-format regression tested separately (9/9 media tests); final delivery records the final combined count.
+- **Windows Node suite: 51/51 passed** in run [40972125952](https://github.com/77worldd/GetANNY/actions/runs/40972125952). That run failed later at MSI compilation, not at the tests; it is not an installed-app pass.
 - **Production renderer build and all 8 extension ZIP builds passed** after the latest UI/bridge changes.
 - Node 22.22.3; SQLite built against available local Node headers.
 - Actual local HTTP and HTTPS servers; TLS certificate generated at test time (not a checked-in private key). Certificate rejection and explicit test-CA trust tested separately. Runtime TLS validation is never disabled globally.
@@ -29,8 +30,9 @@ The workflow runs on **windows-latest**, not on this Linux sandbox. A green job 
 5. EXE same-version reinstall and process restart, preserving SQLite markers/history; actual uninstall.
 6. MSI install; equivalent installed-app checks; MSI reinstall / restart preservation.
 7. Actual unpacked **Playwright Chromium** extension, stable extension ID, real native-host handshake, popup-origin file hash verification, content-script detection, media request and download via the installed Electron UI.
-8. MSI uninstall; retained user history; actual Authenticode signature statuses recorded.
-9. Reports / installer logs / actual screenshots retained even on failure. A release request only executes after prior steps succeed.
+8. Additional actual-browser tests when the verified binaries can be obtained: Helium, Brave, Vivaldi, Opera and Firefox. Firefox uses the supported **temporary** add-on WebDriver API; no signing preference or policy is disabled. Versions / SHA-256s and official download sources are in `scripts/windows/browser-test-manifest.json` (Vivaldi/Opera hashes were cross-checked against Microsoft's winget manifests). Google Chrome's removed command-line loader is not bypassed; normal UI/store installation is a manual gate. Download unavailability is recorded as unverified, while functional failures in an available browser block this gate.
+9. MSI uninstall; retained user history; actual Authenticode signature statuses recorded.
+10. Reports / installer logs / actual screenshots retained even on failure. A release request only executes after prior steps succeed.
 
 A workflow definition is **not** a passing result. Inspect the workflow run, `windows-test-evidence` artifact / Release `Windows-test-evidence.zip` and its JSON. Reports contain each check's pass/fail, timestamps and errors. The delivery report identifies the actual run and outcome, not a forecast.
 

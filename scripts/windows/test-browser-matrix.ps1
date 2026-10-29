@@ -1,0 +1,55 @@
+param([Parameter(Mandatory=$true)][string]$InstalledExe,[Parameter(Mandatory=$true)][string]$Results)
+$ErrorActionPreference='Stop'
+$manifest=Get-Content "$PSScriptRoot\browser-test-manifest.json" -Raw | ConvertFrom-Json
+$work=Join-Path $env:RUNNER_TEMP 'GetANNYBrowserBinaries'
+New-Item $work -ItemType Directory -Force | Out-Null
+New-Item $Results -ItemType Directory -Force | Out-Null
+$matrix=[System.Collections.Generic.List[object]]::new()
+function Fetch-Browser([string]$id) {
+ $entry=$manifest.$id;$file=Join-Path $work "$id.$($entry.type -eq 'zip' ? 'zip' : 'exe')"
+ Invoke-WebRequest $entry.url -OutFile $file -TimeoutSec 120
+ if((Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant() -ne $entry.sha256){throw "Checksum mismatch for $id"}
+ if($entry.type -eq 'zip') {
+  $folder=Join-Path $work $id
+  Expand-Archive $file $folder -Force
+  $candidate=Get-ChildItem $folder -Filter $entry.file -File -Recurse | Select-Object -First 1
+  if(-not $candidate){throw "$id browser executable missing from verified archive"}
+  return $candidate.FullName
+ }
+ $signature=Get-AuthenticodeSignature $file
+ if($signature.Status -ne 'Valid'){throw "Cannot verify $id installer Authenticode: $($signature.Status)"}
+ $process=Start-Process $file -ArgumentList $entry.args -PassThru
+ if(-not $process.WaitForExit(240000)){Stop-Process $process.Id -Force;throw "$id installer timed out"}
+ if($process.ExitCode -notin @(0,3010)){throw "$id installer exited $($process.ExitCode)"}
+ $paths=if($id -eq 'vivaldi'){@("$env:LOCALAPPDATA\Vivaldi\Application\vivaldi.exe","$env:PROGRAMFILES\Vivaldi\Application\vivaldi.exe")}else{@("$env:LOCALAPPDATA\Programs\Opera\opera.exe","$env:PROGRAMFILES\Opera\opera.exe")}
+ foreach($candidate in $paths){if(Test-Path $candidate){return $candidate}}
+ throw "$id installed, but its executable was not found"
+}
+foreach($id in @('helium','brave','vivaldi','opera','firefox')) {
+ $folder=Join-Path $Results $id;New-Item $folder -ItemType Directory -Force | Out-Null
+ try {
+  if($id -eq 'firefox') {
+   $browser="$env:PROGRAMFILES\Mozilla Firefox\firefox.exe"
+   if(-not(Test-Path $browser)){throw 'Firefox is not installed on this runner.'}
+   $gecko=Fetch-Browser 'geckodriver'
+  }else{$browser=Fetch-Browser $id}
+ }catch{
+  $matrix.Add(@{browser=$id;status='unverified';reason=$_.Exception.Message})
+  Write-Warning "$id unavailable: $($_.Exception.Message)"
+  continue
+ }
+ Write-Host "Testing actual $id binary $browser with a new isolated profile..."
+ if($id -eq 'firefox'){& node "$PSScriptRoot\test-firefox.js" $InstalledExe $folder $browser $gecko 2>&1 | Tee-Object "$folder\runtime.log"}
+ else{& node "$PSScriptRoot\test-extension.js" $InstalledExe $folder $id $browser 2>&1 | Tee-Object "$folder\runtime.log"}
+ $code=$LASTEXITCODE
+ if(Test-Path "$folder\browser-report.json") {
+  $report=Get-Content "$folder\browser-report.json" -Raw | ConvertFrom-Json
+  $matrix.Add(@{browser=$id;status=($code -eq 0 -and $report.passed ? 'passed' : 'failed');report="$id/browser-report.json"})
+ }else{$matrix.Add(@{browser=$id;status='failed';reason="Test exited $code before producing a report."})}
+}
+$matrix.Add(@{browser='chrome';status='unverified';reason='Branded Chrome disables automated --load-extension. Ordinary developer-mode/store installation requires manual browser-UI approval; no policy/signing bypass is used.'})
+$matrix.Add(@{browser='edge';status='unverified';reason='Additional browser; ordinary developer-mode/store installation needs individual manual verification.'})
+$chromium=Join-Path (Split-Path $Results -Parent) 'browser\browser-report.json'
+if(Test-Path $chromium){$r=Get-Content $chromium -Raw|ConvertFrom-Json;$matrix.Add(@{browser='chromium';status=($r.passed ? 'passed' : 'failed');report='../browser/browser-report.json'})}
+$matrix | ConvertTo-Json -Depth 8 | Set-Content "$Results\matrix.json"
+if($matrix|Where-Object status -eq 'failed'){throw 'An available browser failed real extension/native/download tests. Inspect matrix.json and the individual reports.'}

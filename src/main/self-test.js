@@ -443,6 +443,10 @@ async function runSelfTest({ services: s, win, app, binPath, userDataPath }) {
               .sessions.find((session) => session.browserId === "chromium")
               ?.transport,
           };
+        } catch (error) {
+          throw new Error(
+            `${error.message}\nNative host exit: ${child.exitCode}; stderr: ${stderr}; received frames: ${JSON.stringify(messages)}`,
+          );
         } finally {
           child.stdin.end();
           await sleep(150);

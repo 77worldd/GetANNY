@@ -54,9 +54,11 @@ if (-not ($restart.checks | Where-Object name -eq 'Persisted history, settings a
 Write-Host 'Testing an actual Chromium extension with the installed MSI application...'
 & node "$PSScriptRoot\test-extension.js" $installedMsiExe "$results\browser"
 if ($LASTEXITCODE -ne 0) { throw 'Installed-app Chromium extension test failed.' }
+Write-Host 'Testing other available real browser brands (never personal profiles)...'
+& "$PSScriptRoot\test-browser-matrix.ps1" -InstalledExe $installedMsiExe -Results "$results\browser-matrix"
 Run-Checked 'msiexec.exe' @('/x',"`"$msiPackage`"",'/qn','/norestart',"/l*v `"$results\msi-uninstall.log`"")
 if (Test-Path $installedMsiExe) { throw 'MSI uninstallation left the application executable.' }
 if (-not (Test-Path (Join-Path $msiData 'getanny.db'))) { throw 'MSI uninstall destroyed user history.' }
 $signatures = @($exePackage,$msiPackage) | ForEach-Object { $sig = Get-AuthenticodeSignature $_; @{file=(Split-Path $_ -Leaf);status=$sig.Status.ToString()} }
-@{passed=$true;date=(Get-Date -Format o);exe=@{installed=$true;reinstalled=$true;uninstalled=$true};msi=@{installed=$true;reinstalled=$true;uninstalled=$true};signatures=$signatures;limitations=@('GitHub-hosted Windows runner is not a pristine consumer Windows installation.','Same-version reinstall tested; migration from the old v1 installer requires manual validation.','Interactive shortcut/options dialogs need manual inspection.','Seven browser brands need individual manual tests; only Chromium is automated.')} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $results 'installer-report.json')
+@{passed=$true;date=(Get-Date -Format o);exe=@{installed=$true;reinstalled=$true;uninstalled=$true};msi=@{installed=$true;reinstalled=$true;uninstalled=$true};signatures=$signatures;limitations=@('GitHub-hosted Windows runner is not a pristine consumer Windows installation.','Same-version reinstall tested; migration from the old v1 installer requires manual validation.','Interactive shortcut/options dialogs need manual inspection.','See browser-matrix/matrix.json for actual per-brand results; Google Chrome manual approval and permanent store/signed installation remain unverified.')} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $results 'installer-report.json')
 Write-Host 'EXE, MSI, installed downloads, restart preservation, native chain and Chromium extension checks passed.'
