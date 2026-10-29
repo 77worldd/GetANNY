@@ -1,3 +1,4 @@
+const path = require("node:path");
 const COLUMNS = [
   "id",
   "url",
@@ -70,15 +71,24 @@ class DownloadsRepo {
     };
   }
   decode(row) {
-    return row
-      ? {
-          ...parse(row.metadata, {}),
-          ...Object.fromEntries(
-            Object.entries(row).filter(([key]) => key !== "metadata"),
-          ),
-          headers: parse(row.headers, {}),
-        }
-      : null;
+    if (!row) return null;
+    const item = {
+      ...parse(row.metadata, {}),
+      ...Object.fromEntries(
+        Object.entries(row).filter(([key]) => key !== "metadata"),
+      ),
+      headers: parse(row.headers, {}),
+    };
+    // v1 did not persist filePath. Recover its original destination, but OS
+    // actions still check the real file's existence before opening/deleting it.
+    if (
+      item.status === "completed" &&
+      !item.filePath &&
+      path.isAbsolute(item.savePath) &&
+      item.filename === path.basename(item.filename)
+    )
+      item.filePath = path.join(item.savePath, item.filename);
+    return item;
   }
   save(item) {
     const row = this.normalize(item);

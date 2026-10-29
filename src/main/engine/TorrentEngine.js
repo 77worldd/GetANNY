@@ -21,7 +21,17 @@ class TorrentEngine extends EventEmitter {
   async run() {
     let ticker, timeout;
     try {
-      this.setStatus("connecting", { phase: "Finding torrent metadata" });
+      // Never let WebTorrent overwrite an unrelated same-name user file.
+      // Keep the same isolated folder on pause/resume and process restart.
+      this.torrentPath =
+        this.torrentPath ||
+        path.join(this.savePath, `Torrent [${this.id.slice(0, 8)}]`);
+      this.savePath = this.torrentPath;
+      this.setStatus("connecting", {
+        phase: "Finding torrent metadata",
+        savePath: this.savePath,
+        torrentPath: this.torrentPath,
+      });
       await fs.mkdir(this.savePath, { recursive: true });
       const { default: WebTorrent } = await import("webtorrent");
       if (this.wantedState) return;

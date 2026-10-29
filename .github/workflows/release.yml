@@ -40,7 +40,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item test-results/windows -ItemType Directory -Force | Out-Null
-          npm test 2>&1 | Tee-Object test-results/windows/backend-tests.log
+          node --test --test-concurrency=1 --test-reporter=spec --test-reporter=junit --test-reporter-destination=stdout --test-reporter-destination=test-results/windows/backend-junit.xml tests/*.test.js src/main/**/*.test.js 2>&1 | Tee-Object test-results/windows/backend-tests.log
           exit $LASTEXITCODE
       - name: Dependency security audit
         run: npm audit --audit-level=high
@@ -68,14 +68,24 @@ jobs:
         run: |
           # Check annotations stay readable through GitHub's API even when a
           # development sandbox cannot reach the external Actions log host.
-          Get-ChildItem test-results/windows -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @('.json','.log') } | ForEach-Object {
-            $text = (Get-Content $_.FullName -Tail 140) -join "`n"
+          function Annotate([string] $title, [string] $text) {
+            if ($text.Length -gt 3800) { $text = $text.Substring($text.Length - 3800) }
             $text = $text.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
-            Write-Output "::error title=$($_.Name)::$text"
+            Write-Output "::error title=$title::$text"
           }
+          if (Test-Path test-results/windows/backend-junit.xml) {
+            [xml]$junit = Get-Content test-results/windows/backend-junit.xml -Raw
+            $junit.SelectNodes('//failure') | ForEach-Object { Annotate 'Backend test failure' $_.InnerText }
+          }
+          Get-ChildItem test-results/windows -Recurse -File -Filter '*.json' -ErrorAction SilentlyContinue | ForEach-Object {
+            $report = Get-Content $_.FullName -Raw | ConvertFrom-Json
+            if ($report.checks) { $report.checks | Where-Object passed -eq $false | ForEach-Object { Annotate $_.name $_.error } }
+            elseif ($report.passed -eq $false) { Annotate $_.Name ($report | ConvertTo-Json -Depth 12) }
+          }
+          Get-ChildItem test-results/windows -File -Filter '*.log' -ErrorAction SilentlyContinue | Where-Object Name -ne 'backend-tests.log' | ForEach-Object { Annotate $_.Name ((Get-Content $_.FullName -Tail 35) -join "`n") }
       - name: Retain executable test reports and installation logs even on failure
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-test-evidence
           path: test-results/windows/
@@ -92,7 +102,7 @@ jobs:
           Compress-Archive -Path test-results/windows/* -DestinationPath release-assets/Windows-test-evidence.zip
           node scripts/checksums.js
       - name: Retain tested distributables
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: GetANNY-tested-windows-release
           path: release-assets/

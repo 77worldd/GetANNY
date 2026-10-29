@@ -342,7 +342,9 @@ async function runSelfTest({ services: s, win, app, binPath, userDataPath }) {
           await fs.writeFile(torrentFile, seeded.torrentFile);
           const id = await s.manager.addTorrent({ torrent: torrentFile });
           await until(
-            () => s.manager.running.get(id)?.torrent,
+            () =>
+              s.manager.running.get(id)?.torrent?.infoHash &&
+              client.torrentPort > 0,
             "torrent creation",
           );
           s.manager.running

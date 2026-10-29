@@ -25,7 +25,7 @@ Download **GetANNY Setup.exe** or **GetANNY Setup.msi**, browser ZIPs, and `SHA2
 - ID-isolated partials, persisted entity validators, safe continuation, restart when an entity changes, and atomic no-overwrite completion. Same-name files are numbered.
 - Pause waits for writers/workers to stop. Cancel removes this transfer's partials. Retry, bounded transient HTTP retries, a shared per-transfer bandwidth limiter, and one concurrent-job queue for files/media/torrents.
 - All / Active / Completed / Paused / Failed views, search, file-type filters, sorting, context menus, details, confirmed history removal / deletion, and OS file/folder opening.
-- SQLite migration preserves v1 history. Interrupted transfers restore paused unless startup resumption is enabled. Downloaded files are never automatically executed.
+- SQLite migration preserves v1 history. Interrupted transfers restore paused unless startup resumption is enabled. URLs without an entity validator restart safely instead of mixing old and new bytes. Downloaded files are never automatically executed.
 
 ### Media studio
 

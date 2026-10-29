@@ -22,10 +22,12 @@ test("download metadata helpers sanitize and format safely", () => {
 });
 test("SQLite repositories persist, filter, update and delete records", async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "getanny-test-"));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const db = new Database(dir);
   await db.initialize();
-  t.after(() => db.close());
+  t.after(() => {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
   const downloads = new DownloadsRepo(db);
   const settings = new SettingsRepo(db);
   downloads.save({

@@ -70,6 +70,7 @@ test("v1 SQLite database is migrated without losing history or settings", async 
   });
   const repo = new DownloadsRepo(db);
   assert.equal(repo.get("legacy").status, "completed");
+  assert.equal(repo.get("legacy").filePath, path.join("/tmp", "f"));
   repo.save({
     ...repo.get("legacy"),
     filePath: path.join(dir, "f"),
