@@ -48,7 +48,7 @@ jobs:
       - name: Build Windows NSIS installer
         shell: pwsh
         run: |
-          npx electron-builder --win nsis 2>&1 | Tee-Object -FilePath electron-builder.log
+          npx electron-builder --win nsis --publish never 2>&1 | Tee-Object -FilePath electron-builder.log
           $buildExit = $LASTEXITCODE
           if ($buildExit -ne 0) {
             $details = (Get-Content electron-builder.log -Tail 35 -ErrorAction SilentlyContinue) -join ' | '
