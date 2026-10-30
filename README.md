@@ -94,7 +94,7 @@ This is an explicitly labeled development preview backed by the **real** SQLite 
 - [Release notes](docs/RELEASE_NOTES.md)
 - [Third-party tool licenses and source information](docs/THIRD_PARTY.md)
 
-The Windows workflow builds installers, **installs both**, launches their actual executables, verifies downloads and media, tests restart/reinstall preservation, runs an actual Chromium-extension/native-host download, uninstalls, and retains reports. Publishing requires an explicit workflow-dispatch input and every automated gate must succeed. Releases remain prereleases until the manual gates are resolved.
+The Windows workflow builds installers, **installs both**, launches their actual executables, verifies downloads and media, tests restart/reinstall preservation, runs an actual Chromium-extension/native-host download, uninstalls, and retains reports. Publishing requires explicit `publish=true` workflow dispatch or the opt-in commit trailer `GetANNY-Publish: prerelease` on this session branch, and every automated gate must succeed. Releases remain prereleases until the manual gates are resolved.
 
 ## Data and troubleshooting
 
