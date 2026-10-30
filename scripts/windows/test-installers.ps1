@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+if($env:CI -ne 'true' -or -not $env:RUNNER_TEMP){throw 'Installer tests modify the default app profile and require a disposable Windows CI account.'}
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $results = Join-Path $root 'test-results\windows'
 $installRoot = Join-Path $env:RUNNER_TEMP 'GetANNYInstallerTests'
@@ -46,6 +47,12 @@ function Assert-Shortcuts([string] $InstalledExe) {
   if (-not ($found | Where-Object kind -eq 'startMenu')) { throw 'Start Menu shortcut missing or targets the wrong application.' }
   return $found.ToArray()
 }
+function Desktop-Lifecycle([string] $InstalledExe, [string] $Name, [string] $Data, $Shortcuts) {
+  $desktop=$Shortcuts | Where-Object kind -eq 'desktop' | Select-Object -First 1
+  $startMenu=$Shortcuts | Where-Object kind -eq 'startMenu' | Select-Object -First 1
+  & node "$PSScriptRoot\test-desktop-lifecycle.js" $InstalledExe $Data (Join-Path $results "$Name-desktop-lifecycle.json") $desktop.path $startMenu.path
+  if($LASTEXITCODE -ne 0){throw 'Installed cold native / actual shell shortcut lifecycle test failed.'}
+}
 function Profile-Snapshot([string] $Data) {
   $json=& node "$PSScriptRoot\snapshot-profile.js" (Join-Path $Data 'getanny.db')
   if ($LASTEXITCODE -ne 0) { throw 'Cannot read real default-profile retention snapshot.' }
@@ -87,6 +94,7 @@ $restart = Get-Content (Join-Path $results 'exe-upgrade-restart.json') -Raw | Co
 if (-not ($restart.checks | Where-Object name -eq 'Persisted history, settings and actual process restart marker').detail.priorRunObserved) { throw 'EXE reinstall destroyed persisted data.' }
 Self-Test $installedExe 'exe-actual-default-profile' $defaultData
 Run-Checked $installedExe @('--setup-browser-hosts','--quiet')
+Desktop-Lifecycle $installedExe 'exe' $defaultData $exeShortcuts
 $exeNativeEntries=@(Owned-NativeEntries $defaultData)
 $exeDefaultBefore=Profile-Snapshot $defaultData
 $uninstaller = Get-ChildItem $exeDir -Filter '*Uninstall*.exe' | Select-Object -First 1
@@ -114,6 +122,7 @@ Write-Host 'Testing other available real browser brands (never personal profiles
 & "$PSScriptRoot\test-browser-matrix.ps1" -InstalledExe $installedMsiExe -Results "$results\browser-matrix"
 Self-Test $installedMsiExe 'msi-actual-default-profile' $defaultData
 Run-Checked $installedMsiExe @('--setup-browser-hosts','--quiet')
+Desktop-Lifecycle $installedMsiExe 'msi' $defaultData $msiShortcuts
 $msiNativeEntries=@(Owned-NativeEntries $defaultData)
 $msiDefaultBefore=Profile-Snapshot $defaultData
 Run-Checked 'msiexec.exe' @('/x',"`"$msiPackage`"",'/qn','/norestart',"/l*v `"$results\msi-uninstall.log`"")
@@ -121,5 +130,5 @@ if (Test-Path $installedMsiExe) { throw 'MSI uninstallation left the application
 if (-not (Test-Path (Join-Path $msiData 'getanny.db'))) { throw 'MSI uninstall destroyed isolated test history.' }
 $msiDefaultRetained=Assert-Uninstalled $installedMsiExe $msiShortcuts $defaultData $msiDefaultBefore $msiNativeEntries
 $signatures = @($exePackage,$msiPackage) | ForEach-Object { $sig = Get-AuthenticodeSignature $_; @{file=(Split-Path $_ -Leaf);status=$sig.Status.ToString()} }
-@{passed=$true;date=(Get-Date -Format o);exe=@{installed=$true;reinstalled=$true;uninstalled=$true};msi=@{installed=$true;reinstalled=$true;uninstalled=$true};signatures=$signatures;defaultProfileRetention=@{exe=$exeDefaultRetained;msi=$msiDefaultRetained};shortcuts=@{exe=$exeShortcuts;msi=$msiShortcuts;createdAndTargetsVerified=$true;removedOnUninstall=$true;shellLaunch='manual/unverified'};limitations=@('GitHub-hosted Windows runner is not a pristine consumer Windows installation.','Same-version reinstall tested; migration from the old v1 installer requires manual validation.','Shortcut files/targets/removal checked; interactive options dialogs and actual shell shortcut launch need manual inspection.','See browser-matrix/matrix.json for actual per-brand results; Production browser-UI consent and permanent store/signed installation remain manual.')} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $results 'installer-report.json')
+@{passed=$true;date=(Get-Date -Format o);exe=@{installed=$true;reinstalled=$true;uninstalled=$true};msi=@{installed=$true;reinstalled=$true;uninstalled=$true};signatures=$signatures;defaultProfileRetention=@{exe=$exeDefaultRetained;msi=$msiDefaultRetained};shortcuts=@{exe=$exeShortcuts;msi=$msiShortcuts;createdAndTargetsVerified=$true;removedOnUninstall=$true;shellLaunch='passed-in-desktop-lifecycle-reports'};limitations=@('GitHub-hosted Windows runner is not a pristine consumer Windows installation.','Same-version reinstall tested; migration from the old v1 installer requires manual validation.','Shortcut files, targets, removal and actual shell launches checked; interactive options dialogs still require manual inspection.','See browser-matrix/matrix.json for actual per-brand results; Production browser-UI consent and permanent store/signed installation remain manual.')} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $results 'installer-report.json')
 Write-Host 'EXE, MSI, installed downloads, restart preservation, native chain and Chromium extension checks passed.'

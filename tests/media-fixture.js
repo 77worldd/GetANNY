@@ -12,7 +12,7 @@ const ffprobe = path.join(
   binPath,
   process.platform === "win32" ? "ffprobe.exe" : "ffprobe",
 );
-async function mediaFixture(t) {
+async function mediaFixture(t, { largeVideo = false } = {}) {
   const dir = await temporary(t, "getanny-media-");
   for (const file of [
     ffmpeg,
@@ -48,6 +48,20 @@ async function mediaFixture(t) {
     "libx264",
     "-pix_fmt",
     "yuv420p",
+    ...(largeVideo
+      ? [
+          "-b:v",
+          "4M",
+          "-minrate",
+          "4M",
+          "-maxrate",
+          "4M",
+          "-bufsize",
+          "4M",
+          "-x264-params",
+          "nal-hrd=cbr:force-cfr=1",
+        ]
+      : []),
     "-c:a",
     "aac",
     "-movflags",

@@ -278,10 +278,17 @@ test("an explicitly silent video remains downloadable without requiring a nonexi
 
 test(
   "REAL managed media: pause, process/database restart, ranged continuation, cancel and retry verify physical bytes",
-  { timeout: 65000 },
+  { timeout: 120000 },
   async (t) => {
-    const fixture = await mediaFixture(t);
+    // Official Windows yt-dlp uses a larger Python output buffer than the
+    // local Python runtime. Generate >128 KiB of genuine CBR video so an
+    // incomplete, physically flushed partial exists on both platforms.
+    const fixture = await mediaFixture(t, { largeVideo: true });
     if (!fixture) return;
+    assert.ok(
+      (await fs.stat(path.join(fixture.dir, "video.mp4"))).size > 256 * 1024,
+      "large real fixture must exceed Python output buffering",
+    );
     const folder = await temporary(t, "getanny-media-lifecycle-");
     const options = {
       userDataPath: path.join(folder, "data"),
@@ -292,7 +299,7 @@ test(
     };
     let services = await createServices(options);
     try {
-      await services.settings.set("speedLimit", 16 * 1024);
+      await services.settings.set("speedLimit", 128 * 1024);
       await services.settings.set("retryAttempts", 0);
       const analysis = await services.mediaDetector.getFormats(
         fixture.server.url + "/watch.html",
@@ -306,8 +313,12 @@ test(
       const id = await services.manager.addMedia(selection);
       await waitFor(
         async () => {
-          if (services.manager.requireItem(id).downloadedSize <= 0)
-            return false;
+          const item = services.manager.requireItem(id);
+          if (["completed", "failed", "cancelled"].includes(item.status))
+            throw new Error(
+              `Media left its partial state before pause: ${JSON.stringify({ status: item.status, error: item.error, bytes: item.downloadedSize, files: await fs.readdir(options.downloadPath) })}`,
+            );
+          if (item.downloadedSize <= 0) return false;
           const names = await fs.readdir(options.downloadPath);
           for (const name of names.filter(
             (name) => name.includes(`[${id}]`) && name.endsWith(".part"),
@@ -316,7 +327,7 @@ test(
               return true;
           return false;
         },
-        20000,
+        40000,
         "actual media partial bytes flushed before pause",
       );
       await services.manager.pause(id);

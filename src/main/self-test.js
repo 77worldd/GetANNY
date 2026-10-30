@@ -132,6 +132,10 @@ async function runSelfTest({ services: s, win, app, binPath, userDataPath }) {
   const base = `http://127.0.0.1:${server.address().port}`;
   await s.settings.set("defaultDownloadPath", path.join(folder, "downloads"));
   await s.settings.set("autoStartDownloads", true);
+  await s.settings.set("firstRunCompleted", true);
+  // Let the separate installed lifecycle harness close the REAL native window
+  // gracefully after cold/shortcut launches, instead of force-killing a tray app.
+  await s.settings.set("closeToTray", false);
   await s.settings.set("retryAttempts", 0);
   await s.settings.set("maxConnectionsPerDownload", 4);
   const finish = async (id) => {

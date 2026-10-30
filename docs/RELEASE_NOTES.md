@@ -16,14 +16,14 @@ A functional repair and cohesive desktop redesign, not just a screenshot reskin.
 - **GetANNY Setup.exe** and **GetANNY Setup.msi**.
 - Targeted ZIP packages for Helium, Chrome, Chromium, Brave, Firefox, Vivaldi and Opera; Edge included additionally. Chromium builds reuse one implementation with correct target configuration; Firefox uses a separate manifest.
 - Windows/browser instructions, SHA-256 checksums and an evidence archive. GitHub provides source ZIP/tar archives for the release tag.
-- The publishing workflow requires successful backend/media/bridge tests and actual installed EXE/MSI, default-profile/output retention, shortcuts and available-browser integration tests. Read the attached JSON reports; generating a package alone is not considered an installation test.
+- The publishing workflow requires successful backend/media/bridge tests and actual installed EXE/MSI, default-profile/output retention, actual cold-native/shortcut launches and available-browser integration tests. Read the attached JSON reports; generating a package alone is not considered an installation test.
 
 ## Important limitations — not a fully certified final release
 
 - Packages are unsigned unless the attached Authenticode report explicitly says Valid. No signing identity was supplied during development.
 - Firefox ZIP is **unsigned development source**, not a Mozilla-signed production XPI. Regular Firefox permanent installation requires authorized signing. Chromium packages are unpacked developer-mode packages, not signed store CRXs or silently installed extensions. No extension-store update service is configured.
 - Read the attached `browser-matrix/matrix.json` for individually executed browser results. Chromium success alone does not certify any branded browser. Available Helium, Brave, Vivaldi, Opera and Firefox binaries are exercised separately; unavailable downloads are explicitly unverified. Google Chrome is exercised through its normal visible developer-mode controls and native folder picker in a disposable CI profile, never through policy/profile edits; production consent and store installation remain manual. Edge remains additionally supported but individually unverified.
-- The Windows runner is not a pristine consumer VM; interactive wizard/UAC flows, actual shell shortcut launches (separate from file/target/removal checks), real cross-version v1 upgrades and clean-machine dependency checks remain manual.
+- The Windows runner is not a pristine consumer VM; interactive wizard/UAC flows, nondefault shortcut options, real cross-version v1 upgrades and clean-machine dependency checks remain manual.
 - Local HTML5 / DASH media tests verify real extraction/download/merging but do not certify every live website, authenticated media, regional access, DRM or playlist support. DRM and playlist downloading are not provided.
 - Per-download bandwidth / connection changes apply to new/resumed jobs. The limit is explicitly **per transfer**, not a misrepresented global limit.
 - Multi-terabyte / disk-full / power-loss / high-DPI / multiple-user edge cases need broader field testing.
