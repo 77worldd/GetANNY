@@ -226,7 +226,7 @@ test("per-transfer speed limit is shared across connections", async (t) => {
   assert.equal(await run(engine), undefined);
   assert.ok(Date.now() - start >= 950);
 });
-async function managerFixture(t, settings = {}) {
+async function managerFixture(t, settings = {}, options = {}) {
   const dir = await fs.mkdtemp(
     path.join(require("node:os").tmpdir(), "getanny-manager-"),
   );
@@ -242,6 +242,7 @@ async function managerFixture(t, settings = {}) {
         retryAttempts: 0,
         ...settings,
       },
+      ...options,
     });
   t.after(async () => {
     await manager.shutdown();
@@ -367,6 +368,54 @@ test("a resumed URL without entity validators restarts rather than mixing change
   );
 });
 
+test("partial data stays outside the destination and history clearing keeps files", async (t) => {
+  const server = await fixtureServer(t, { size: 2 * 1024 * 1024, delay: 40 });
+  const { dir, manager } = await managerFixture(t, {
+    maxConnectionsPerDownload: 4,
+  });
+  // Work data belongs beside the app's data, not in the user's folder.
+  manager.tempPath = path.join(dir, "transfer-temp");
+  const id = await manager.addDownload({ url: server.url + "/large.bin" });
+  await waitFor(() => manager.requireItem(id).status === "downloading");
+  const workDir = path.join(dir, "transfer-temp", id);
+  await waitFor(async () =>
+    (await fs.readdir(workDir).catch(() => [])).some((name) =>
+      name.includes(".getanny-"),
+    ),
+  );
+  const destination = manager.requireItem(id).savePath;
+  const visibleDuringTransfer = await fs.readdir(destination);
+  assert.deepEqual(visibleDuringTransfer, []);
+  const workFiles = await fs.readdir(workDir);
+  assert.ok(workFiles.some((name) => name.includes(".getanny-")));
+  await waitFor(() => manager.requireItem(id).status === "completed");
+  const item = manager.requireItem(id);
+  assert.deepEqual(await fs.readdir(destination), [item.filename]);
+  assert.equal(checksum(await fs.readFile(item.filePath)), checksum(server.state.data));
+  await manager.clearHistory({ scope: "all" });
+  assert.equal(
+    await fs.access(item.filePath).then(
+      () => true,
+      () => false,
+    ),
+    true,
+  );
+});
+test("clearing all history leaves unfinished transfers running", async (t) => {
+  const server = await fixtureServer(t, { size: 32 * 1024 });
+  const { manager } = await managerFixture(t);
+  const completed = await manager.addDownload({ url: server.url + "/done.bin" });
+  await waitFor(() => manager.requireItem(completed).status === "completed");
+  manager.settings.autoStartDownloads = false;
+  const paused = await manager.addDownload({ url: server.url + "/later.bin" });
+  assert.equal(manager.requireItem(paused).status, "paused");
+  assert.equal(await manager.clearHistory({ scope: "all" }), 1);
+  assert.equal(manager.getAll().length, 1);
+  assert.equal(manager.requireItem(paused).status, "paused");
+  assert.equal(await manager.clearHistory({ scope: "selected", ids: [paused] }), 0);
+  assert.equal(await manager.clearHistory({ scope: "selected", ids: [paused], stopUnfinished: true }), 1);
+  assert.equal(manager.getAll().length, 0);
+});
 test("daily start window handles daytime, overnight and equal endpoints in local time", () => {
   const { isWithinSchedule } = require("../src/main/engine/DownloadManager");
   const at = (hours, minutes = 0) => new Date(2026, 0, 15, hours, minutes);
@@ -442,5 +491,23 @@ test("scheduled downloads remain queued across restart and start when scheduling
   assert.equal(
     checksum(await fs.readFile(manager.requireItem(id).filePath)),
     checksum(fixture.state.data),
+  );
+});
+test("torrent output uses the swarm name and migrates legacy UUID folders", () => {
+  const { TorrentEngine, LEGACY_FOLDER } = require("../src/main/engine/TorrentEngine");
+  const base = path.join(require("node:os").tmpdir(), "torrent-target");
+  const legacy = new TorrentEngine({
+    id: "legacy",
+    url: "magnet:?xt=urn:btih:0000000000000000000000000000000000000000",
+    basePath: base,
+    savePath: path.join(base, "Torrent [69e406fe-c278-47c7-af6f-525c8e454847]"),
+  });
+  assert.equal(LEGACY_FOLDER.test(path.basename(legacy.savePath)), true);
+  assert.equal(legacy.resolveSavePath(), base);
+  legacy.torrent = { name: "Ubuntu 24.04: Desktop" };
+  assert.equal(legacy.destinationName(), "Ubuntu 24.04_ Desktop");
+  assert.equal(
+    legacy.destinationName().includes("69e406fe"),
+    false,
   );
 });

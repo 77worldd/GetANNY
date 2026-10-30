@@ -1,11 +1,13 @@
 const path = require("node:path");
 const THEMES = require("../../shared/themes.json").map((theme) => theme.id);
+const LANGUAGES = require("../../shared/languages.json").map(
+  (language) => language.code,
+);
 const BOOLEAN_KEYS = [
   "autoStartDownloads",
   "resumeOnStartup",
   "scheduleEnabled",
   "organizeByType",
-  "confirmBrowserDownloads",
   "notifications",
   "closeToTray",
   "launchAtLogin",
@@ -51,12 +53,12 @@ function defaults(downloadPath) {
     scheduleStartMinute: 0,
     scheduleEndMinute: 360,
     organizeByType: false,
-    confirmBrowserDownloads: true,
     notifications: true,
     closeToTray: true,
     launchAtLogin: false,
     startMinimized: false,
     theme: "graphite",
+    language: "en",
     compactList: false,
     reduceMotion: false,
     animationMode: "standard",
@@ -86,6 +88,9 @@ function validateSetting(key, value) {
   } else if (key === "theme") {
     if (![...THEMES, "system"].includes(value))
       throw new Error("Choose a supported theme.");
+  } else if (key === "language") {
+    if (!LANGUAGES.includes(value))
+      throw new Error("Choose a supported language.");
   } else if (key === "animationMode") {
     if (!["standard", "reduced", "disabled"].includes(value))
       throw new Error("Choose a supported animation mode.");

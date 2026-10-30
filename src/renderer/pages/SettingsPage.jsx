@@ -22,7 +22,9 @@ import {
 } from "../components/ui";
 import useSettingsStore from "../stores/useSettingsStore";
 import useUIStore from "../stores/useUIStore";
+import { useI18n } from "../i18n/useI18n";
 function NumberControl({ value, onChange, min, max, label, suffix, disabled }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState(String(value ?? ""));
   useEffect(() => setDraft(String(value ?? "")), [value]);
   const commit = () => {
@@ -39,7 +41,7 @@ function NumberControl({ value, onChange, min, max, label, suffix, disabled }) {
       useUIStore
         .getState()
         .notify(
-          `${label}: enter a whole number from ${min} to ${max}.`,
+          t("settings.numberRange", { label, min, max }),
           "error",
         );
     }
@@ -92,6 +94,7 @@ function SettingRow({ title, description, children, disabled = false }) {
   );
 }
 export default function SettingsPage({ capabilities, version }) {
+  const { t } = useI18n();
   const settings = useSettingsStore((state) => state.settings),
     save = useSettingsStore((state) => state.save);
   const [section, setSection] = useState("downloads"),
@@ -134,29 +137,29 @@ export default function SettingsPage({ capabilities, version }) {
   return (
     <div className="page settings-page">
       <PageHeader
-        eyebrow="MAKE IT YOURS"
-        title="Settings"
-        description="Thoughtful defaults. Real controls. Saved automatically."
+        eyebrow={t("settings.eyebrow")}
+        title={t("settings.title")}
+        description={t("settings.description")}
       >
         <span className="save-indicator">
           {saving ? (
-            "Saving…"
+            t("settings.saving")
           ) : saved ? (
             <>
               <LuCheck />
-              Changes saved
+              {t("settings.saved")}
             </>
           ) : (
-            "Stored on this device"
+            t("settings.stored")
           )}
         </span>
       </PageHeader>
-      <nav className="settings-tabs" aria-label="Settings categories">
+      <nav className="settings-tabs" aria-label={t("settings.categories")}>
         {[
-          ["downloads", LuArrowDownToLine, "Downloads"],
-          ["storage", LuFolderOpen, "Storage"],
-          ["browser", LuGlobe, "Browser"],
-          ["application", LuSlidersHorizontal, "Application"],
+          ["downloads", LuArrowDownToLine, t("settings.tab.downloads")],
+          ["storage", LuFolderOpen, t("settings.tab.storage")],
+          ["browser", LuGlobe, t("settings.tab.browser")],
+          ["application", LuSlidersHorizontal, t("settings.tab.application")],
         ].map(([key, Icon, label]) => (
           <button
             key={key}
@@ -174,32 +177,32 @@ export default function SettingsPage({ capabilities, version }) {
         <>
           <section className="settings-panel">
             <div className="settings-section-heading">
-              <h2>Transfer behavior</h2>
-              <p>Choose how GetANNY starts, connects, and recovers.</p>
+              <h2>{t("settings.transfer.title")}</h2>
+              <p>{t("settings.transfer.description")}</p>
             </div>
             <SettingRow
-              title="Start new downloads immediately"
-              description="When off, new downloads are added in a paused state."
+              title={t("settings.autoStart.title")}
+              description={t("settings.autoStart.description")}
             >
               {toggle("autoStartDownloads")}
             </SettingRow>
             <SettingRow
-              title="Maximum simultaneous downloads"
-              description="One queue for file, media, and torrent downloads."
+              title={t("settings.maxDownloads.title")}
+              description={t("settings.maxDownloads.description")}
             >
               {number(
                 "maxConcurrentDownloads",
-                "Maximum simultaneous downloads",
+                t("settings.maxDownloads.title"),
                 1,
                 12,
               )}
             </SettingRow>
             <SettingRow
-              title="Connections per file"
-              description="Parallel HTTP ranges are used only when the server supports them. Applied on new or resumed transfers."
+              title={t("settings.connections.title")}
+              description={t("settings.connections.description")}
             >
               <Select
-                aria-label="Connections per file"
+                aria-label={t("settings.connections.title")}
                 value={settings.maxConnectionsPerDownload}
                 disabled={!!saving}
                 onChange={(event) =>
@@ -212,50 +215,47 @@ export default function SettingsPage({ capabilities, version }) {
                 {[1, 2, 4, 6, 8, 12, 16].map((value) => (
                   <option key={value} value={value}>
                     {value === 1
-                      ? "1 · Single connection"
-                      : `${value} connections`}
+                      ? t("settings.connections.one")
+                      : t("settings.connections.many", { count: value })}
                   </option>
                 ))}
               </Select>
             </SettingRow>
             <SettingRow
-              title="Resume paused downloads at startup"
-              description="Otherwise interrupted transfers stay paused after a restart."
+              title={t("settings.resume.title")}
+              description={t("settings.resume.description")}
             >
               {toggle("resumeOnStartup")}
             </SettingRow>
           </section>
           <section className="settings-panel">
             <div className="settings-section-heading">
-              <h2>Download schedule</h2>
-              <p>
-                Times use this device’s local time. Keep GetANNY running to
-                start queued transfers.
-              </p>
+              <h2>{t("settings.schedule.title")}</h2>
+              <p>{t("settings.schedule.description")}</p>
             </div>
             <SettingRow
-              title="Schedule new transfers"
-              description="Only start queued downloads during the daily window. Transfers already running may finish outside it."
+              title={t("settings.schedule.only.title")}
+              description={t("settings.schedule.only.description")}
             >
               {toggle("scheduleEnabled")}
             </SettingRow>
             <SettingRow
-              title="Start time"
-              description="The beginning of the daily start window."
+              title={t("settings.startTime.title")}
+              description={t("settings.startTime.description")}
             >
               <ScheduleTime
-                label="Schedule start time"
+                label={t("settings.startTime.label")}
                 value={settings.scheduleStartMinute}
                 disabled={!!saving || !settings.scheduleEnabled}
                 onChange={(value) => persist("scheduleStartMinute", value)}
               />
             </SettingRow>
             <SettingRow
-              title="End time"
-              description="An earlier end time crosses midnight. Equal times allow starts all day."
+              title={t("settings.endTime.title")}
+              description={t("settings.endTime.description")}
             >
               <ScheduleTime
-                label="Schedule end time"
+                label={t("settings.endTime.label")}
                 value={settings.scheduleEndMinute}
                 disabled={!!saving || !settings.scheduleEnabled}
                 onChange={(value) => persist("scheduleEndMinute", value)}
@@ -264,18 +264,15 @@ export default function SettingsPage({ capabilities, version }) {
           </section>
           <section className="settings-panel">
             <div className="settings-section-heading">
-              <h2>Bandwidth & recovery</h2>
-              <p>
-                Limits and connection preferences apply to new or resumed
-                transfers.
-              </p>
+              <h2>{t("settings.bandwidth.title")}</h2>
+              <p>{t("settings.bandwidth.description")}</p>
             </div>
             <SettingRow
-              title="Per-download speed limit"
-              description="Kilobytes per second (1 KB = 1024 bytes). 0 means unlimited. Shared across a file’s connections, not multiplied by them."
+              title={t("settings.speed.title")}
+              description={t("settings.speed.description")}
             >
               <NumberControl
-                label="Per-download speed limit"
+                label={t("settings.speed.title")}
                 min={0}
                 max={1048576}
                 suffix="KB/s"
@@ -285,28 +282,40 @@ export default function SettingsPage({ capabilities, version }) {
               />
             </SettingRow>
             <SettingRow
-              title="Connection timeout"
-              description="Stop requests that are inactive for this many seconds."
+              title={t("settings.timeout.title")}
+              description={t("settings.timeout.description")}
             >
               {number(
                 "requestTimeoutSeconds",
-                "Connection timeout",
+                t("settings.timeout.title"),
                 5,
                 300,
                 "sec",
               )}
             </SettingRow>
             <SettingRow
-              title="Automatic retries"
-              description="Retry transient HTTP failures. Authentication, invalid ranges, and disk errors require attention."
+              title={t("settings.retries.title")}
+              description={t("settings.retries.description")}
             >
-              {number("retryAttempts", "Automatic retries", 0, 5, "tries")}
+              {number(
+                "retryAttempts",
+                t("settings.retries.title"),
+                0,
+                5,
+                t("settings.tries"),
+              )}
             </SettingRow>
             <SettingRow
-              title="Retry delay"
-              description="Seconds before the first retry. Subsequent retries wait proportionally longer."
+              title={t("settings.retryDelay.title")}
+              description={t("settings.retryDelay.description")}
             >
-              {number("retryDelaySeconds", "Retry delay", 1, 120, "sec")}
+              {number(
+                "retryDelaySeconds",
+                t("settings.retryDelay.title"),
+                1,
+                120,
+                t("settings.seconds"),
+              )}
             </SettingRow>
           </section>
         </>
@@ -314,16 +323,13 @@ export default function SettingsPage({ capabilities, version }) {
       {section === "storage" && (
         <section className="settings-panel">
           <div className="settings-section-heading">
-            <h2>Files & organization</h2>
-            <p>
-              Your files stay yours. Removing history never silently deletes
-              completed files.
-            </p>
+            <h2>{t("settings.storage.title")}</h2>
+            <p>{t("settings.storage.description")}</p>
           </div>
           <SettingRow
-            title="Default download folder"
+            title={t("settings.folder.title")}
             description={
-              settings.defaultDownloadPath || "Choose a download location"
+              settings.defaultDownloadPath || t("settings.folder.choose")
             }
           >
             <Button
@@ -339,12 +345,12 @@ export default function SettingsPage({ capabilities, version }) {
                 }
               }}
             >
-              Choose folder
+              {t("settings.chooseFolder")}
             </Button>
           </SettingRow>
           {!capabilities.dialogs && (
             <div className="setting-preview-path">
-              <label htmlFor="preview-path">Sandbox download path</label>
+              <label htmlFor="preview-path">{t("settings.sandboxPath")}</label>
               <input
                 id="preview-path"
                 key={settings.defaultDownloadPath}
@@ -354,21 +360,18 @@ export default function SettingsPage({ capabilities, version }) {
                     persist("defaultDownloadPath", event.target.value);
                 }}
               />
-              <small>
-                The web preview uses a real isolated sandbox folder, not your
-                personal Downloads directory.
-              </small>
+              <small>{t("settings.sandboxNote")}</small>
             </div>
           )}
           <SettingRow
-            title="Organize files by type"
-            description="For the default location, create Video, Audio, Archives, Documents, Images and Applications subfolders. Explicit destinations are unchanged."
+            title={t("settings.organize.title")}
+            description={t("settings.organize.description")}
           >
             {toggle("organizeByType")}
           </SettingRow>
           <SettingRow
-            title="Application data"
-            description="SQLite history, preferences, extension packages and diagnostics stay on this device."
+            title={t("settings.data.title")}
+            description={t("settings.data.description")}
           >
             <Button
               icon={LuExternalLink}
@@ -379,55 +382,42 @@ export default function SettingsPage({ capabilities, version }) {
                   .catch((error) => setError(errorMessage(error)))
               }
             >
-              Open data folder
+              {t("settings.openData")}
             </Button>
           </SettingRow>
           <div className="settings-note">
             <LuCircleHelp />
-            <span>
-              Files with the same name are numbered instead of overwritten.
-              Partial downloads are isolated by ID and are never shown as
-              completed.
-            </span>
+            <span>{t("settings.storageNote")}</span>
           </div>
         </section>
       )}
       {section === "browser" && (
         <section className="settings-panel">
           <div className="settings-section-heading">
-            <h2>Browser connection</h2>
-            <p>
-              Authenticated native messaging, with an explicitly paired local
-              fallback.
-            </p>
+            <h2>{t("settings.browser.title")}</h2>
+            <p>{t("settings.browser.description")}</p>
           </div>
           <SettingRow
-            title="Enable browser integration"
-            description="Allow connected extensions to send file and media requests. Turning off disconnects existing browser sessions."
+            title={t("settings.browserIntegration.title")}
+            description={t("settings.browserIntegration.description")}
           >
             {toggle("browserIntegrationEnabled")}
           </SettingRow>
           <SettingRow
-            title="Review browser downloads"
-            description="Ask for confirmation and a destination before adding browser file links to the queue."
-          >
-            {toggle("confirmBrowserDownloads")}
-          </SettingRow>
-          <SettingRow
-            title="Accept media page requests"
-            description="Open video and audio pages from the extension in Media studio, where you choose the format."
+            title={t("settings.mediaIntegration.title")}
+            description={t("settings.mediaIntegration.description")}
           >
             {toggle("mediaIntegration")}
           </SettingRow>
           <SettingRow
-            title="Manage connected browsers"
-            description="Prepare extension files, register the native host, and verify real connections."
+            title={t("settings.manageBrowsers.title")}
+            description={t("settings.manageBrowsers.description")}
           >
             <Button
               icon={LuGlobe}
               onClick={() => useUIStore.getState().setActiveTab("browser")}
             >
-              Browser setup
+              {t("settings.browserSetup")}
             </Button>
           </SettingRow>
         </section>
@@ -436,82 +426,86 @@ export default function SettingsPage({ capabilities, version }) {
         <>
           <section className="settings-panel">
             <div className="settings-section-heading">
-              <h2>Appearance</h2>
-              <p>A quieter workspace, tuned to your preferences.</p>
+              <h2>{t("settings.appearance.title")}</h2>
+              <p>{t("settings.appearance.description")}</p>
             </div>
             <SettingRow
-              title="Color theme"
-              description="Explore twelve coordinated palettes, or follow your operating system."
+              title={t("settings.theme.title")}
+              description={t("settings.theme.description")}
             >
               <Button
                 icon={LuPalette}
                 onClick={() => useUIStore.getState().setActiveTab("themes")}
               >
-                Open theme gallery
+                {t("settings.openThemes")}
               </Button>
             </SettingRow>
             <SettingRow
-              title="Compact download rows"
-              description="Fit more files in the library without hiding transfer information."
+              title={t("settings.compact.title")}
+              description={t("settings.compact.description")}
             >
               {toggle("compactList")}
             </SettingRow>
             <SettingRow
-              title="Animations"
-              description="Choose how much motion to show. Your system’s reduced-motion preference is always respected."
+              title={t("settings.animations.title")}
+              description={t("settings.animations.description")}
             >
               <Select
-                aria-label="Animations"
+                aria-label={t("settings.animations.title")}
                 value={settings.animationMode || "standard"}
                 disabled={!!saving}
                 onChange={(event) =>
                   persist("animationMode", event.target.value)
                 }
               >
-                <option value="standard">Standard</option>
-                <option value="reduced">Reduced</option>
-                <option value="disabled">Disabled</option>
+                <option value="standard">
+                  {t("settings.animations.standard")}
+                </option>
+                <option value="reduced">
+                  {t("settings.animations.reduced")}
+                </option>
+                <option value="disabled">
+                  {t("settings.animations.disabled")}
+                </option>
               </Select>
             </SettingRow>
           </section>
           <section className="settings-panel">
             <div className="settings-section-heading">
-              <h2>Startup & notifications</h2>
-              <p>
-                Decide when GetANNY is present, and when it gets out of the way.
-              </p>
+              <h2>{t("settings.startup.title")}</h2>
+              <p>{t("settings.startup.description")}</p>
             </div>
             <SettingRow
-              title="Desktop completion notifications"
-              description="Show an operating-system notification after a verified successful download."
+              title={t("settings.notifications.title")}
+              description={t("settings.notifications.description")}
             >
               {toggle("notifications")}
             </SettingRow>
             <SettingRow
-              title="Close to system tray"
-              description="Keep transfers running when the window closes. If a tray is unavailable, closing quits safely."
+              title={t("settings.tray.title")}
+              description={t("settings.tray.description")}
             >
               {toggle("closeToTray")}
             </SettingRow>
             <SettingRow
-              title="Launch at login"
+              title={t("settings.launch.title")}
               description={
                 capabilities.login
-                  ? "Start GetANNY when you sign in to Windows or macOS."
-                  : "Available in the installed Windows and macOS application."
+                  ? t("settings.launch.description")
+                  : t("settings.launch.installed")
               }
               disabled={!capabilities.login}
             >
               <Switch
-                label="Launch at login"
+                label={t("settings.launch.title")}
                 checked={!!settings.launchAtLogin}
                 disabled={!capabilities.login || !!saving}
                 onChange={(value) => persist("launchAtLogin", value)}
               />
             </SettingRow>
             <SettingRow
-              title="Start minimized"
-              description="Start in the tray when available, or minimize the window."
+              title={t("settings.minimized.title")}
+              description={t("settings.minimized.description")}
             >
               {toggle("startMinimized")}
             </SettingRow>
@@ -529,21 +523,21 @@ export default function SettingsPage({ capabilities, version }) {
             />
             <span className="about-version">{version}</span>
           </div>
-          <small>Reliable downloads. Clear control.</small>
+          <small>{t("settings.tagline")}</small>
         </div>
         <Button
           variant="ghost"
           icon={LuRotateCcw}
           onClick={() => setReset(true)}
         >
-          Reset preferences
+          {t("settings.reset")}
         </Button>
       </div>
       {reset && (
         <ConfirmDialog
-          title="Restore default preferences?"
-          description="Your download history and files will stay untouched. Login behavior, theme and transfer preferences will return to defaults."
-          label="Reset preferences"
+          title={t("settings.resetTitle")}
+          description={t("settings.resetDescription")}
+          label={t("settings.reset")}
           onClose={() => setReset(false)}
           onConfirm={async () => {
             const values = await api.invoke("settings:reset");

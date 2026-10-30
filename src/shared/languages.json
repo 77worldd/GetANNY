@@ -1,0 +1,6 @@
+[
+  { "code": "en", "label": "EN", "name": "English", "english": "English", "dir": "ltr" },
+  { "code": "ar", "label": "AR", "name": "العربية", "english": "Arabic", "dir": "rtl" },
+  { "code": "fr", "label": "FR", "name": "Français", "english": "French", "dir": "ltr" },
+  { "code": "es", "label": "ES", "name": "Español", "english": "Spanish", "dir": "ltr" }
+]

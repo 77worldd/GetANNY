@@ -423,7 +423,6 @@ async function runSelfTest({ services: s, win, app, binPath, userDataPath }) {
     await check(
       "Windows native executable → Electron Node → framed bridge → download",
       async () => {
-        await s.settings.set("confirmBrowserDownloads", false);
         const registered = await s.nativeMessagingHost.register("chromium");
         const child = spawn(registered.hostPath, [], {
           stdio: ["pipe", "pipe", "pipe"],

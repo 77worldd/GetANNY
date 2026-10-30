@@ -463,12 +463,18 @@ test(
               `Media left its partial state before pause: ${JSON.stringify({ status: item.status, error: item.error, bytes: item.downloadedSize, files: await fs.readdir(options.downloadPath) })}`,
             );
           if (item.downloadedSize <= 0) return false;
-          const names = await fs.readdir(options.downloadPath);
-          for (const name of names.filter(
-            (name) => name.includes(`[${id}]`) && name.endsWith(".part"),
-          ))
-            if ((await fs.stat(path.join(options.downloadPath, name))).size > 0)
-              return true;
+          // Work data lives outside the destination; users must only see the
+          // final media file.
+          const work = path.join(options.userDataPath, "transfer-temp", id);
+          const names = await fs.readdir(work).catch(() => []);
+          assert.ok(
+            !(await fs.readdir(options.downloadPath)).some((name) =>
+              name.includes(`[${id}]`),
+            ),
+            "destination must not expose internal media fragments",
+          );
+          for (const name of names.filter((name) => name.endsWith(".part")))
+            if ((await fs.stat(path.join(work, name))).size > 0) return true;
           return false;
         },
         40000,
@@ -477,23 +483,23 @@ test(
       await services.manager.pause(id);
       await waitFor(() => !services.manager.running.has(id));
       assert.equal(services.manager.requireItem(id).status, "paused");
-      const partials = (await fs.readdir(options.downloadPath)).filter((name) =>
-        name.includes(`[${id}]`),
+      const work = path.join(options.userDataPath, "transfer-temp", id);
+      const partials = (await fs.readdir(work)).filter((name) =>
+        name.endsWith(".part"),
       );
       assert.ok(
-        partials.some((name) => name.endsWith(".part")),
-        "actual continuation partial must exist",
+        partials.length > 0,
+        "actual continuation partial must exist in private work storage",
       );
       assert.ok(
-        (
-          await fs.stat(
-            path.join(
-              options.downloadPath,
-              partials.find((name) => name.endsWith(".part")),
-            ),
-          )
-        ).size > 0,
+        (await fs.stat(path.join(work, partials[0]))).size > 0,
         "partial must physically contain bytes before restart",
+      );
+      assert.ok(
+        !(await fs.readdir(options.downloadPath)).some((name) =>
+          name.includes(`[${id}]`),
+        ),
+        "destination stays clean while a media transfer is paused",
       );
       await services.close();
       services = await createServices(options);

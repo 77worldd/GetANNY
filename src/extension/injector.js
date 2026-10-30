@@ -24,6 +24,12 @@
   };
   function ensure() {
     if (host) return;
+    let logo = "icons/icon48.png";
+    try {
+      logo = api.runtime.getURL("icons/icon48.png");
+    } catch {
+      /* keep a relative resource path if the API is unavailable */
+    }
     host = document.createElement("div");
     host.style.cssText =
       "position:fixed;z-index:2147483646;display:none;pointer-events:none;";
@@ -32,13 +38,13 @@
       .wrap{display:flex;align-items:center;gap:4px;pointer-events:auto;font-family:system-ui,-apple-system,sans-serif}
       button{all:initial;box-sizing:border-box;display:flex;align-items:center;justify-content:center;height:28px;background:#151d24eF;color:#e8f0f2;border:1px solid #40515c;cursor:pointer;font:600 11px/1 system-ui,-apple-system,sans-serif;transition:background .12s,border-color .12s}
       .send{gap:5px;padding:0 8px;border-radius:6px;box-shadow:0 2px 8px #0004;white-space:nowrap}
-      .mark{color:#a2dfc2;font-size:14px;line-height:1}
+      .logo{width:15px;height:15px;object-fit:contain;display:block;flex:none}
       .dismiss{width:22px;height:22px;margin-left:1px;border-radius:50%;background:#151d24d9;color:#b9c5cc;font-size:14px;font-weight:400}
       button:hover{background:#24323b;border-color:#a2dfc2;color:#fff}
       button:focus-visible{outline:2px solid #a2dfc2;outline-offset:2px}
       button:disabled{opacity:.65;cursor:wait}
       @media(prefers-reduced-motion:reduce){button{transition:none}}
-    </style><div class="wrap"><button class="send" type="button" aria-label="Send media to GetANNY"><span class="mark">↓</span><span class="label">GetANNY</span></button><button class="dismiss" type="button" aria-label="Dismiss GetANNY for this video" title="Dismiss for this video">×</button></div>`;
+    </style><div class="wrap"><button class="send" type="button" aria-label="Send media to GetANNY"><img class="logo" alt="" src="${logo}" draggable="false"><span class="label">GetANNY</span></button><button class="dismiss" type="button" aria-label="Dismiss GetANNY for this video" title="Dismiss for this video">×</button></div>`;
     document.documentElement.appendChild(host);
     button = shadow.querySelector(".send");
     close = shadow.querySelector(".dismiss");

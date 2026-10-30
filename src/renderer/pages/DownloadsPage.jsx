@@ -26,6 +26,8 @@ import {
   LuClock3,
   LuCircleAlert,
   LuMagnet,
+  LuSquareCheck,
+  LuArrowLeft,
 } from "react-icons/lu";
 import { api, errorMessage } from "../api";
 import {
@@ -42,9 +44,9 @@ import {
   bytes,
   duration,
   percent,
-  statusLabel,
   shortHost,
 } from "../utils/format";
+import { useI18n } from "../i18n/useI18n";
 const icons = {
   Archives: LuFileArchive,
   Documents: LuFileText,
@@ -53,30 +55,15 @@ const icons = {
   Applications: LuPackage,
   Images: LuImage,
 };
-const titles = {
-  all: [
-    "All downloads",
-    "Everything you’ve brought in. Organized, and under control.",
-  ],
-  active: [
-    "Active downloads",
-    "Live transfers, queued files, and scheduled retries.",
-  ],
-  completed: [
-    "Completed",
-    "Ready when you are. Open a file or find it on disk.",
-  ],
-  paused: ["Paused", "Pick up where you left off, whenever you’re ready."],
-  failed: [
-    "Failed downloads",
-    "See what went wrong. Retry without losing your place.",
-  ],
-  torrent: [
-    "Torrents",
-    "Peer-to-peer transfers with verified pieces and persistent history.",
-  ],
+const titleKeys = {
+  all: ["downloads.all.title", "downloads.all.description"],
+  active: ["downloads.active.title", "downloads.active.description"],
+  completed: ["downloads.completed.title", "downloads.completed.description"],
+  paused: ["downloads.paused.title", "downloads.paused.description"],
+  failed: ["downloads.failed.title", "downloads.failed.description"],
+  torrent: ["downloads.torrent.title", "downloads.torrent.description"],
 };
-function ContextMenu({ position, actions, onClose }) {
+function ContextMenu({ position, actions, onClose, label }) {
   const ref = useRef();
   useEffect(() => {
     const root = ref.current;
@@ -112,7 +99,7 @@ function ContextMenu({ position, actions, onClose }) {
   return createPortal(
     <div
       role="menu"
-      aria-label="Download actions"
+      aria-label={label}
       className="context-menu"
       ref={ref}
       style={{
@@ -198,11 +185,45 @@ function DownloadPreview({ item, Icon }) {
     </div>
   );
 }
-function DownloadRow({ item, onConfirm }) {
+function DownloadRow({
+  item,
+  onConfirm,
+  index,
+  selected,
+  selectionMode,
+  onSelect,
+}) {
+  const { t, language } = useI18n();
   const [busy, setBusy] = useState(false),
     [menu, setMenu] = useState(null);
+  const pressTimer = useRef(null),
+    pressOrigin = useRef(null),
+    suppressClick = useRef(false);
+  const clearPress = () => {
+    clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+    pressOrigin.current = null;
+  };
+  const activate = (event) => {
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      return;
+    }
+    // Buttons inside the row keep their own behaviour.
+    if (event.target.closest("button, a, input, select, textarea")) return;
+    if (event.ctrlKey || event.metaKey) {
+      onSelect(index, { toggle: true });
+    } else if (event.shiftKey) {
+      onSelect(index, { range: true });
+    } else if (selectionMode) {
+      onSelect(index, { toggle: true });
+    } else {
+      useUIStore.getState().setDetails(item.id);
+    }
+  };
   const Icon =
     item.kind === "torrent" ? LuMagnet : icons[item.category] || LuFile;
+  const statusText = t(`status.${item.status}`);
   const knownSize = item.totalSize > 0 || item.status === "completed";
   const pct =
     item.totalSize > 0
@@ -217,10 +238,7 @@ function DownloadRow({ item, onConfirm }) {
       if (result === false)
         useUIStore
           .getState()
-          .notify(
-            "This action is no longer available. The download state has changed.",
-            "error",
-          );
+          .notify(t("downloads.actionUnavailable"), "error");
     } catch (error) {
       useUIStore.getState().notify(errorMessage(error), "error");
     } finally {
@@ -235,7 +253,7 @@ function DownloadRow({ item, onConfirm }) {
     ...(item.status === "completed"
       ? [
           {
-            label: "Open downloaded file",
+            label: t("downloads.action.openFile"),
             icon: LuArrowUpRight,
             disabled: !api.desktop,
             run: () => act("open-file"),
@@ -243,13 +261,13 @@ function DownloadRow({ item, onConfirm }) {
         ]
       : []),
     {
-      label: "Show in folder",
+      label: t("downloads.action.showInFolder"),
       icon: LuFolderOpen,
       disabled: !api.desktop,
       run: () => act("open-folder"),
     },
     {
-      label: "Open source",
+      label: t("downloads.action.openSource"),
       icon: LuArrowUpRight,
       disabled: !api.desktop || !/^https?:\/\//i.test(item.url || ""),
       run: () =>
@@ -260,59 +278,61 @@ function DownloadRow({ item, onConfirm }) {
           ),
     },
     {
-      label: "Copy source link",
+      label: t("downloads.action.copySource"),
       icon: LuCopy,
       run: () =>
         navigator.clipboard.writeText(item.url).then(
-          () => useUIStore.getState().notify("Source link copied."),
+          () => useUIStore.getState().notify(t("downloads.sourceCopied")),
           () =>
             useUIStore
               .getState()
-              .notify("Clipboard access was denied.", "error"),
+              .notify(t("downloads.clipboardDenied"), "error"),
         ),
     },
     {
-      label: "Download details",
+      label: t("downloads.action.details"),
       icon: LuInfo,
       run: () => useUIStore.getState().setDetails(item.id),
     },
     ...(!["completed", "cancelled"].includes(item.status)
       ? [
           {
-            label: "Cancel transfer",
+            label: t("downloads.action.cancelTransfer"),
             icon: LuX,
             run: () =>
               onConfirm({
-                title: "Cancel this download?",
+                title: t("downloads.cancelTitle"),
                 description: item.filename,
-                label: "Cancel download",
+                label: t("downloads.cancelConfirm"),
                 onConfirm: () => api.invoke("download:cancel", item.id),
               }),
           },
         ]
       : []),
     {
-      label: "Remove from history",
+      label: t("downloads.action.removeHistory"),
       icon: LuTrash2,
       run: () =>
         onConfirm({
-          title: "Remove from history?",
-          description: `${item.filename}. Downloaded files will stay on disk. An active transfer will be stopped.`,
-          label: "Remove download",
+          title: t("downloads.removeHistoryTitle"),
+          description: t("downloads.removeHistoryDescription", {
+            name: item.filename,
+          }),
+          label: t("downloads.removeHistoryConfirm"),
           onConfirm: () => api.invoke("download:remove", { id: item.id }),
         }),
     },
     ...(item.status === "completed" && item.kind !== "torrent"
       ? [
           {
-            label: "Delete file from disk",
+            label: t("downloads.action.deleteFile"),
             icon: LuTrash2,
             danger: true,
             run: () =>
               onConfirm({
-                title: "Delete the downloaded file?",
+                title: t("downloads.deleteFileTitle"),
                 description: item.filePath || item.filename,
-                label: "Delete file",
+                label: t("downloads.deleteFileConfirm"),
                 destructive: true,
                 onConfirm: () =>
                   api.invoke("download:remove", {
@@ -326,14 +346,60 @@ function DownloadRow({ item, onConfirm }) {
   ];
   return (
     <article
-      className={`download-row status-${item.status}`}
+      className={`download-row status-${item.status} ${selected ? "selected" : ""} ${selectionMode ? "selecting" : ""}`}
       role="listitem"
-      aria-label={`${item.filename}, ${statusLabel(item)}`}
+      aria-selected={selected}
+      aria-label={t("downloads.rowLabel", {
+        name: item.filename,
+        status: statusText,
+      })}
+      tabIndex={0}
+      onClick={activate}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          activate(event);
+        }
+      }}
+      onPointerDown={(event) => {
+        if (event.pointerType !== "touch" || event.target.closest("button"))
+          return;
+        clearPress();
+        pressOrigin.current = { x: event.clientX, y: event.clientY };
+        pressTimer.current = setTimeout(() => {
+          suppressClick.current = true;
+          onSelect(index, { toggle: true });
+        }, 500);
+      }}
+      onPointerMove={(event) => {
+        const origin = pressOrigin.current;
+        if (
+          origin &&
+          Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 10
+        )
+          clearPress();
+      }}
+      onPointerUp={clearPress}
+      onPointerCancel={clearPress}
       onContextMenu={(event) => {
         event.preventDefault();
+        if (suppressClick.current) return;
         setMenu({ x: event.clientX, y: event.clientY });
       }}
     >
+      <button
+        type="button"
+        className={`row-select ${selected ? "selected" : ""}`}
+        role="checkbox"
+        aria-checked={!!selected}
+        aria-label={t("downloads.selectOne", { name: item.filename })}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect(index, { toggle: true });
+        }}
+      >
+        <LuCheck />
+      </button>
       <DownloadPreview item={item} Icon={Icon} />
       <div className="file-info">
         <button
@@ -356,7 +422,7 @@ function DownloadRow({ item, onConfirm }) {
               <span>
                 {new Date(
                   item.completedAt || item.updatedAt || item.createdAt,
-                ).toLocaleString(undefined, {
+                ).toLocaleString(language, {
                   month: "short",
                   day: "numeric",
                   hour: "2-digit",
@@ -368,7 +434,7 @@ function DownloadRow({ item, onConfirm }) {
             <>
               {shortHost(item.url)}
               <span>·</span>
-              {new Date(item.createdAt).toLocaleDateString(undefined, {
+              {new Date(item.createdAt).toLocaleDateString(language, {
                 month: "short",
                 day: "numeric",
               })}
@@ -407,7 +473,7 @@ function DownloadRow({ item, onConfirm }) {
                 {bytes(item.totalSize)}
               </span>
             ) : (
-              <span className="muted"> / unknown</span>
+              <span className="muted"> / {t("downloads.unknown")}</span>
             )}
           </span>
           <span className="transfer-percent">
@@ -419,14 +485,16 @@ function DownloadRow({ item, onConfirm }) {
         <div
           className={`progress-track ${!knownSize && active(item) ? "indeterminate" : ""}`}
           role="progressbar"
-          aria-label={`${item.filename} progress`}
+          aria-label={t("downloads.progressLabel", { name: item.filename })}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={knownSize ? Math.round(pct) : undefined}
           aria-valuetext={
             knownSize
-              ? `${item.approximateSize ? "Approximately " : ""}${Math.round(pct)}%`
-              : `${bytes(item.downloadedSize)} transferred; total unknown`
+              ? `${item.approximateSize ? `${t("downloads.approximate")} ` : ""}${Math.round(pct)}%`
+              : t("downloads.transferredUnknown", {
+                  size: bytes(item.downloadedSize),
+                })
           }
         >
           <span style={{ width: `${pct}%` }} />
@@ -435,28 +503,32 @@ function DownloadRow({ item, onConfirm }) {
           {item.status === "downloading" ? (
             <>
               <span>
-                {item.speed > 0 ? `${bytes(item.speed)}/s` : "Waiting for data"}
+                {item.speed > 0
+                  ? `${bytes(item.speed)}/s`
+                  : t("downloads.waitingData")}
               </span>
               <span>
                 {item.eta != null && item.totalSize > 0
-                  ? `${duration(item.eta)} left`
+                  ? t("downloads.timeLeft", { time: duration(item.eta) })
                   : item.kind === "torrent"
-                    ? `${item.peers || 0} peers`
+                    ? t("downloads.peers", { count: item.peers || 0 })
                     : ""}
               </span>
             </>
           ) : item.status === "processing" ? (
-            <span>{item.phase || "Verifying output"}</span>
+            <span>{item.phase || t("downloads.verifying")}</span>
           ) : item.status === "retrying" ? (
-            <span>Attempt {item.attempt} · waiting to retry</span>
+            <span>
+              {t("downloads.retryWaiting", { attempt: item.attempt })}
+            </span>
           ) : (
             <span>
               {item.status === "completed"
-                ? "Saved to disk"
+                ? t("downloads.savedToDisk")
                 : item.resumable
-                  ? "Resume supported"
+                  ? t("downloads.resumeSupported")
                   : item.status === "queued"
-                    ? "Waiting for a free slot"
+                    ? t("downloads.waitingSlot")
                     : "—"}
             </span>
           )}
@@ -474,12 +546,12 @@ function DownloadRow({ item, onConfirm }) {
         ) : (
           <LuClock3 />
         )}
-        {statusLabel(item)}
+        {statusText}
       </div>
       <div className="row-actions">
         {active(item) || ["queued", "retrying"].includes(item.status) ? (
           <IconButton
-            label={`Pause ${item.filename}`}
+            label={t("downloads.pauseLabel", { name: item.filename })}
             busy={busy}
             onClick={() => act("pause")}
           >
@@ -487,7 +559,12 @@ function DownloadRow({ item, onConfirm }) {
           </IconButton>
         ) : ["paused", "failed", "cancelled"].includes(item.status) ? (
           <IconButton
-            label={`${item.status === "paused" ? "Resume" : "Retry"} ${item.filename}`}
+            label={t(
+              item.status === "paused"
+                ? "downloads.resumeLabel"
+                : "downloads.retryLabel",
+              { name: item.filename },
+            )}
             busy={busy}
             onClick={() => act(item.status === "paused" ? "resume" : "retry")}
           >
@@ -495,14 +572,17 @@ function DownloadRow({ item, onConfirm }) {
           </IconButton>
         ) : (
           <IconButton
-            label={`Open ${item.filename}`}
+            label={t("downloads.openLabel", { name: item.filename })}
             disabled={!api.desktop}
             onClick={() => act("open-file")}
           >
             <LuArrowUpRight />
           </IconButton>
         )}
-        <IconButton label={`Actions for ${item.filename}`} onClick={openMenu}>
+        <IconButton
+          label={t("downloads.actionsLabel", { name: item.filename })}
+          onClick={openMenu}
+        >
           <LuEllipsis />
         </IconButton>
       </div>
@@ -510,6 +590,7 @@ function DownloadRow({ item, onConfirm }) {
         <ContextMenu
           position={menu}
           actions={actions}
+          label={t("downloads.actionsMenu")}
           onClose={() => setMenu(null)}
         />
       )}
@@ -518,13 +599,20 @@ function DownloadRow({ item, onConfirm }) {
 }
 const MemoDownloadRow = React.memo(DownloadRow);
 export default function DownloadsPage({ filter }) {
+  const { t } = useI18n();
   const downloads = useDownloadStore((state) => state.downloads);
   const [search, setSearch] = useState(""),
     [category, setCategory] = useState("All files"),
     [sort, setSort] = useState("latest"),
     [confirm, setConfirm] = useState(null),
-    [bulkBusy, setBulkBusy] = useState(false);
-  const [title, description] = titles[filter] || titles.all;
+    [bulkBusy, setBulkBusy] = useState(false),
+    [selected, setSelected] = useState(() => new Set()),
+    [historyMenu, setHistoryMenu] = useState(null);
+  const anchor = useRef(null);
+  const selectionMode = selected.size > 0;
+  const [titleKey, descriptionKey] = titleKeys[filter] || titleKeys.all;
+  const title = t(titleKey),
+    description = t(descriptionKey);
   const base = useMemo(
     () =>
       downloads.filter(
@@ -557,6 +645,151 @@ export default function DownloadsPage({ filter }) {
         ),
     [base, search, category, sort],
   );
+  const select = (index, { toggle, range }) => {
+    const item = rows[index];
+    if (!item) return;
+    // Shift-click without a previous anchor still selects the clicked row so
+    // the gesture never becomes a no-op.
+    if (range && anchor.current != null) {
+      const [from, to] = [anchor.current, index].sort((a, b) => a - b);
+      setSelected((previous) => {
+        const next = new Set(previous);
+        for (let cursor = from; cursor <= to; cursor++)
+          if (rows[cursor]) next.add(rows[cursor].id);
+        return next;
+      });
+      return;
+    }
+    if (toggle || range) {
+      anchor.current = index;
+      setSelected((previous) => {
+        const next = new Set(previous);
+        if (next.has(item.id)) next.delete(item.id);
+        else next.add(item.id);
+        return next;
+      });
+    }
+  };
+  const selectAll = () => {
+    const allVisible = rows.length > 0 && rows.every((item) => selected.has(item.id));
+    setSelected((previous) => {
+      const next = new Set(previous);
+      for (const item of rows)
+        if (allVisible) next.delete(item.id);
+        else next.add(item.id);
+      return next;
+    });
+    anchor.current = null;
+  };
+  const exitSelection = () => {
+    setSelected(new Set());
+    anchor.current = null;
+  };
+  useEffect(() => {
+    // Rows can disappear after a transfer is removed; stale ids must not keep
+    // the toolbar open or act on unrelated future items.
+    setSelected((previous) => {
+      if (!previous.size) return previous;
+      const live = new Set(downloads.map((item) => item.id));
+      const next = new Set([...previous].filter((id) => live.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [downloads]);
+  useEffect(() => {
+    if (!selectionMode) return;
+    const key = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        exitSelection();
+      }
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "a" &&
+        !event.target.closest?.("input, textarea, select")
+      ) {
+        event.preventDefault();
+        selectAll();
+      }
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [selectionMode, rows.length, downloads]);
+  const historical = (item) =>
+    ["completed", "failed", "cancelled"].includes(item.status);
+  const historyCount = (scope) =>
+    scope === "selected"
+      ? downloads.filter((item) => selected.has(item.id) && historical(item))
+          .length
+      : scope === "completed"
+        ? downloads.filter((item) => item.status === "completed").length
+        : scope === "failed"
+          ? downloads.filter((item) => item.status === "failed").length
+          : downloads.filter(historical).length;
+  const clearScope = (scope) => {
+    const ids = scope === "selected"
+      ? downloads
+          .filter((item) => selected.has(item.id) && historical(item))
+          .map((item) => item.id)
+      : [];
+    const count = historyCount(scope);
+    const labels = {
+      selected: "downloads.history.confirmSelected",
+      completed: "downloads.history.confirmCompleted",
+      failed: "downloads.history.confirmFailed",
+      all: "downloads.history.confirmAll",
+    };
+    setConfirm({
+      title: t("downloads.history.title"),
+      description: t("downloads.history.description"),
+      note: t("downloads.history.filesNote"),
+      label: count ? t(labels[scope]) : t("downloads.history.nothing"),
+      destructive: scope === "all",
+      onConfirm: async () => {
+        if (!count) return;
+        const removed = await api.invoke("download:clear-history", {
+          scope,
+          ids,
+        });
+        exitSelection();
+        useUIStore
+          .getState()
+          .notify(t("downloads.history.removed", { count: removed }));
+      },
+    });
+  };
+  const removeSelected = () => {
+    setConfirm({
+      title: t("downloads.removeSelectedTitle"),
+      description: t("downloads.removeSelectedDescription", {
+        count: selected.size,
+      }),
+      label: t("downloads.removeSelectedConfirm", { count: selected.size }),
+      destructive: true,
+      onConfirm: async () => {
+        const removed = await api.invoke("download:clear-history", {
+          scope: "selected",
+          ids: [...selected],
+          stopUnfinished: true,
+        });
+        exitSelection();
+        useUIStore
+          .getState()
+          .notify(t("downloads.history.removed", { count: removed }));
+      },
+    });
+  };
+  const historyActions = [
+    ["selected", "downloads.history.selected", historyCount("selected")],
+    ["completed", "downloads.history.completed", historyCount("completed")],
+    ["failed", "downloads.history.failed", historyCount("failed")],
+    ["all", "downloads.history.all", historyCount("all")],
+  ].map(([scope, key, count]) => ({
+    icon: LuTrash2,
+    label: t(key, { count }),
+    disabled: !count,
+    danger: scope === "all",
+    run: () => clearScope(scope),
+  }));
   const transferring = downloads.filter(active),
     speed = transferring.reduce(
       (sum, item) =>
@@ -583,7 +816,7 @@ export default function DownloadsPage({ filter }) {
   return (
     <div className="page downloads-page">
       <PageHeader
-        eyebrow="YOUR LIBRARY"
+        eyebrow={t("downloads.eyebrow")}
         title={title}
         description={description}
       >
@@ -596,30 +829,36 @@ export default function DownloadsPage({ filter }) {
               .setAddModal(filter === "torrent" ? { torrent: true } : {})
           }
         >
-          {filter === "torrent" ? "Add torrent" : "New download"}
+          {filter === "torrent"
+            ? t("downloads.addTorrent")
+            : t("downloads.newDownload")}
         </Button>
       </PageHeader>
       <div className="transfer-summary">
         <div>
           <span className={`live-dot ${transferring.length ? "live" : ""}`} />
           <strong>{transferring.length}</strong>
-          <span>transferring</span>
+          <span>{t("downloads.transferring")}</span>
         </div>
         <div>
           <LuDownload />
           <strong>{speed > 0 ? `${bytes(speed)}/s` : "—"}</strong>
-          <span>current speed</span>
+          <span>{t("downloads.currentSpeed")}</span>
         </div>
         <div>
           <LuCheck />
           <strong>
             {downloads.filter((item) => item.status === "completed").length}
           </strong>
-          <span>completed</span>
+          <span>{t("downloads.completedCount")}</span>
         </div>
         <span className="summary-label">
-          {downloads.length} {downloads.length === 1 ? "file" : "files"} in your
-          library
+          {t(
+            downloads.length === 1
+              ? "downloads.libraryCountOne"
+              : "downloads.libraryCountMany",
+            { count: downloads.length },
+          )}
         </span>
       </div>
       <div className="library-panel">
@@ -627,13 +866,16 @@ export default function DownloadsPage({ filter }) {
           <div className="search-input">
             <LuSearch />
             <input
-              aria-label="Search downloads"
-              placeholder="Search files or links…"
+              aria-label={t("downloads.searchLabel")}
+              placeholder={t("downloads.searchPlaceholder")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
             {search && (
-              <IconButton label="Clear search" onClick={() => setSearch("")}>
+              <IconButton
+                label={t("downloads.clearSearch")}
+                onClick={() => setSearch("")}
+              >
                 <LuX />
               </IconButton>
             )}
@@ -652,53 +894,50 @@ export default function DownloadsPage({ filter }) {
               }
               onClick={pauseAll}
             >
-              Pause all
+              {t("downloads.pauseAll")}
             </Button>
             <Select
               value={sort}
               onChange={(event) => setSort(event.target.value)}
-              aria-label="Sort downloads"
+              aria-label={t("downloads.sortLabel")}
             >
-              <option value="latest">Newest first</option>
-              <option value="name">File name</option>
-              <option value="size">Largest first</option>
+              <option value="latest">{t("downloads.sort.latest")}</option>
+              <option value="name">{t("downloads.sort.name")}</option>
+              <option value="size">{t("downloads.sort.size")}</option>
             </Select>
-            {filter === "completed" && (
-              <IconButton
-                label="Clear completed history"
-                disabled={!base.length}
-                onClick={() =>
-                  setConfirm({
-                    title: "Clear completed history?",
-                    description:
-                      "Completed files remain on disk. Only their history entries will be removed.",
-                    label: "Clear history",
-                    onConfirm: () => api.invoke("download:clear-completed"),
-                  })
-                }
-              >
-                <LuTrash2 />
-              </IconButton>
-            )}
+            <Button
+              variant="ghost"
+              icon={LuTrash2}
+              disabled={!historyCount("all")}
+              onClick={(event) => {
+                const box = event.currentTarget.getBoundingClientRect();
+                setHistoryMenu({
+                  x: box.right - 250,
+                  y: box.bottom + 6,
+                });
+              }}
+            >
+              {t("downloads.clearHistory")}
+            </Button>
           </div>
         </div>
         <div
           className="category-tabs"
           role="group"
-          aria-label="Filter by file type"
+          aria-label={t("downloads.filterType")}
         >
           {[
-            "All files",
-            "Video",
-            "Audio",
-            "Archives",
-            "Documents",
-            "Applications",
-            "Images",
-            "Other",
+            ["All files", "downloads.allFiles"],
+            ["Video", "downloads.category.video"],
+            ["Audio", "downloads.category.audio"],
+            ["Archives", "downloads.category.archives"],
+            ["Documents", "downloads.category.documents"],
+            ["Applications", "downloads.category.applications"],
+            ["Images", "downloads.category.images"],
+            ["Other", "downloads.category.other"],
           ]
             .filter(
-              (name) =>
+              ([name]) =>
                 [
                   "All files",
                   "Video",
@@ -707,29 +946,71 @@ export default function DownloadsPage({ filter }) {
                   "Documents",
                 ].includes(name) || base.some((item) => item.category === name),
             )
-            .map((name) => (
+            .map(([name, key]) => (
               <button
                 className={category === name ? "selected" : ""}
                 key={name}
                 onClick={() => setCategory(name)}
               >
-                {name}
+                {t(key)}
                 {name === "All files" && <span>{base.length}</span>}
               </button>
             ))}
         </div>
+        {selectionMode && (
+          <div className="selection-bar" role="status">
+            <LuSquareCheck />
+            <strong>
+              {t("downloads.selectedCount", { count: selected.size })}
+            </strong>
+            <Button
+              variant="ghost"
+              icon={LuTrash2}
+              onClick={removeSelected}
+            >
+              {t("downloads.removeSelected")}
+            </Button>
+            <Button
+              variant="ghost"
+              icon={LuX}
+              onClick={exitSelection}
+            >
+              {t("downloads.cancelSelection")}
+            </Button>
+          </div>
+        )}
         <div className="list-heading">
-          <span className="file-heading">FILE NAME</span>
-          <span>TRANSFER</span>
-          <span>STATUS</span>
+          <label className="select-all">
+            <input
+              type="checkbox"
+              checked={rows.length > 0 && selected.size === rows.length}
+              ref={(input) => {
+                if (input)
+                  input.indeterminate =
+                    selected.size > 0 && selected.size < rows.length;
+              }}
+              onChange={selectAll}
+              disabled={!rows.length}
+              aria-label={t("downloads.selectAll")}
+            />
+            <span className="file-heading">
+              {t("downloads.fileName")}
+            </span>
+          </label>
+          <span>{t("downloads.transfer")}</span>
+          <span>{t("downloads.status")}</span>
           <span />
         </div>
         <div role="list" aria-label={title} className="download-list">
           {rows.length ? (
-            rows.map((item) => (
+            rows.map((item, index) => (
               <MemoDownloadRow
                 key={item.id}
                 item={item}
+                index={index}
+                selected={selected.has(item.id)}
+                selectionMode={selectionMode}
+                onSelect={select}
                 onConfirm={setConfirm}
               />
             ))
@@ -748,25 +1029,25 @@ export default function DownloadsPage({ filter }) {
               </div>
               <h2>
                 {search || category !== "All files"
-                  ? "No matching downloads"
+                  ? t("downloads.emptySearchTitle")
                   : filter === "completed"
-                    ? "Good things are on their way"
+                    ? t("downloads.emptyCompletedTitle")
                     : filter === "failed"
-                      ? "Nothing to fix here"
+                      ? t("downloads.emptyFailedTitle")
                       : filter === "paused"
-                        ? "Nothing on hold"
-                        : "Your next download starts here"}
+                        ? t("downloads.emptyPausedTitle")
+                        : t("downloads.emptyTitle")}
               </h2>
               <p>
                 {search || category !== "All files"
-                  ? "Try another file name, link, or category."
+                  ? t("downloads.emptySearchDescription")
                   : filter === "failed"
-                    ? "If a transfer fails, its details and retry action will appear here."
+                    ? t("downloads.emptyFailedDescription")
                     : filter === "paused"
-                      ? "Paused transfers keep their partial files, ready to resume."
+                      ? t("downloads.emptyPausedDescription")
                       : filter === "completed"
-                        ? "Your successfully verified downloads will appear here."
-                        : "Paste a file link, choose where it goes, and leave the rest to GetANNY."}
+                        ? t("downloads.emptyCompletedDescription")
+                        : t("downloads.emptyDescription")}
               </p>
               {!search && filter !== "failed" && filter !== "paused" && (
                 <Button
@@ -780,14 +1061,14 @@ export default function DownloadsPage({ filter }) {
                   }
                 >
                   {filter === "torrent"
-                    ? "Add a torrent"
-                    : "Add your first download"}
+                    ? t("downloads.addTorrentEmpty")
+                    : t("downloads.addFirst")}
                 </Button>
               )}
               <span className="keyboard-hint">
                 {filter === "all" && (
                   <>
-                    Quick add <kbd>Ctrl</kbd>
+                    {t("downloads.quickAdd")} <kbd>Ctrl</kbd>
                     <kbd>N</kbd>
                   </>
                 )}
@@ -797,21 +1078,34 @@ export default function DownloadsPage({ filter }) {
         </div>
         <div className="list-footer">
           <span>
-            {rows.length} of {base.length} downloads
+            {t("downloads.count", {
+              shown: rows.length,
+              total: base.length,
+            })}
           </span>
           <span>
             {rows.length
-              ? `${bytes(rows.reduce((sum, item) => sum + item.downloadedSize, 0))} transferred`
-              : "Your history is stored locally"}
+              ? t("downloads.transferred", {
+                  size: bytes(
+                    rows.reduce((sum, item) => sum + item.downloadedSize, 0),
+                  ),
+                })
+              : t("downloads.localOnly")}
           </span>
         </div>
       </div>
       {filter === "torrent" && (
         <p className="page-footnote">
           <LuInfo />
-          Torrents stop seeding when complete. On resume, saved pieces are
-          verified before transferring.
+          {t("downloads.torrentNote")}
         </p>
+      )}
+      {historyMenu && (
+        <ContextMenu
+          position={historyMenu}
+          actions={historyActions}
+          onClose={() => setHistoryMenu(null)}
+        />
       )}
       {confirm && (
         <ConfirmDialog {...confirm} onClose={() => setConfirm(null)} />

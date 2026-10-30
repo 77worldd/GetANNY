@@ -26,6 +26,7 @@ class DownloadManager extends EventEmitter {
   constructor({
     settings = {},
     downloadsRepo,
+    tempPath = null,
     engineFactory,
     onProgress = () => {},
     onStatusChange = () => {},
@@ -36,6 +37,7 @@ class DownloadManager extends EventEmitter {
     Object.assign(this, {
       settings,
       repo: downloadsRepo,
+      tempPath,
       engineFactory,
       onProgress,
       onStatusChange,
@@ -221,12 +223,16 @@ class DownloadManager extends EventEmitter {
     }
     return { filename: item.filename, savePath: item.savePath };
   }
+  workPath(item) {
+    return this.tempPath ? path.join(this.tempPath, item.id) : null;
+  }
   createEngine(item) {
     const options = {
       ...item,
       timeout: (this.settings.requestTimeoutSeconds || 30) * 1000,
       connections: this.settings.maxConnectionsPerDownload || 8,
       speedLimit: this.settings.speedLimit || 0,
+      tempPath: this.workPath(item),
       reserveTarget: (info) => this.reserve(item, info),
     };
     const engine =
@@ -388,6 +394,9 @@ class DownloadManager extends EventEmitter {
     return true;
   }
   async cleanup(item) {
+    // Work files live outside the destination now. The destination scan keeps
+    // older interrupted transfers (from builds that used hidden in-place
+    // partials) removable without exposing them to the user.
     const names = await fs.readdir(item.savePath).catch(() => []);
     const prefix = `.getanny-${item.id}`;
     await Promise.all(
@@ -395,12 +404,45 @@ class DownloadManager extends EventEmitter {
         .filter(
           (name) =>
             name.startsWith(`${prefix}.`) ||
-            (item.kind === "media" &&
-              name.includes(`[${item.id}]`) &&
-              name !== item.filename),
+            name.startsWith(`.getanny-media-${item.id}`),
         )
         .map((name) => fs.rm(path.join(item.savePath, name), { force: true })),
     );
+    if (this.tempPath)
+      await fs
+        .rm(path.join(this.tempPath, item.id), {
+          recursive: true,
+          force: true,
+        })
+        .catch(() => {});
+  }
+  async clearHistory({ scope = "all", ids = [], stopUnfinished = false } = {}) {
+    const selected = new Set(ids.map(String));
+    const historical = (item) =>
+      ["completed", "failed", "cancelled"].includes(item.status);
+    const targets = [...this.items.values()].filter((item) => {
+      if (scope === "selected")
+        return selected.has(item.id) && (historical(item) || stopUnfinished);
+      if (scope === "completed") return item.status === "completed";
+      if (scope === "failed") return item.status === "failed";
+      // "Clear all history" never cancels work that is still in progress or
+      // paused; those entries remain until the user acts on them explicitly.
+      return historical(item);
+    });
+    for (const item of targets) {
+      if (["queued", "retrying"].includes(item.status)) {
+        this.clearRetry(item.id);
+        this.queue = this.queue.filter((value) => value !== item.id);
+      }
+      if (["completed", "cancelled", "failed"].includes(item.status))
+        await this.cleanup(item);
+      else await this.remove(item.id);
+      this.discardProgress(item.id);
+      this.items.delete(item.id);
+      this.repo?.remove(item.id);
+    }
+    this.snapshot();
+    return targets.length;
   }
   async remove(id, deleteFile = false) {
     const item = this.requireItem(id);

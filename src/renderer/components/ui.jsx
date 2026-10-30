@@ -9,6 +9,7 @@ import {
 } from "react-icons/lu";
 import { api, errorMessage } from "../api";
 import useUIStore from "../stores/useUIStore";
+import { useI18n } from "../i18n/useI18n";
 export function Button({
   children,
   variant = "secondary",
@@ -78,10 +79,11 @@ export function Field({ label, hint, error, children, id, className = "" }) {
 export function FolderField({
   value,
   onChange,
-  label = "Save to",
+  label,
   id = "save-folder",
   desktop = api.desktop,
 }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const choose = async () => {
     setBusy(true);
@@ -95,7 +97,7 @@ export function FolderField({
     }
   };
   return (
-    <Field label={label} id={id}>
+    <Field label={label || t("common.saveTo")} id={id}>
       <div className="input-group">
         <LuFolderOpen aria-hidden />
         <input
@@ -104,13 +106,13 @@ export function FolderField({
           onChange={(event) => onChange(event.target.value)}
           required
           placeholder={
-            desktop ? "Choose a folder" : "Absolute sandbox folder path"
+            desktop ? t("common.chooseFolder") : t("common.sandboxPath")
           }
           spellCheck="false"
         />
         {desktop && (
           <Button onClick={choose} busy={busy} variant="ghost">
-            Browse
+            {t("common.browse")}
           </Button>
         )}
       </div>
@@ -125,6 +127,7 @@ export function Dialog({
   wide = false,
   busy = false,
 }) {
+  const { t } = useI18n();
   const ref = useRef();
   // Capture before mounting/focusing the dialog, not on each StrictMode effect.
   const openerRef = useRef(document.activeElement);
@@ -198,7 +201,11 @@ export function Dialog({
             <h2 id="dialog-title">{title}</h2>
             {description && <p>{description}</p>}
           </div>
-          <IconButton label="Close dialog" disabled={busy} onClick={onClose}>
+          <IconButton
+            label={t("common.closeDialog")}
+            disabled={busy}
+            onClick={onClose}
+          >
             <LuX />
           </IconButton>
         </header>
@@ -213,8 +220,10 @@ export function ConfirmDialog({
   onConfirm,
   onClose,
   destructive = false,
-  label = "Confirm",
+  label,
+  note = "",
 }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   return (
@@ -226,11 +235,17 @@ export function ConfirmDialog({
     >
       <div className="dialog-body">
         {error && <ErrorBanner>{error}</ErrorBanner>}
-        {destructive && <p className="muted">This action cannot be undone.</p>}
+        {note ? (
+          <p className="muted">{note}</p>
+        ) : (
+          destructive && (
+            <p className="muted">{t("common.cannotUndo")}</p>
+          )
+        )}
       </div>
       <footer className="dialog-footer">
         <Button disabled={busy} onClick={onClose}>
-          Keep it
+          {t("common.keep")}
         </Button>
         <Button
           variant={destructive ? "danger" : "primary"}
@@ -247,7 +262,7 @@ export function ConfirmDialog({
             }
           }}
         >
-          {label}
+          {label || t("common.confirm")}
         </Button>
       </footer>
     </Dialog>
@@ -285,6 +300,7 @@ export function Select({ children, ...props }) {
   );
 }
 export function Toasts() {
+  const { t } = useI18n();
   const toasts = useUIStore((state) => state.toasts),
     dismiss = useUIStore((state) => state.dismissToast);
   return (
@@ -294,7 +310,7 @@ export function Toasts() {
           {toast.type === "error" ? <LuCircleAlert /> : <LuCheck />}
           <span>{toast.message}</span>
           <IconButton
-            label="Dismiss notification"
+            label={t("common.dismiss")}
             onClick={() => dismiss(toast.id)}
           >
             <LuX />

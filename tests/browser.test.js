@@ -68,6 +68,10 @@ test("browser detection covers all seven targets plus Edge using executables, no
     },
     exists: async (file) =>
       file.includes("imput") && file.endsWith("chrome.exe"),
+    // Keep this filesystem simulation deterministic on machines with Chrome.
+    appPathLookup: async () => {
+      throw new Error("not registered in the simulation");
+    },
   });
   const found = await detector.detect();
   assert.equal(found.length, 8);
@@ -193,7 +197,6 @@ test(
       await services.close();
       await fs.rm(dir, { recursive: true, force: true });
     });
-    await services.settings.set("confirmBrowserDownloads", false);
     const compiledHost = process.env.GETANNY_NATIVE_LAUNCHER === "1";
     const config = path.join(
       dir,
@@ -292,7 +295,7 @@ test(
     assert.equal(child.exitCode, 0);
   },
 );
-test("browser review and media requests are acknowledged as review, not fake started downloads", async (t) => {
+test("file handoffs start automatically while media pages wait for a format choice", async (t) => {
   const dir = await fs.mkdtemp(
     path.join(os.tmpdir(), "getanny-browser-review-"),
   );
@@ -317,17 +320,22 @@ test("browser review and media requests are acknowledged as review, not fake sta
     browserId: "chrome",
     extensionId: CHROMIUM_ID,
   });
-  assert.equal(
-    (
-      await message(client, {
-        type: "download",
-        url: "https://example.test/a",
-        kind: "file",
-      })
-    ).action,
-    "review",
+  const file = await message(client, {
+    type: "download",
+    url: "https://example.test/a",
+    kind: "file",
+  });
+  assert.equal(file.action, "queued");
+  assert.equal(file.success, true);
+  assert.equal(services.manager.getAll().length, 1);
+  // The handoff starts immediately; depending on scheduling it is already
+  // connecting by the time the acknowledgement reaches the browser.
+  assert.ok(
+    ["queued", "connecting", "downloading"].includes(
+      services.manager.getAll()[0].status,
+    ),
+    services.manager.getAll()[0].status,
   );
-  assert.equal(services.manager.getAll().length, 0);
   assert.equal(
     (
       await message(client, {
@@ -338,7 +346,7 @@ test("browser review and media requests are acknowledged as review, not fake sta
     ).action,
     "analyze",
   );
-  assert.equal(services.pendingBrowserRequests.length, 2);
+  assert.equal(services.pendingBrowserRequests.length, 1);
   await services.settings.set("mediaIntegration", false);
   assert.equal(
     (
@@ -434,7 +442,6 @@ test("automatic browser handoff foregrounds the application without jeopardizing
     await services.close();
     await fs.rm(dir, { recursive: true, force: true });
   });
-  await services.settings.set("confirmBrowserDownloads", false);
   const client = await connect(t, services.wsServer);
   await message(client, {
     type: "authenticate",
@@ -481,7 +488,6 @@ test("portable builds refuse persistent native host registration and retain WebS
   );
   const { checkBrowserPreparation } = require("../src/main/self-test");
   assert.equal((await checkBrowserPreparation(services, true)).length, 8);
-  await services.settings.set("confirmBrowserDownloads", false);
   const client = await connect(
     t,
     services.wsServer,
@@ -516,8 +522,8 @@ test("portable builds refuse persistent native host registration and retain WebS
   );
 });
 
-test("reviewed handoff cancels the browser only for the matching desktop file", async (t) => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "getanny-review-match-"));
+test("duplicate intercepted handoffs never create a second download job", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "getanny-auto-handoff-"));
   const services = await createServices({
     userDataPath: dir,
     downloadPath: path.join(dir, "downloads"),
@@ -525,9 +531,6 @@ test("reviewed handoff cancels the browser only for the matching desktop file", 
     extensionPath: path.resolve("dist-extension"),
     port: 0,
     startTransfers: false,
-    onBrowserRequest: () => {
-      throw new Error("window unavailable");
-    },
   });
   t.after(async () => {
     await services.close();
@@ -543,46 +546,23 @@ test("reviewed handoff cancels the browser only for the matching desktop file", 
     browserId: "chrome",
     extensionId: CHROMIUM_ID,
   });
-  const response = await message(client, {
+  const request = {
     type: "download",
     url: "https://example.test/file.zip",
     kind: "file",
     intercepted: true,
-    transferId: "review-transfer",
-  });
-  assert.equal(response.action, "review");
-  assert.equal(services.pendingBrowserRequests.length, 1);
-  const commands = [];
-  services.wsServer.downloadCommand = async (...args) => {
-    commands.push(args);
-    return { success: true };
+    transferId: "same-transfer",
   };
-  const unrelated = await services.manager.addDownload({
-    url: "https://example.test/other.zip",
-    browserSource: "chrome",
-    browserTransferId: "review-transfer",
-  });
-  await assert.rejects(
-    services.commitBrowserRequest(response.pendingId),
-    /matching desktop download/,
+  const first = await message(client, request);
+  const second = await message(client, request);
+  assert.equal(first.action, "queued");
+  assert.equal(second.id, first.id);
+  assert.equal(services.manager.getAll().length, 1);
+  // Files are never left in the review queue, so returning to the app is not
+  // required to make an intercepted download start.
+  assert.equal(services.pendingBrowserRequests.length, 0);
+  assert.equal(
+    services.manager.requireItem(first.id).browserTransferId,
+    "same-transfer",
   );
-  await assert.rejects(
-    services.commitBrowserRequest(response.pendingId, unrelated),
-    /does not match/,
-  );
-  assert.equal(commands.length, 0);
-  assert.equal(services.pendingBrowserRequests.length, 1);
-  const matching = await services.manager.addDownload({
-    url: "https://example.test/file.zip",
-    browserSource: "chrome",
-    browserTransferId: "review-transfer",
-  });
-  const committed = await services.commitBrowserRequest(
-    response.pendingId,
-    matching,
-  );
-  assert.equal(committed.cancelled, true);
-  assert.equal(commands.length, 1);
-  assert.equal(commands[0][1], "cancel");
-  assert.equal(commands[0][2], "review-transfer");
 });

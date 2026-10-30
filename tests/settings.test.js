@@ -50,9 +50,11 @@ test("all displayed preference types reject malformed values", () => {
     ["theme", "unsupported"],
     ["defaultDownloadPath", "relative"],
     ["preferredBrowser", "unknown"],
+    ["language", "xx"],
   ])
     assert.throws(() => validateSetting(key, value));
   assert.equal(validateSetting("browserIntegrationEnabled", false), false);
+  assert.equal(validateSetting("language", "ar"), "ar");
 });
 test("v1 SQLite database is migrated without losing history or settings", async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "getanny-migrate-"));

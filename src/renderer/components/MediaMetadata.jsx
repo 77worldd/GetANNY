@@ -12,16 +12,18 @@ import {
 import { api, errorMessage } from "../api";
 import { Button } from "./ui";
 import useUIStore from "../stores/useUIStore";
+import { useI18n } from "../i18n/useI18n";
 
 export default function MediaMetadata({ section, result, savePath, onError }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState("");
   const [query, setQuery] = useState("");
   const copy = async (text, label) => {
     try {
       await navigator.clipboard.writeText(text);
-      useUIStore.getState().notify(`${label} copied.`);
+      useUIStore.getState().notify(t("metadata.copied", { label }));
     } catch {
-      useUIStore.getState().notify("Clipboard access was denied.", "error");
+      useUIStore.getState().notify(t("common.copyDenied"), "error");
     }
   };
   const run = async (key, channel, options, message) => {
@@ -42,18 +44,21 @@ export default function MediaMetadata({ section, result, savePath, onError }) {
   };
   if (section === "thumbnails")
     return (
-      <section className="metadata-panel" aria-label="Video thumbnails">
+      <section
+        className="metadata-panel"
+        aria-label={t("metadata.thumbnailsLabel")}
+      >
         <div className="metadata-heading">
           <div>
             <LuImage />
             <span>
-              <h2>Thumbnail images</h2>
-              <p>
-                Preview and save the image resolutions exposed by the source.
-              </p>
+              <h2>{t("metadata.thumbnailsTitle")}</h2>
+              <p>{t("metadata.thumbnailsText")}</p>
             </span>
           </div>
-          <span>{result.thumbnails.length} available</span>
+          <span>
+            {t("metadata.available", { count: result.thumbnails.length })}
+          </span>
         </div>
         {result.thumbnails.length ? (
           <div className="thumbnail-grid">
@@ -62,7 +67,9 @@ export default function MediaMetadata({ section, result, savePath, onError }) {
                 <div className="thumbnail-preview">
                   <img
                     src={thumbnail.url}
-                    alt={`Video thumbnail ${thumbnail.label}`}
+                    alt={t("metadata.thumbnailAlt", {
+                      label: thumbnail.label,
+                    })}
                     loading="lazy"
                   />
                 </div>
@@ -80,68 +87,69 @@ export default function MediaMetadata({ section, result, savePath, onError }) {
                         thumbnail.id,
                         "media:download-thumbnail",
                         { thumbnailId: thumbnail.id },
-                        "Thumbnail added to Downloads.",
+                        t("metadata.thumbnailAdded"),
                       )
                     }
                   >
-                    Download
+                    {t("metadata.download")}
                   </Button>
                 </div>
               </article>
             ))}
           </div>
         ) : (
-          <div className="metadata-empty">
-            No downloadable thumbnails were reported for this page.
-          </div>
+          <div className="metadata-empty">{t("metadata.noThumbnails")}</div>
         )}
       </section>
     );
   if (section === "description")
     return (
-      <section className="metadata-panel" aria-label="Video description">
+      <section
+        className="metadata-panel"
+        aria-label={t("metadata.descriptionLabel")}
+      >
         <div className="metadata-heading">
           <div>
             <LuFileText />
             <span>
-              <h2>Full description</h2>
-              <p>Original line breaks and spacing are preserved.</p>
+              <h2>{t("metadata.descriptionTitle")}</h2>
+              <p>{t("metadata.descriptionText")}</p>
             </span>
           </div>
           <Button
             icon={LuCopy}
             disabled={!result.description}
-            onClick={() => copy(result.description, "Description")}
+            onClick={() =>
+              copy(result.description, t("metadata.copyDescriptionLabel"))
+            }
           >
-            Copy description
+            {t("metadata.copyDescription")}
           </Button>
         </div>
         {result.description ? (
           <div className="video-description">{result.description}</div>
         ) : (
-          <div className="metadata-empty">
-            This page has no public description.
-          </div>
+          <div className="metadata-empty">{t("metadata.noDescription")}</div>
         )}
       </section>
     );
   if (section === "tags")
     return (
-      <section className="metadata-panel" aria-label="Video tags">
+      <section className="metadata-panel" aria-label={t("metadata.tagsLabel")}>
         <div className="metadata-heading">
           <div>
             <LuTags />
             <span>
-              <h2>Video tags</h2>
-              <p>Copy one tag, or copy the complete comma-separated list.</p>
+              <h2>{t("metadata.tagsTitle")}</h2>
+              <p>{t("metadata.tagsText")}</p>
             </span>
           </div>
           <Button
             icon={LuCopy}
             disabled={!result.tags.length}
-            onClick={() => copy(result.tags.join(", "), "All tags")}
+            onClick={() => copy(result.tags.join(", "), t("metadata.allTags"))}
           >
-            Copy all tags
+            {t("metadata.copyAllTags")}
           </Button>
         </div>
         {result.tags.length ? (
@@ -149,8 +157,8 @@ export default function MediaMetadata({ section, result, savePath, onError }) {
             {result.tags.map((tag, index) => (
               <button
                 key={`${tag}-${index}`}
-                onClick={() => copy(tag, "Tag")}
-                title={`Copy ${tag}`}
+                onClick={() => copy(tag, t("metadata.tag"))}
+                title={t("metadata.copyTag", { tag })}
               >
                 <span>{tag}</span>
                 <LuCopy />
@@ -158,9 +166,7 @@ export default function MediaMetadata({ section, result, savePath, onError }) {
             ))}
           </div>
         ) : (
-          <div className="metadata-empty">
-            No public tags were reported for this page.
-          </div>
+          <div className="metadata-empty">{t("metadata.noTags")}</div>
         )}
       </section>
     );
@@ -168,26 +174,28 @@ export default function MediaMetadata({ section, result, savePath, onError }) {
     `${item.name} ${item.language}`.toLowerCase().includes(query.toLowerCase()),
   );
   return (
-    <section className="metadata-panel" aria-label="Video subtitles">
+    <section
+      className="metadata-panel"
+      aria-label={t("metadata.subtitlesLabel")}
+    >
       <div className="metadata-heading">
         <div>
           <LuCaptions />
           <span>
-            <h2>Subtitles & captions</h2>
-            <p>
-              Download independently as VTT, or as SRT with conversion when
-              needed.
-            </p>
+            <h2>{t("metadata.subtitlesTitle")}</h2>
+            <p>{t("metadata.subtitlesText")}</p>
           </span>
         </div>
-        <span>{result.subtitles.length} languages</span>
+        <span>
+          {t("metadata.languages", { count: result.subtitles.length })}
+        </span>
       </div>
       {result.subtitles.length > 8 && (
         <div className="search-input subtitle-search">
           <LuSearch />
           <input
-            aria-label="Search subtitle languages"
-            placeholder="Find a language…"
+            aria-label={t("metadata.searchLabel")}
+            placeholder={t("metadata.searchPlaceholder")}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -202,8 +210,8 @@ export default function MediaMetadata({ section, result, savePath, onError }) {
                 <span>
                   {subtitle.language}
                   {subtitle.automatic
-                    ? " · Automatic captions"
-                    : " · Creator subtitles"}
+                    ? ` · ${t("metadata.automaticCaptions")}`
+                    : ` · ${t("metadata.creatorSubtitles")}`}
                 </span>
               </div>
               <small>
@@ -223,15 +231,22 @@ export default function MediaMetadata({ section, result, savePath, onError }) {
                       disabled={!!busy}
                       title={
                         direct
-                          ? `Download available ${format.toUpperCase()} track`
-                          : `Convert an available caption to ${format.toUpperCase()} with FFmpeg`
+                          ? t("metadata.downloadTrack", {
+                              format: format.toUpperCase(),
+                            })
+                          : t("metadata.convertTrack", {
+                              format: format.toUpperCase(),
+                            })
                       }
                       onClick={() =>
                         run(
                           key,
                           "media:download-subtitle",
                           { languageId: subtitle.id, format },
-                          `${subtitle.name} ${format.toUpperCase()} subtitles added to Downloads.`,
+                          t("metadata.subtitleAdded", {
+                            name: subtitle.name,
+                            format: format.toUpperCase(),
+                          }),
                         )
                       }
                     >
@@ -246,16 +261,12 @@ export default function MediaMetadata({ section, result, savePath, onError }) {
       ) : (
         <div className="metadata-empty">
           {result.subtitles.length
-            ? "No languages match your search."
-            : "No accessible subtitles or automatic captions were reported."}
+            ? t("metadata.noMatch")
+            : t("metadata.none")}
         </div>
       )}
       {!!result.subtitles.length && (
-        <p className="metadata-note">
-          Availability is controlled by the source. If SRT or VTT is not
-          directly provided, GetANNY uses yt-dlp and FFmpeg to convert an
-          available track.
-        </p>
+        <p className="metadata-note">{t("metadata.note")}</p>
       )}
     </section>
   );

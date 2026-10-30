@@ -9,6 +9,7 @@ const channels = [
   "download:remove",
   "download:retry",
   "download:clear-completed",
+  "download:clear-history",
   "download:get-all",
   "download:preview",
   "download:open-file",

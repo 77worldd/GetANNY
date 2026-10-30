@@ -1,51 +1,63 @@
 import React from "react";
 import { Button, Dialog } from "./ui";
-import { bytes, duration, statusLabel } from "../utils/format";
+import { bytes, duration } from "../utils/format";
+import { useI18n } from "../i18n/useI18n";
+
 export default function DownloadDetails({ item, onClose }) {
+  const { t } = useI18n();
+  const kindKey =
+    item.kind === "torrent"
+      ? "details.kindTorrent"
+      : item.kind === "media"
+        ? "details.kindMedia"
+        : "details.kindFile";
   const fields = [
-    ["Status", statusLabel(item)],
-    ["Type", item.kind],
+    ["details.status", t(`status.${item.status}`)],
+    ["details.type", t(kindKey)],
     [
-      "Format",
+      "details.format",
       item.filename.match(/\.([^.]+)$/)?.[1]?.toUpperCase() ||
         item.mimeType ||
-        "Unknown",
+        t("common.unknown"),
     ],
     [
-      "Completed",
+      "details.completed",
       item.completedAt
         ? new Date(item.completedAt).toLocaleString()
-        : "Not completed",
+        : t("details.notCompleted"),
     ],
     [
-      "File size",
+      "details.fileSize",
       item.totalSize > 0 || item.status === "completed"
-        ? `${item.approximateSize ? "Approximately " : ""}${bytes(item.totalSize)}`
-        : "Not provided by server",
+        ? `${item.approximateSize ? `${t("details.approximately")} ` : ""}${bytes(item.totalSize)}`
+        : t("details.notProvidedServer"),
     ],
-    ["Transferred", bytes(item.downloadedSize)],
-    ["Speed", item.speed > 0 ? `${bytes(item.speed)}/s` : "—"],
-    ["Remaining", duration(item.eta)],
+    ["details.transferred", bytes(item.downloadedSize)],
     [
-      "Resumable",
+      "details.speed",
+      item.speed > 0 ? `${bytes(item.speed)}/s` : "—",
+    ],
+    ["details.remaining", duration(item.eta)],
+    [
+      "details.resumable",
       item.kind === "file"
         ? item.resumable === undefined
-          ? "Not checked yet"
+          ? t("details.notChecked")
           : item.resumable
-            ? "Server supports byte ranges"
-            : "Server does not support byte ranges"
+            ? t("details.serverRanges")
+            : t("details.noRanges")
         : item.kind === "media"
-          ? "yt-dlp continuation where supported"
-          : "Verified torrent pieces",
+          ? t("details.ytdlpContinuation")
+          : t("details.torrentPieces"),
     ],
-    ["Connections", item.connections || "—"],
-    ["Created", new Date(item.createdAt).toLocaleString()],
-    ["Location", item.filePath || item.savePath],
-    ["Source", item.url],
+    ["details.connections", item.connections || "—"],
+    ["details.created", new Date(item.createdAt).toLocaleString()],
+    ["details.location", item.filePath || item.savePath],
+    ["details.source", item.url],
   ];
   return (
     <Dialog
-      title="Download details"
+      title={t("details.title")}
       description={item.filename}
       onClose={onClose}
     >
@@ -53,7 +65,7 @@ export default function DownloadDetails({ item, onClose }) {
         <dl className="details-list">
           {fields.map(([label, value]) => (
             <div key={label}>
-              <dt>{label}</dt>
+              <dt>{t(label)}</dt>
               <dd>{value}</dd>
             </div>
           ))}
@@ -61,7 +73,7 @@ export default function DownloadDetails({ item, onClose }) {
         {item.error && <div className="error-banner">{item.error}</div>}
       </div>
       <footer className="dialog-footer">
-        <Button onClick={onClose}>Done</Button>
+        <Button onClick={onClose}>{t("details.done")}</Button>
       </footer>
     </Dialog>
   );

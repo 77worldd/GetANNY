@@ -13,8 +13,9 @@ class BrowserDetector {
     env = process.env,
     userDataPath,
     exists,
+    appPathLookup = exec,
   } = {}) {
-    Object.assign(this, { platform, home, env, userDataPath });
+    Object.assign(this, { platform, home, env, userDataPath, appPathLookup });
     this.exists =
       exists ||
       (async (file) =>
@@ -122,7 +123,7 @@ class BrowserDetector {
             if (name.toLowerCase() === "launcher.exe") continue;
             for (const hive of ["HKCU", "HKLM"]) {
               try {
-                const result = await exec(
+                const result = await this.appPathLookup(
                   "reg.exe",
                   [
                     "query",

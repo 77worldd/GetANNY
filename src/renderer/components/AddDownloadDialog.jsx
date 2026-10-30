@@ -5,12 +5,22 @@ import {
   LuFolderOpen,
   LuMagnet,
   LuArrowUpRight,
+  LuX,
 } from "react-icons/lu";
 import { api, errorMessage } from "../api";
-import { Button, Dialog, Field, FolderField, ErrorBanner } from "./ui";
+import {
+  Button,
+  Dialog,
+  Field,
+  FolderField,
+  ErrorBanner,
+  IconButton,
+} from "./ui";
 import useSettingsStore from "../stores/useSettingsStore";
 import useUIStore from "../stores/useUIStore";
+import { useI18n } from "../i18n/useI18n";
 export default function AddDownloadDialog({ initial = {}, onClose }) {
+  const { t } = useI18n();
   const settings = useSettingsStore((state) => state.settings);
   const intercepted = Boolean(initial.browserRequestId);
   const [kind, setKind] = useState(initial.torrent ? "torrent" : "file");
@@ -19,17 +29,20 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
   const [folder, setFolder] = useState(settings.defaultDownloadPath || "");
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const clearLink = () => {
+    setUrl("");
+    setError("");
+    document.getElementById("download-url")?.focus();
+  };
   const submit = async (event) => {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
       if (intercepted && (kind !== "file" || url.trim() !== initial.url))
-        throw new Error("A browser handoff must keep its original file link.");
+        throw new Error(t("add.handoffMismatch"));
       if (kind === "file" && !/^https?:\/\//i.test(url.trim()))
-        throw new Error(
-          "Enter an HTTP or HTTPS file URL. Use Media studio for a video page.",
-        );
+        throw new Error(t("add.invalidUrl"));
       const downloadId = await api.invoke(
         kind === "torrent" ? "download:add-torrent" : "download:add",
         kind === "torrent"
@@ -55,15 +68,12 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
           if (handoff.cancelled === false)
             useUIStore
               .getState()
-              .notify(
-                "GetANNY queued the file, but the browser did not confirm cancellation. Check its download list to avoid a duplicate.",
-                "error",
-              );
+              .notify(t("add.handoffUnconfirmed"), "error");
         } catch (error) {
           useUIStore
             .getState()
             .notify(
-              `Download queued; browser cleanup needs attention: ${errorMessage(error)}`,
+              t("add.handoffFailed", { error: errorMessage(error) }),
               "error",
             );
         }
@@ -72,8 +82,8 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
         .getState()
         .notify(
           settings.autoStartDownloads
-            ? "Download added to the queue."
-            : "Download added in paused state. Start it when you’re ready.",
+            ? t("add.queuedNotice")
+            : t("add.pausedNotice"),
         );
       useUIStore
         .getState()
@@ -87,11 +97,11 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
   };
   return (
     <Dialog
-      title="New download"
+      title={t("add.title")}
       description={
         initial.source
-          ? `Sent from ${initial.source}. Review the file and destination.`
-          : "A direct link. A destination. You’re in control."
+          ? t("add.descriptionSource", { source: initial.source })
+          : t("add.descriptionDefault")
       }
       onClose={() => !busy && onClose()}
       busy={busy}
@@ -108,38 +118,34 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
               }}
             >
               <LuLink />
-              File URL
+              {t("add.fileUrl")}
             </button>
             <button
               type="button"
               className={kind === "torrent" ? "selected" : ""}
               disabled={intercepted}
-              title={
-                intercepted
-                  ? "Browser handoffs must keep their original file link"
-                  : undefined
-              }
+              title={intercepted ? t("add.torrentLocked") : undefined}
               onClick={() => {
                 setKind("torrent");
                 setError("");
               }}
             >
               <LuMagnet />
-              Torrent
+              {t("add.torrent")}
             </button>
           </div>
           {error && <ErrorBanner>{error}</ErrorBanner>}
           <Field
             label={
-              kind === "file" ? "Download link" : "Magnet link or torrent file"
+              kind === "file" ? t("add.downloadLink") : t("add.torrentLink")
             }
             id="download-url"
             hint={
               intercepted
-                ? "The original browser link is locked to keep this handoff safe."
+                ? t("add.handoffLocked")
                 : kind === "file"
-                  ? "Paste the direct HTTP(S) link to a file, not a website’s download page."
-                  : "Transfers depend on available peers. Pausing disconnects the torrent; resuming rechecks saved pieces."
+                  ? t("add.fileHint")
+                  : t("add.torrentHint")
             }
           >
             <div className="input-group">
@@ -160,6 +166,15 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
                 autoComplete="off"
                 spellCheck="false"
               />
+              {url && !intercepted && (
+                <IconButton
+                  label={t("add.clearLink")}
+                  className="clear-link"
+                  onClick={clearLink}
+                >
+                  <LuX />
+                </IconButton>
+              )}
               {kind === "torrent" && api.desktop && (
                 <Button
                   variant="ghost"
@@ -173,22 +188,22 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
                     }
                   }}
                 >
-                  Choose file
+                  {t("add.chooseFile")}
                 </Button>
               )}
             </div>
           </Field>
           {kind === "file" && (
             <Field
-              label="File name"
+              label={t("add.fileName")}
               id="download-name"
-              hint="Optional. Leave blank to use the name provided by the server."
+              hint={t("add.fileNameHint")}
             >
               <input
                 id="download-name"
                 value={filename}
                 onChange={(event) => setFilename(event.target.value)}
-                placeholder="Automatic"
+                placeholder={t("add.automatic")}
                 maxLength={220}
               />
             </Field>
@@ -197,13 +212,15 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
           <div className="form-note">
             <LuArrowDownToLine />
             <span>
-              {settings.maxConnectionsPerDownload || 8} connections when
-              supported ·{" "}
+              {t("add.connections", {
+                count: settings.maxConnectionsPerDownload || 8,
+              })}{" "}
+              ·{" "}
               {settings.autoStartDownloads
-                ? "Starts automatically"
-                : "Starts paused"}
+                ? t("add.autoStart")
+                : t("add.paused")}
               <br />
-              Existing files are never overwritten.
+              {t("add.existingNote")}
             </span>
           </div>
           {kind === "file" && (
@@ -215,13 +232,13 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
                 onClose();
               }}
             >
-              Downloading video or audio? Open Media studio <LuArrowUpRight />
+              {t("add.mediaLink")} <LuArrowUpRight />
             </button>
           )}
         </div>
         <footer className="dialog-footer">
           <Button disabled={busy} onClick={onClose}>
-            Cancel
+            {t("add.cancel")}
           </Button>
           <Button
             type="submit"
@@ -229,7 +246,7 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
             icon={LuArrowDownToLine}
             busy={busy}
           >
-            {settings.autoStartDownloads ? "Start download" : "Add download"}
+            {settings.autoStartDownloads ? t("add.start") : t("add.add")}
           </Button>
         </footer>
       </form>

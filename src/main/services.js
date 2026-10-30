@@ -60,6 +60,7 @@ async function createServices({
   manager = new DownloadManager({
     settings: settings.getAll(),
     downloadsRepo,
+    tempPath: path.join(userDataPath, "transfer-temp"),
     engineFactory: (item, options) => {
       if (item.kind === "media")
         return new MediaEngine(options, mediaDetector.ytdlp);
@@ -106,7 +107,11 @@ async function createServices({
     if (dedupeKey && recentBrowserRequests.has(dedupeKey))
       return recentBrowserRequests.get(dedupeKey);
     const operation = (async () => {
-      if (request.kind === "media" || settings.get("confirmBrowserDownloads")) {
+      // Media pages need a format choice, so they open in Media studio. File
+      // handoffs are always taken over and started automatically: making the
+      // user revisit GetANNY to press Start leaves the browser in charge and
+      // defeats the point of the integration.
+      if (request.kind === "media") {
         const existing = request.transferId
           ? pendingBrowserRequests.find(
               (item) =>
@@ -141,10 +146,7 @@ async function createServices({
         } catch {
           // Window focus is best effort, not an ownership decision.
         }
-        return {
-          action: request.kind === "media" ? "analyze" : "review",
-          pendingId: review.id,
-        };
+        return { action: "analyze", pendingId: review.id };
       }
       const id = await manager.addDownload({
         url: request.url,

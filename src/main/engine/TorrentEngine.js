@@ -1,6 +1,12 @@
 const { EventEmitter } = require("node:events");
 const path = require("node:path");
 const fs = require("node:fs/promises");
+const { sanitizeFilename } = require("./utils");
+
+// Older builds nested every torrent inside "Torrent [<uuid>]". Recognise that
+// shape so existing entries migrate to a human-readable location.
+const LEGACY_FOLDER =
+  /^Torrent \[[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\]$/i;
 
 // Per-download client makes pause stop sockets/uploads, and bandwidth settings
 // unambiguous. Resume rechecks pieces on disk instead of trusting saved progress.
@@ -18,20 +24,53 @@ class TorrentEngine extends EventEmitter {
     if (!this.task) this.task = this.run();
     return this.task;
   }
+  destinationName() {
+    // Torrent names are arbitrary Unicode from the swarm. Strip only what
+    // Windows cannot store, never replace it with an internal identifier.
+    return sanitizeFilename(this.torrent?.name || "torrent");
+  }
+  async uniqueTarget(name) {
+    const extension = path.extname(name);
+    const basename = path.basename(name, extension);
+    let candidate = path.join(this.savePath, name);
+    let counter = 0;
+    while (await fs.access(candidate).then(() => true, () => false))
+      candidate = path.join(
+        this.savePath,
+        `${basename} (${++counter})${extension}`,
+      );
+    return candidate;
+  }
+  async publish(source, target) {
+    await fs.mkdir(this.savePath, { recursive: true });
+    try {
+      await fs.rename(source, target);
+      return;
+    } catch (error) {
+      if (!["EXDEV", "EPERM", "EACCES"].includes(error.code)) throw error;
+    }
+    await fs.cp(source, target, { recursive: true, errorOnExist: true });
+    await fs.rm(source, { recursive: true, force: true });
+  }
+  resolveSavePath() {
+    // Destination collection folder. The visible folder inside it is always
+    // the torrent's own name, never a UUID.
+    this.savePath = this.savePath || this.basePath;
+    if (LEGACY_FOLDER.test(path.basename(this.savePath)))
+      this.savePath = path.dirname(this.savePath);
+    return this.savePath;
+  }
   async run() {
     let ticker, timeout;
     try {
-      // Never let WebTorrent overwrite an unrelated same-name user file.
-      // Keep the same isolated folder on pause/resume and process restart.
-      this.torrentPath =
-        this.torrentPath || path.join(this.savePath, `Torrent [${this.id}]`);
-      this.savePath = this.torrentPath;
+      this.resolveSavePath();
+      // Work data stays out of the destination until every piece is verified.
+      this.workPath = this.tempPath || path.join(this.savePath, ".getanny-torrent");
+      await fs.mkdir(this.workPath, { recursive: true });
       this.setStatus("connecting", {
         phase: "Finding torrent metadata",
         savePath: this.savePath,
-        torrentPath: this.torrentPath,
       });
-      await fs.mkdir(this.savePath, { recursive: true });
       const { default: WebTorrent } = await import("webtorrent");
       if (this.wantedState) return;
       this.client = new WebTorrent({
@@ -42,7 +81,7 @@ class TorrentEngine extends EventEmitter {
       await new Promise((resolve, reject) => {
         this.finish = resolve;
         this.client.once("error", reject);
-        const torrent = this.client.add(this.url, { path: this.savePath });
+        const torrent = this.client.add(this.url, { path: this.workPath });
         this.torrent = torrent;
         torrent.once("error", reject);
         timeout = setTimeout(
@@ -59,7 +98,6 @@ class TorrentEngine extends EventEmitter {
           this.setStatus("downloading", {
             filename: torrent.name,
             totalSize: torrent.length,
-            filePath: path.join(this.savePath, torrent.name),
             phase: "Downloading verified pieces",
           });
         });
@@ -82,13 +120,21 @@ class TorrentEngine extends EventEmitter {
       }
       if (!this.torrent.done || this.torrent.downloaded < this.torrent.length)
         throw new Error("The torrent stopped before all pieces were verified.");
+      const name = this.destinationName();
+      const source = path.join(this.workPath, this.torrent.name);
+      const target = await this.uniqueTarget(name);
+      this.setStatus("processing", { phase: "Publishing torrent files" });
+      await this.publish(source, target);
+      await fs.rm(this.workPath, { recursive: true, force: true }).catch(() => {});
+      const stat = await fs.stat(target);
       const data = {
-        filename: this.torrent.name,
+        filename: path.basename(target),
         totalSize: this.torrent.length,
         downloadedSize: this.torrent.length,
-        filePath: path.join(this.savePath, this.torrent.name),
+        filePath: target,
+        savePath: this.savePath,
+        ...(stat.isDirectory() ? {} : { totalSize: stat.size }),
       };
-      await fs.access(data.filePath);
       this.setStatus("completed");
       this.emit("complete", this.id, data);
     } catch (error) {
@@ -116,6 +162,8 @@ class TorrentEngine extends EventEmitter {
     this.finish?.();
     await this.destroyClient();
     await this.task;
+    if (status === "cancelled" && this.workPath)
+      await fs.rm(this.workPath, { recursive: true, force: true }).catch(() => {});
     this.setStatus(status);
     return true;
   }
@@ -126,4 +174,4 @@ class TorrentEngine extends EventEmitter {
     return this.stop("cancelled");
   }
 }
-module.exports = { TorrentEngine };
+module.exports = { TorrentEngine, LEGACY_FOLDER };

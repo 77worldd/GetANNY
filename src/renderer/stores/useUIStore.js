@@ -2,7 +2,25 @@ import { create } from "zustand";
 let toastId = 0;
 const useUIStore = create((set) => ({
   activeTab: "all",
-  setActiveTab: (activeTab) => set({ activeTab }),
+  tabHistory: [],
+  setActiveTab: (activeTab) =>
+    set((state) =>
+      state.activeTab === activeTab
+        ? { activeTab }
+        : {
+            activeTab,
+            tabHistory: [...state.tabHistory, state.activeTab].slice(-20),
+          },
+    ),
+  goBack: () =>
+    set((state) => {
+      const previous = state.tabHistory[state.tabHistory.length - 1];
+      if (!previous) return {};
+      return {
+        activeTab: previous,
+        tabHistory: state.tabHistory.slice(0, -1),
+      };
+    }),
   addModal: null,
   setAddModal: (addModal) => set({ addModal }),
   details: null,
@@ -44,6 +62,10 @@ const useUIStore = create((set) => ({
   openMedia: (url) =>
     set((state) => ({
       activeTab: "media",
+      tabHistory:
+        state.activeTab === "media"
+          ? state.tabHistory
+          : [...state.tabHistory, state.activeTab].slice(-20),
       mediaUrl: url,
       mediaRequest: state.mediaRequest + 1,
     })),

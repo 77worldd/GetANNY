@@ -4,8 +4,10 @@ import { errorMessage } from "../api";
 import useSettingsStore from "../stores/useSettingsStore";
 import useUIStore from "../stores/useUIStore";
 import { themes } from "../utils/theme";
+import { useI18n } from "../i18n/useI18n";
 
 export default function ThemeSwitcher() {
+  const { t } = useI18n();
   const selected = useSettingsStore(
     (state) => state.settings.theme || "graphite",
   );
@@ -45,25 +47,29 @@ export default function ThemeSwitcher() {
       <button
         type="button"
         className="theme-quick-button"
-        aria-label={`Theme: ${selected === "system" ? "System" : current?.name || "Obsidian"}. Change theme`}
+        aria-label={`${selected === "system" ? t("common.system") : current?.name || "Obsidian"} · ${t("shell.chooseTheme")}`}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
         <LuPalette />
         <span className="theme-quick-name">
-          {selected === "system" ? "System" : current?.name || "Obsidian"}
+          {selected === "system" ? t("common.system") : current?.name || "Obsidian"}
         </span>
         <LuChevronDown className="theme-chevron" />
       </button>
       {open && (
-        <div className="theme-quick-menu" role="menu" aria-label="Choose theme">
+        <div
+          className="theme-quick-menu"
+          role="menu"
+          aria-label={t("shell.chooseTheme")}
+        >
           <div className="theme-menu-heading">
-            <span>APPEARANCE</span>
+            <span>{t("shell.themeMenu").toUpperCase()}</span>
             <button
               type="button"
               onClick={() => useUIStore.getState().setActiveTab("themes")}
             >
-              View gallery
+              {t("shell.viewThemes")}
             </button>
           </div>
           <div className="theme-menu-list">
@@ -77,7 +83,7 @@ export default function ThemeSwitcher() {
               <span className="theme-system-icon">
                 <LuMonitor />
               </span>
-              <span>System</span>
+              <span>{t("common.system")}</span>
               {selected === "system" && <LuCheck />}
             </button>
             {themes.map((theme) => (

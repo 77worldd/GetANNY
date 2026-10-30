@@ -21,6 +21,9 @@ class DownloadEngine extends EventEmitter {
     this.id = options.id || randomUUID();
     this.url = validateUrl(options.url);
     this.savePath = options.savePath;
+    // Partial data and resume state live in a private work folder outside the
+    // destination so users never see chunks appear next to their files.
+    this.tempPath = options.tempPath || null;
     this.filename = options.filename || null;
     this.filenameExplicit = options.filenameExplicit ?? !!options.filename;
     this.headers = validateHeaders(options.headers);
@@ -98,11 +101,15 @@ class DownloadEngine extends EventEmitter {
   desiredSegments() {
     return 1;
   }
+  workPath() {
+    return this.tempPath || this.savePath;
+  }
   async prepare(info) {
     await fsp.mkdir(this.savePath, { recursive: true });
+    await fsp.mkdir(this.workPath(), { recursive: true });
     if (this.reserveTarget) Object.assign(this, await this.reserveTarget(info));
-    this.partialPath = path.join(this.savePath, `.getanny-${this.id}.part`);
-    this.stateFile = path.join(this.savePath, `.getanny-${this.id}.json`);
+    this.partialPath = path.join(this.workPath(), `.getanny-${this.id}.part`);
+    this.stateFile = path.join(this.workPath(), `.getanny-${this.id}.json`);
     let state;
     try {
       state = JSON.parse(await fsp.readFile(this.stateFile, "utf8"));
@@ -167,9 +174,8 @@ class DownloadEngine extends EventEmitter {
           `Incomplete file: received ${size} of ${this.totalSize} bytes.`,
         );
       const target = path.join(this.savePath, this.filename);
-      // Same-directory hard link is atomic and fails rather than overwriting a user's file.
-      await fsp.link(this.partialPath, target);
-      await this.cleanupPartials();
+      await this.publish(target);
+      await this.cleanupPartials({ removeWorkDir: true });
       this.downloadedSize = size;
       this.totalSize = size;
       this.speed = 0;
@@ -184,7 +190,7 @@ class DownloadEngine extends EventEmitter {
     } catch (error) {
       if (this.wantedState) {
         if (this.wantedState === "cancelled")
-          await this.cleanupPartials().catch(() => {});
+          await this.cleanupPartials({ removeWorkDir: true }).catch(() => {});
         if (this.wantedState === "paused") {
           // Abort/pause has settled every writer and worker. The 400 ms UI
           // sample and in-flight meter can both differ from durable partials.
@@ -331,9 +337,35 @@ class DownloadEngine extends EventEmitter {
       throw error;
     }
   }
-  async cleanupPartials() {
-    if (!this.savePath) return;
-    const files = await fsp.readdir(this.savePath).catch(() => []);
+  async publish(target) {
+    await fsp.mkdir(this.savePath, { recursive: true });
+    try {
+      // Same-directory hard link is atomic and never overwrites a user's file.
+      await fsp.link(this.partialPath, target);
+      return;
+    } catch (error) {
+      // Work data can sit on another volume, where hard links are impossible.
+      if (!["EXDEV", "EPERM", "ENOTSUP", "EACCES"].includes(error.code))
+        throw error;
+    }
+    // Stage inside the destination, then rename so a partial copy is never
+    // presented as the finished file.
+    const staged = path.join(
+      this.savePath,
+      `.getanny-${this.id}.publishing`,
+    );
+    try {
+      await fsp.copyFile(this.partialPath, staged);
+      await fsp.rename(staged, target);
+    } catch (error) {
+      await fsp.rm(staged, { force: true }).catch(() => {});
+      throw error;
+    }
+  }
+  async cleanupPartials({ removeWorkDir = false } = {}) {
+    const work = this.workPath();
+    if (!work) return;
+    const files = await fsp.readdir(work).catch(() => []);
     await Promise.all(
       files
         .filter(
@@ -343,8 +375,12 @@ class DownloadEngine extends EventEmitter {
             name === `.getanny-${this.id}.json.tmp` ||
             name.startsWith(`.getanny-${this.id}.part-`),
         )
-        .map((name) => fsp.rm(path.join(this.savePath, name), { force: true })),
+        .map((name) => fsp.rm(path.join(work, name), { force: true })),
     );
+    // Preparation calls this to discard stale state; removing the work folder
+    // there would delete the directory that is about to receive new state.
+    if (removeWorkDir && this.tempPath)
+      await fsp.rmdir(this.tempPath).catch(() => {});
   }
 }
 module.exports = { DownloadEngine };

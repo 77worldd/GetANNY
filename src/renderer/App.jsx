@@ -23,6 +23,7 @@ import {
   LuWifiOff,
   LuLoaderCircle,
   LuRefreshCw,
+  LuArrowLeft,
 } from "react-icons/lu";
 import { api, errorMessage } from "./api";
 import { useIPC } from "./hooks/useIPC";
@@ -35,19 +36,23 @@ import BrowserPage from "./pages/BrowserPage";
 import SettingsPage from "./pages/SettingsPage";
 import ThemesPage from "./pages/ThemesPage";
 import ThemeSwitcher from "./components/ThemeSwitcher";
+import LanguageSwitcher from "./components/LanguageSwitcher";
+import { useI18n } from "./i18n/useI18n";
 import { applyTheme } from "./utils/theme";
 import AddDownloadDialog from "./components/AddDownloadDialog";
 import DownloadDetails from "./components/DownloadDetails";
 import { Button, IconButton, Toasts } from "./components/ui";
 import { active, bytes } from "./utils/format";
 const navigation = [
-  ["all", LuArrowDownToLine, "All downloads"],
-  ["active", LuActivity, "Active"],
-  ["completed", LuCircleCheck, "Completed"],
-  ["paused", LuPause, "Paused"],
-  ["failed", LuCircleAlert, "Failed"],
+  ["all", LuArrowDownToLine, "nav.all"],
+  ["active", LuActivity, "nav.active"],
+  ["completed", LuCircleCheck, "nav.completed"],
+  ["paused", LuPause, "nav.paused"],
+  ["failed", LuCircleAlert, "nav.failed"],
 ];
+const downloadTabs = navigation.map(([id]) => id);
 function Sidebar({ bridge, version }) {
+  const { t } = useI18n();
   const tab = useUIStore((state) => state.activeTab),
     setTab = useUIStore((state) => state.setActiveTab);
   const downloads = useDownloadStore((state) => state.downloads),
@@ -75,27 +80,34 @@ function Sidebar({ bridge, version }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-top">
-        <div className="workspace-label">PERSONAL WORKSPACE</div>
+        <div className="workspace-label">{t("shell.personalWorkspace")}</div>
         <Button
           icon={LuPlus}
           variant="primary"
           className="sidebar-add"
           onClick={() => useUIStore.getState().setAddModal({})}
         >
-          New download<kbd>⌘ / Ctrl N</kbd>
+          {t("shell.newDownload")}
+          <kbd>⌘ / Ctrl N</kbd>
         </Button>
       </div>
       <nav aria-label="Main navigation">
-        <div className="nav-group-label">LIBRARY</div>
-        {navigation.map(([id, Icon, label]) => (
-          <Nav key={id} id={id} icon={Icon} label={label} count={count(id)} />
+        <div className="nav-group-label">{t("nav.library")}</div>
+        {navigation.map(([id, Icon, key]) => (
+          <Nav
+            key={id}
+            id={id}
+            icon={Icon}
+            label={t(key)}
+            count={count(id)}
+          />
         ))}
-        <div className="nav-group-label tools-label">TOOLS</div>
-        <Nav id="media" icon={LuFilm} label="Media studio" />
+        <div className="nav-group-label tools-label">{t("nav.tools")}</div>
+        <Nav id="media" icon={LuFilm} label={t("nav.media")} />
         <Nav
           id="torrent"
           icon={LuMagnet}
-          label="Torrents"
+          label={t("nav.torrents")}
           count={
             downloads.filter((item) => item.kind === "torrent" && active(item))
               .length
@@ -110,7 +122,7 @@ function Sidebar({ bridge, version }) {
         >
           <LuFolderOpen />
           <div>
-            <small>DEFAULT LOCATION</small>
+            <small>{t("shell.defaultLocation")}</small>
             <span>
               {settings.defaultDownloadPath
                 ?.split(/[\\/]/)
@@ -120,9 +132,9 @@ function Sidebar({ bridge, version }) {
           </div>
           <LuChevronRight />
         </button>
-        <Nav id="browser" icon={LuGlobe} label="Browser integration" />
-        <Nav id="themes" icon={LuPalette} label="Themes" />
-        <Nav id="settings" icon={LuSettings2} label="Settings" />
+        <Nav id="browser" icon={LuGlobe} label={t("nav.browser")} />
+        <Nav id="themes" icon={LuPalette} label={t("nav.themes")} />
+        <Nav id="settings" icon={LuSettings2} label={t("nav.settings")} />
         <button
           className="sidebar-connection"
           onClick={() => setTab("browser")}
@@ -130,10 +142,15 @@ function Sidebar({ bridge, version }) {
           <span className={`live-dot ${bridge.clients > 0 ? "live" : ""}`} />
           <span>
             {bridge.clients > 0
-              ? `${bridge.clients} browser${bridge.clients > 1 ? "s" : ""} connected`
+              ? t(
+                  bridge.clients > 1
+                    ? "shell.browsersConnected"
+                    : "shell.browserConnected",
+                  { count: bridge.clients },
+                )
               : bridge.running && bridge.enabled
-                ? "No browser connected"
-                : "Browser bridge offline"}
+                ? t("shell.noBrowser")
+                : t("shell.bridgeOffline")}
           </span>
           <LuChevronRight />
         </button>
@@ -146,6 +163,7 @@ function Sidebar({ bridge, version }) {
 }
 export default function App() {
   useIPC();
+  const { t, language, rtl } = useI18n();
   const [boot, setBoot] = useState(null),
     [error, setError] = useState(""),
     [bridge, setBridge] = useState({
@@ -158,9 +176,21 @@ export default function App() {
     addModal = useUIStore((state) => state.addModal),
     setAddModal = useUIStore((state) => state.setAddModal),
     detailId = useUIStore((state) => state.details),
-    requests = useUIStore((state) => state.browserRequests);
+    requests = useUIStore((state) => state.browserRequests),
+    tabHistory = useUIStore((state) => state.tabHistory),
+    goBack = useUIStore((state) => state.goBack);
   const downloads = useDownloadStore((state) => state.downloads),
     settings = useSettingsStore((state) => state.settings);
+  const [visited, setVisited] = useState(() => new Set(["all"]));
+  useEffect(() => {
+    setVisited((previous) =>
+      previous.has(tab) ? previous : new Set(previous).add(tab),
+    );
+  }, [tab]);
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.documentElement.dir = rtl ? "rtl" : "ltr";
+  }, [language, rtl]);
   const load = async () => {
     setError("");
     try {
@@ -221,28 +251,16 @@ export default function App() {
       : "comfortable";
   }, [settings.animationMode, settings.compactList]);
   const detail = downloads.find((item) => item.id === detailId);
+  // File handoffs are queued automatically by the desktop bridge, so the only
+  // request that still needs attention is a media page awaiting a format.
   const review = (request) => {
-    if (request.kind === "media") useUIStore.getState().openMedia(request.url);
-    else
-      setAddModal({
-        url: request.url,
-        source: request.source,
-        filename: request.filename,
-        headers: request.headers,
-        browserRequestId: request.intercepted ? request.id : null,
-        browserTransferId: request.transferId,
-        browserSource: request.source,
-      });
-    // An intercepted native download stays paused until the review is actually
-    // submitted. Explicit link/media reviews retain the existing quick flow.
-    if (!request.intercepted) {
-      useUIStore.getState().removeRequest(request.id);
-      api
-        .invoke("browser:ack-request", request.id)
-        .catch((error) =>
-          useUIStore.getState().notify(errorMessage(error), "error"),
-        );
-    }
+    useUIStore.getState().openMedia(request.url);
+    useUIStore.getState().removeRequest(request.id);
+    api
+      .invoke("browser:ack-request", request.id)
+      .catch((error) =>
+        useUIStore.getState().notify(errorMessage(error), "error"),
+      );
   };
   const closeAdd = (submitted = false) => {
     const requestId = addModal?.browserRequestId;
@@ -281,15 +299,32 @@ export default function App() {
               aria-label="GetANNY"
             />
             <span className="brand-divider" />
-            <span className="app-caption">Download manager</span>
+            <span className="app-caption">{t("shell.downloadManager")}</span>
           </div>
+          {(tabHistory.length > 0 || detailId) && (
+            <button
+              type="button"
+              className="back-button"
+              title={t("shell.backTitle")}
+              onClick={() => {
+                // A detail sheet is the deepest view; back closes it before
+                // returning to the previous workspace section.
+                if (detailId) useUIStore.getState().setDetails(null);
+                else goBack();
+              }}
+            >
+              <LuArrowLeft />
+              <span>{t("shell.back")}</span>
+            </button>
+          )}
           <ThemeSwitcher />
+          <LanguageSwitcher />
         </div>
         <div className="titlebar-right">
           {!api.desktop && (
             <span className="preview-label">
               <LuMonitor />
-              LIVE WEB PREVIEW
+              {t("shell.livePreview")}
             </span>
           )}
           {api.desktop && boot?.platform !== "darwin" && (
@@ -325,8 +360,7 @@ export default function App() {
               {!api.desktop && (
                 <div className="preview-strip">
                   <LuMonitor />
-                  Sandbox preview · Real transfers and persistence · OS dialogs
-                  and browser registration need the desktop app.
+                  {t("shell.sandbox")}
                 </div>
               )}
               {requests.length > 0 && (
@@ -334,20 +368,17 @@ export default function App() {
                   <LuLink />
                   <div>
                     <strong>
-                      {requests[0].kind === "media"
-                        ? "Media page received"
-                        : "Download link received"}{" "}
-                      from {requests[0].source}
+                      {t("shell.mediaReceived", {
+                        source: requests[0].source,
+                      })}
                     </strong>
                     <span>{requests[0].url}</span>
                   </div>
                   <Button variant="primary" onClick={() => review(requests[0])}>
-                    {requests[0].kind === "media"
-                      ? "Analyze page"
-                      : "Review download"}
+                    {t("shell.analyzePage")}
                   </Button>
                   <IconButton
-                    label="Dismiss browser request"
+                    label={t("shell.dismissRequest")}
                     onClick={() => {
                       const request = requests[0];
                       useUIStore.getState().removeRequest(request.id);
@@ -360,19 +391,41 @@ export default function App() {
                   </IconButton>
                 </div>
               )}
-              {tab === "media" ? (
-                <MediaPage tools={boot.tools} />
-              ) : tab === "browser" ? (
-                <BrowserPage />
-              ) : tab === "themes" ? (
-                <ThemesPage />
-              ) : tab === "settings" ? (
-                <SettingsPage
-                  capabilities={boot.capabilities}
-                  version={boot.version}
-                />
-              ) : (
-                <DownloadsPage filter={tab} />
+              {downloadTabs.map(
+                (id) =>
+                  (visited.has(id) || tab === id) && (
+                    <div
+                      className="page-slot"
+                      hidden={tab !== id}
+                      key={id}
+                      aria-hidden={tab !== id}
+                    >
+                      <DownloadsPage filter={id} />
+                    </div>
+                  ),
+              )}
+              {(visited.has("media") || tab === "media") && (
+                <div className="page-slot" hidden={tab !== "media"}>
+                  <MediaPage tools={boot.tools} />
+                </div>
+              )}
+              {(visited.has("browser") || tab === "browser") && (
+                <div className="page-slot" hidden={tab !== "browser"}>
+                  <BrowserPage />
+                </div>
+              )}
+              {(visited.has("themes") || tab === "themes") && (
+                <div className="page-slot" hidden={tab !== "themes"}>
+                  <ThemesPage />
+                </div>
+              )}
+              {(visited.has("settings") || tab === "settings") && (
+                <div className="page-slot" hidden={tab !== "settings"}>
+                  <SettingsPage
+                    capabilities={boot.capabilities}
+                    version={boot.version}
+                  />
+                </div>
               )}
             </main>
           </div>
@@ -382,19 +435,25 @@ export default function App() {
                 className={`live-dot ${downloads.some(active) ? "live" : ""}`}
               />
               {downloads.some(active)
-                ? `${downloads.filter(active).length} active transfers`
-                : "Ready for your next download"}
+                ? t("shell.activeTransfers", {
+                    count: downloads.filter(active).length,
+                  })
+                : t("shell.ready")}
               <span className="status-separator">/</span>
               <span>
-                {downloads.filter((item) => item.status === "queued").length}{" "}
-                queued
+                {t("shell.queued", {
+                  count: downloads.filter((item) => item.status === "queued")
+                    .length,
+                })}
               </span>
             </div>
             <div>
               <LuArrowDown />
               {speed > 0 ? `${bytes(speed)}/s` : "0 B/s"}
               <span className="status-separator">/</span>
-              <span>Stored locally · {boot.version}</span>
+              <span>
+                {t("shell.storedLocally")} · {boot.version}
+              </span>
             </div>
           </footer>
         </>
@@ -413,22 +472,19 @@ export default function App() {
             <>
               <p className="error-text">{error}</p>
               <Button icon={LuRefreshCw} onClick={load}>
-                Try again
+                {t("shell.tryAgain")}
               </Button>
             </>
           ) : (
             <>
               <LuLoaderCircle className="spin" />
-              <p>Opening your workspace…</p>
+              <p>{t("shell.opening")}</p>
             </>
           )}
         </div>
       )}
       {addModal && (
-        <AddDownloadDialog
-          initial={addModal}
-          onClose={() => setAddModal(null)}
-        />
+        <AddDownloadDialog initial={addModal} onClose={closeAdd} />
       )}
       {detail && (
         <DownloadDetails

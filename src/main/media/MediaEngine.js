@@ -32,9 +32,13 @@ class MediaEngine extends EventEmitter {
         );
       this.setStatus("connecting");
       await fs.mkdir(this.savePath, { recursive: true });
+      // yt-dlp fragments and .part files stay in the private work folder. Only
+      // the finished, verified file is published to the destination.
+      this.workPath = this.tempPath || this.savePath;
+      await fs.mkdir(this.workPath, { recursive: true });
       const stem = `${sanitizeFilename(media.title).slice(0, 140)} [${this.id}]`;
       const outputTemplate =
-        path.join(this.savePath, stem).replaceAll("%", "%%") + ".%(ext)s";
+        path.join(this.workPath, stem).replaceAll("%", "%%") + ".%(ext)s";
       let filePath;
       if (media.type === "subtitle") {
         this.setStatus("downloading", { phase: "Downloading subtitles" });
@@ -109,19 +113,31 @@ class MediaEngine extends EventEmitter {
         );
       filePath = path.resolve(filePath);
       if (
-        path.dirname(filePath) !== path.resolve(this.savePath) ||
+        path.dirname(filePath) !== path.resolve(this.workPath) ||
         !path.basename(filePath).startsWith(stem)
       )
         throw new Error("yt-dlp reported an unexpected output location.");
       const stat = await fs.stat(filePath);
       if (!stat.isFile() || stat.size === 0 || /\.(part|ytdl)$/.test(filePath))
         throw new Error("The media output is missing or incomplete.");
+      const cleanName = sanitizeFilename(
+        path.basename(filePath).replace(` [${this.id}]`, ""),
+      );
+      // Standalone engines have no reservation callback; still publish with the
+      // clean media name instead of an undefined filename.
+      this.filename = cleanName;
+      if (this.reserveTarget)
+        Object.assign(this, await this.reserveTarget({ filename: cleanName }));
+      const target = path.join(this.savePath, this.filename);
+      await this.publish(filePath, target);
+      await this.cleanup().catch(() => {});
+      const published = await fs.stat(target);
       this.setStatus("completed");
       this.emit("complete", this.id, {
-        filePath,
-        filename: path.basename(filePath),
-        totalSize: stat.size,
-        downloadedSize: stat.size,
+        filePath: target,
+        filename: this.filename,
+        totalSize: published.size,
+        downloadedSize: published.size,
         approximateSize: false,
       });
     } catch (error) {
@@ -134,11 +150,36 @@ class MediaEngine extends EventEmitter {
       }
     }
   }
+  async publish(source, target) {
+    await fs.mkdir(this.savePath, { recursive: true });
+    try {
+      await fs.rename(source, target);
+      return;
+    } catch (error) {
+      if (!["EXDEV", "EPERM", "EACCES"].includes(error.code)) throw error;
+    }
+    const staged = path.join(this.savePath, `.getanny-${this.id}.publishing`);
+    try {
+      await fs.copyFile(source, staged);
+      await fs.rename(staged, target);
+      await fs.rm(source, { force: true });
+    } catch (error) {
+      await fs.rm(staged, { force: true }).catch(() => {});
+      throw error;
+    }
+  }
   async cleanup() {
+    // Remove this transfer's work folder and any legacy in-place fragments.
+    if (this.workPath && this.workPath !== this.savePath)
+      await fs.rm(this.workPath, { recursive: true, force: true }).catch(() => {});
     const names = await fs.readdir(this.savePath).catch(() => []);
     await Promise.all(
       names
-        .filter((name) => name.includes(`[${this.id}]`))
+        .filter(
+          (name) =>
+            name.includes(`[${this.id}]`) ||
+            name.startsWith(`.getanny-media-${this.id}`),
+        )
         .map((name) => fs.rm(path.join(this.savePath, name), { force: true })),
     );
   }

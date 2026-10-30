@@ -71,6 +71,7 @@ function createHandlers({ services: s, desktop }) {
     "download:remove": (options) =>
       manager.remove(options.id, options.deleteFile === true),
     "download:clear-completed": () => manager.clearCompleted(),
+    "download:clear-history": (options) => manager.clearHistory(options),
     "download:get-all": () => manager.getAll(),
     "download:preview": (id) => s.previews.get(manager.requireItem(id)),
     "download:open-file": (id) => openKnown(id, false),

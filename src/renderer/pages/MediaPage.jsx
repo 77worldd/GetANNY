@@ -13,6 +13,7 @@ import {
   LuFileText,
   LuTags,
   LuCaptions,
+  LuX,
 } from "react-icons/lu";
 import { api, errorMessage } from "../api";
 import {
@@ -20,6 +21,7 @@ import {
   ErrorBanner,
   Field,
   FolderField,
+  IconButton,
   PageHeader,
   Select,
 } from "../components/ui";
@@ -27,7 +29,9 @@ import MediaMetadata from "../components/MediaMetadata";
 import useSettingsStore from "../stores/useSettingsStore";
 import useUIStore from "../stores/useUIStore";
 import { bytes, duration } from "../utils/format";
+import { useI18n } from "../i18n/useI18n";
 export default function MediaPage({ tools }) {
+  const { t } = useI18n();
   const url = useUIStore((state) => state.mediaUrl),
     setUrl = useUIStore((state) => state.setMediaUrl),
     mediaRequest = useUIStore((state) => state.mediaRequest);
@@ -45,6 +49,18 @@ export default function MediaPage({ tools }) {
     [subtitleFormat, setSubtitleFormat] = useState("vtt");
   const generation = useRef(0),
     lastAuto = useRef(0);
+  const clearLink = () => {
+    // Invalidate any in-flight analysis so its result cannot repopulate the
+    // input or the format list after the user cleared the link.
+    generation.current++;
+    lastAuto.current = 0;
+    setUrl("");
+    setResult(null);
+    setSelected(null);
+    setError("");
+    setBusy(false);
+    document.getElementById("media-url")?.focus();
+  };
   const analyze = async (event) => {
     event?.preventDefault();
     const current = ++generation.current;
@@ -56,7 +72,7 @@ export default function MediaPage({ tools }) {
     setWithSubtitles(false);
     try {
       if (!/^https?:\/\//i.test(url.trim()))
-        throw new Error("Paste an HTTP or HTTPS video or audio page URL.");
+        throw new Error(t("media.invalidUrl"));
       const info = await api.invoke("media:get-formats", url.trim());
       if (current !== generation.current) return;
       setResult(info);
@@ -67,9 +83,7 @@ export default function MediaPage({ tools }) {
       setGroup(preferred?.group || "video");
       setSelected(preferred?.formatId || null);
       if (!info.formats.length)
-        setError(
-          "No unprotected playable formats were returned. The page may require authentication, be DRM-protected, or be unsupported.",
-        );
+        setError(t("media.noFormats"));
     } catch (error) {
       if (current === generation.current) setError(errorMessage(error));
     } finally {
@@ -113,8 +127,8 @@ export default function MediaPage({ tools }) {
         .getState()
         .notify(
           withSubtitles
-            ? "Media and subtitles added to Downloads."
-            : "Media added to Downloads.",
+            ? t("media.addedWithSubtitles")
+            : t("media.added"),
         );
       useUIStore.getState().setActiveTab("all");
     } catch (error) {
@@ -126,31 +140,27 @@ export default function MediaPage({ tools }) {
   return (
     <div className="page media-page">
       <PageHeader
-        eyebrow="EXTRACT & DOWNLOAD"
-        title="Media studio"
-        description="The right quality. The right format. Video and audio, without the clutter."
+        eyebrow={t("media.eyebrow")}
+        title={t("media.title")}
+        description={t("media.description")}
       >
         <span className={`engine-label ${tools.ytdlp ? "ready" : ""}`}>
           <span className="status-dot" />
-          {tools.ytdlp ? "yt-dlp engine available" : "yt-dlp missing"}
+          {tools.ytdlp ? t("media.engineReady") : t("media.engineMissing")}
         </span>
       </PageHeader>
       {!tools.ytdlp && (
-        <ErrorBanner>
-          The media engine is missing from this installation. Run{" "}
-          <code>npm run prepare:tools</code> or reinstall the complete Windows
-          package.
-        </ErrorBanner>
+        <ErrorBanner>{t("media.engineMissingBanner")}</ErrorBanner>
       )}
       <form className="media-search-panel" onSubmit={analyze}>
-        <Field label="VIDEO OR AUDIO PAGE" id="media-url">
+        <Field label={t("media.pageLabel")} id="media-url">
           <div className="media-search">
             <LuLink />
             <input
               id="media-url"
               type="url"
               required
-              placeholder="Paste a supported video or audio link…"
+              placeholder={t("media.urlPlaceholder")}
               value={url}
               onChange={(event) => {
                 setUrl(event.target.value);
@@ -162,6 +172,15 @@ export default function MediaPage({ tools }) {
               spellCheck="false"
               autoComplete="off"
             />
+            {url && (
+              <IconButton
+                label={t("media.clearLink")}
+                className="clear-link"
+                onClick={clearLink}
+              >
+                <LuX />
+              </IconButton>
+            )}
             <Button
               type="submit"
               icon={LuSearch}
@@ -169,25 +188,22 @@ export default function MediaPage({ tools }) {
               busy={busy}
               disabled={!url.trim() || !tools.ytdlp}
             >
-              Analyze link
+              {t("media.analyze")}
             </Button>
           </div>
         </Field>
         <div className="media-search-note">
-          <span>Powered by yt-dlp · Single video or audio pages</span>
-          <span>Only download content you’re allowed to save.</span>
+          <span>{t("media.poweredBy")}</span>
+          <span>{t("media.disclaimer")}</span>
         </div>
       </form>
       {error && <ErrorBanner>{error}</ErrorBanner>}
       {busy && (
         <div className="analysis-loading">
           <div className="loader-ring" />
-          <h2>Finding your formats</h2>
-          <p>
-            Reading the source page and checking available video and audio
-            streams.
-          </p>
-          <span>Some websites may take a little longer to respond.</span>
+          <h2>{t("media.loadingTitle")}</h2>
+          <p>{t("media.loadingText")}</p>
+          <span>{t("media.loadingNote")}</span>
         </div>
       )}
       {!busy && result && (
@@ -197,7 +213,7 @@ export default function MediaPage({ tools }) {
               <img
                 className="media-thumbnail"
                 src={result.thumbnail}
-                alt="Media preview"
+                alt={t("media.previewAlt")}
                 onError={(event) => {
                   event.currentTarget.hidden = true;
                 }}
@@ -209,29 +225,25 @@ export default function MediaPage({ tools }) {
             )}
             <div>
               <span className="eyebrow">
-                {result.extractor || "MEDIA SOURCE"}{" "}
+                {result.extractor || t("media.source")}{" "}
                 {result.duration ? `· ${duration(result.duration)}` : ""}
               </span>
               <h2>{result.title}</h2>
-              <p>
-                {result.formats.length} playable{" "}
-                {result.formats.length === 1 ? "format" : "formats"} ·
-                Storyboards and duplicates filtered out
-              </p>
+              <p>{t("media.formatsCount", { count: result.formats.length })}</p>
             </div>
           </div>
           <div
             className="media-section-tabs"
             role="tablist"
-            aria-label="Media tools"
+            aria-label={t("media.toolsLabel")}
           >
             {[
-              ["media", LuFilm, "Video & Audio", result.formats.length],
-              ["thumbnails", LuImage, "Thumbnails", result.thumbnails.length],
-              ["description", LuFileText, "Description", null],
-              ["tags", LuTags, "Tags", result.tags.length],
-              ["subtitles", LuCaptions, "Subtitles", result.subtitles.length],
-            ].map(([id, Icon, label, count]) => (
+              ["media", LuFilm, "media.tab.media", result.formats.length],
+              ["thumbnails", LuImage, "media.tab.thumbnails", result.thumbnails.length],
+              ["description", LuFileText, "media.tab.description", null],
+              ["tags", LuTags, "media.tab.tags", result.tags.length],
+              ["subtitles", LuCaptions, "media.tab.subtitles", result.subtitles.length],
+            ].map(([id, Icon, labelKey, count]) => (
               <button
                 key={id}
                 role="tab"
@@ -239,7 +251,7 @@ export default function MediaPage({ tools }) {
                 onClick={() => setSection(id)}
               >
                 <Icon />
-                {label}
+                {t(labelKey)}
                 {count != null && <span>{count}</span>}
               </button>
             ))}
@@ -250,12 +262,12 @@ export default function MediaPage({ tools }) {
                 <div
                   className="format-tabs"
                   role="tablist"
-                  aria-label="Media format type"
+                  aria-label={t("media.formatTypeLabel")}
                 >
                   {[
-                    ["video", LuFilm, "Video"],
-                    ["audio", LuAudioLines, "Audio only"],
-                  ].map(([key, Icon, label]) => (
+                    ["video", LuFilm, "media.video"],
+                    ["audio", LuAudioLines, "media.audioOnly"],
+                  ].map(([key, Icon, labelKey]) => (
                     <button
                       role="tab"
                       aria-selected={group === key}
@@ -269,7 +281,7 @@ export default function MediaPage({ tools }) {
                       }}
                     >
                       <Icon />
-                      {label}
+                      {t(labelKey)}
                       <span>
                         {
                           result.formats.filter((item) => item.group === key)
@@ -280,13 +292,15 @@ export default function MediaPage({ tools }) {
                   ))}
                 </div>
                 <div className="format-heading">
-                  <span>QUALITY / FORMAT</span>
-                  <span>SIZE</span>
+                  <span>{t("media.qualityFormat")}</span>
+                  <span>{t("media.size")}</span>
                 </div>
                 <div
                   className="format-list"
                   role="radiogroup"
-                  aria-label={`${group} formats`}
+                  aria-label={t("media.formatGroup", {
+                    group: t(group === "audio" ? "media.audioOnly" : "media.video"),
+                  })}
                 >
                   {result.formats
                     .filter((item) => item.group === group)
@@ -318,16 +332,18 @@ export default function MediaPage({ tools }) {
                               item.acodec?.split(".")[0],
                               item.language,
                               item.mergeAudio
-                                ? "Audio merged automatically"
+                                ? t("media.audioMerged")
                                 : item.hasVideo
                                   ? item.audioUnknown
-                                    ? "Audio not reported"
+                                    ? t("media.audioNotReported")
                                     : item.hasAudio
-                                      ? "Video + audio included"
-                                      : "Video only · no audio track"
+                                      ? t("media.videoAudio")
+                                      : t("media.videoOnlyNoAudio")
                                   : item.audioChannels
-                                    ? `${item.audioChannels} channels`
-                                    : "Audio stream",
+                                    ? t("media.channels", {
+                                        count: item.audioChannels,
+                                      })
+                                    : t("media.audioStream"),
                             ]
                               .filter(Boolean)
                               .join(" · ")}
@@ -336,63 +352,67 @@ export default function MediaPage({ tools }) {
                         <span className="format-size">
                           {item.filesize
                             ? `${item.approximateSize ? "≈ " : ""}${bytes(item.filesize)}`
-                            : "Unknown"}
+                            : t("media.unknownSize")}
                           {item.mergeAudio && item.filesize ? (
-                            <small>+ audio</small>
+                            <small>{t("media.plusAudio")}</small>
                           ) : null}
                         </span>
                       </label>
                     ))}
                   {!result.formats.some((item) => item.group === group) && (
                     <div className="format-empty">
-                      This page has no separate{" "}
-                      {group === "audio" ? "audio-only" : "video"} formats.
+                      {t("media.noGroupFormats", {
+                        group: t(
+                          group === "audio"
+                            ? "media.groupAudio"
+                            : "media.groupVideo",
+                        ),
+                      })}
                     </div>
                   )}
                 </div>
                 <p className="format-footnote">
                   <LuInfo />
-                  Unknown sizes are not estimates. Video-only sizes exclude the
-                  audio stream.
+                  {t("media.formatFootnote")}
                 </p>
               </div>
               <aside className="media-output">
-                <div className="eyebrow">YOUR DOWNLOAD</div>
+                <div className="eyebrow">{t("media.yourDownload")}</div>
                 <div className="selected-quality">
-                  {format?.quality || "Choose a format"}
+                  {format?.quality || t("media.chooseFormat")}
                   <span>{format?.ext.toUpperCase()}</span>
                 </div>
                 <dl>
                   <div>
-                    <dt>Content</dt>
+                    <dt>{t("media.content")}</dt>
                     <dd>
                       {format?.group === "audio"
-                        ? "Audio only"
+                        ? t("media.audioOnlyContent")
                         : format?.audioUnknown
-                          ? "Video · tracks unreported"
+                          ? t("media.tracksUnreported")
                           : format?.hasAudio || format?.mergeAudio
-                            ? "Video with audio"
-                            : "Video only"}
+                            ? t("media.videoWithAudio")
+                            : t("media.videoOnly")}
                     </dd>
                   </div>
                   <div>
-                    <dt>Audio</dt>
+                    <dt>{t("media.audio")}</dt>
                     <dd>
                       {format?.mergeAudio
-                        ? "Merged with FFmpeg"
+                        ? t("media.mergedFfmpeg")
                         : format?.hasAudio
-                          ? "Included"
+                          ? t("media.included")
                           : format?.audioUnknown
-                            ? "Not reported"
+                            ? t("media.audioNotReported")
                             : "—"}
                     </dd>
                   </div>
                   <div>
-                    <dt>File size</dt>
+                    <dt>{t("media.fileSize")}</dt>
                     <dd>
                       {format?.filesize
-                        ? `${format.approximateSize ? "≈ " : ""}${bytes(format.filesize)}${format.mergeAudio ? " + audio" : ""}`
-                        : "Not provided"}
+                        ? `${format.approximateSize ? "≈ " : ""}${bytes(format.filesize)}${format.mergeAudio ? ` ${t("media.plusAudio")}` : ""}`
+                        : t("common.notProvided")}
                     </dd>
                   </div>
                 </dl>
@@ -411,12 +431,12 @@ export default function MediaPage({ tools }) {
                           setWithSubtitles(event.target.checked)
                         }
                       />
-                      Include subtitles as a separate download
+                      {t("media.includeSubtitles")}
                     </label>
                     {withSubtitles && (
                       <div>
                         <Select
-                          aria-label="Subtitle language"
+                          aria-label={t("media.subtitleLanguage")}
                           value={subtitleLanguage}
                           onChange={(event) =>
                             setSubtitleLanguage(event.target.value)
@@ -425,12 +445,12 @@ export default function MediaPage({ tools }) {
                           {result.subtitles.map((subtitle) => (
                             <option key={subtitle.id} value={subtitle.id}>
                               {subtitle.name}
-                              {subtitle.automatic ? " (auto)" : ""}
+                              {subtitle.automatic ? t("media.autoSuffix") : ""}
                             </option>
                           ))}
                         </Select>
                         <Select
-                          aria-label="Subtitle format"
+                          aria-label={t("media.subtitleFormat")}
                           value={subtitleFormat}
                           onChange={(event) =>
                             setSubtitleFormat(event.target.value)
@@ -455,16 +475,16 @@ export default function MediaPage({ tools }) {
                   }
                   onClick={add}
                 >
-                  Download {group === "audio" ? "audio" : "video"}
+                  {t(
+                    group === "audio"
+                      ? "media.downloadAudio"
+                      : "media.downloadVideo",
+                  )}
                 </Button>
-                <p>
-                  Progress, pause, cancel, and history are available in
-                  Downloads.
-                </p>
+                <p>{t("media.progressNote")}</p>
                 {!result.tools.ffmpeg && (
                   <div className="small-warning">
-                    FFmpeg is missing. Video-only formats that need audio
-                    merging are disabled.
+                    {t("media.ffmpegMissing")}
                   </div>
                 )}
               </aside>
@@ -488,33 +508,26 @@ export default function MediaPage({ tools }) {
             <LuFilm />
             <LuAudioLines />
           </div>
-          <h2>One link. Every useful format.</h2>
-          <p>
-            Choose a resolution for video, or keep just the audio.
-            <br />
-            We’ll take care of streams and merging, then keep everything in your
-            download library.
-          </p>
+          <h2>{t("media.introTitle")}</h2>
+          <p>{t("media.introDescription")}</p>
           <div className="media-capabilities">
             <span>
               <LuCheck />
-              Video + audio
+              {t("media.capVideoAudio")}
             </span>
             <span>
               <LuCheck />
-              Audio-only formats
+              {t("media.capAudioOnly")}
             </span>
             <span>
               <LuCheck />
-              Real transfer progress
+              {t("media.capProgress")}
             </span>
           </div>
           <p className="media-limit-note">
-            Availability depends on the website. DRM-protected content is not
-            supported.
+            {t("media.availabilityNote")}
             <br />
-            Private pages may require authentication not provided by this
-            application.
+            {t("media.privateNote")}
           </p>
         </div>
       )}

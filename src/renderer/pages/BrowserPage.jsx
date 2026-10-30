@@ -23,6 +23,7 @@ import { api, errorMessage } from "../api";
 import { Button, ErrorBanner, IconButton, PageHeader } from "../components/ui";
 import useUIStore from "../stores/useUIStore";
 import useSettingsStore from "../stores/useSettingsStore";
+import { useI18n } from "../i18n/useI18n";
 const browserIcons = {
   chrome: FaChrome,
   chromium: FaChrome,
@@ -34,6 +35,7 @@ const browserIcons = {
   helium: LuGlobe,
 };
 export default function BrowserPage() {
+  const { t } = useI18n();
   const settings = useSettingsStore((state) => state.settings),
     save = useSettingsStore((state) => state.save);
   const [info, setInfo] = useState(null),
@@ -86,20 +88,15 @@ export default function BrowserPage() {
       await save("preferredBrowser", selected);
       useUIStore
         .getState()
-        .notify(
-          "Extension prepared and native host registered. Browser installation still needs your approval.",
-        );
+        .notify(t("browser.prepareNotice"));
     });
   const copy = (text) =>
     navigator.clipboard.writeText(text).then(
-      () => useUIStore.getState().notify("Copied to clipboard."),
+      () => useUIStore.getState().notify(t("browser.copied")),
       () =>
         useUIStore
           .getState()
-          .notify(
-            "Clipboard access was denied. Select and copy the text manually.",
-            "error",
-          ),
+          .notify(t("browser.clipboardDenied"), "error"),
     );
   const packagePath =
     prepared?.browserId === selected
@@ -110,16 +107,16 @@ export default function BrowserPage() {
   return (
     <div className="page browser-page">
       <PageHeader
-        eyebrow="CONNECTED WORKFLOW"
-        title="Browser integration"
-        description="Bring download links from your browser straight to your desktop."
+        eyebrow={t("browser.eyebrow")}
+        title={t("browser.title")}
+        description={t("browser.description")}
       >
         <Button
           icon={LuRefreshCw}
           busy={refreshing}
           onClick={() => refresh(true)}
         >
-          Refresh status
+          {t("browser.refresh")}
         </Button>
       </PageHeader>
       {!settings.firstRunCompleted && (
@@ -128,24 +125,21 @@ export default function BrowserPage() {
             <LuPlug />
           </div>
           <div>
-            <span className="eyebrow">WELCOME TO GETANNY</span>
-            <h2>A smoother way to bring it all in.</h2>
-            <p>
-              Connect your browser once. Send files with a right-click, or
-              analyze a media page without copying links back and forth.
-            </p>
+            <span className="eyebrow">{t("browser.welcomeEyebrow")}</span>
+            <h2>{t("browser.welcomeTitle")}</h2>
+            <p>{t("browser.welcomeText")}</p>
             <div className="onboarding-points">
               <span>
                 <LuCheck />
-                Your choice of browser
+                {t("browser.pointBrowser")}
               </span>
               <span>
                 <LuCheck />
-                Local, authenticated connection
+                {t("browser.pointSecure")}
               </span>
               <span>
                 <LuCheck />
-                You approve every install
+                {t("browser.pointApprove")}
               </span>
             </div>
           </div>
@@ -157,32 +151,25 @@ export default function BrowserPage() {
               )
             }
           >
-            I’ll set this up later <LuArrowRight />
+            {t("browser.later")} <LuArrowRight />
           </Button>
         </section>
       )}
       {!api.desktop && (
         <div className="notice">
           <LuMonitor />
-          <span>
-            This is a live web preview of the real download engine. Browser
-            registration and installation require the Windows desktop
-            application; no browser connection is being simulated.
-          </span>
+          <span>{t("browser.previewNotice")}</span>
         </div>
       )}
       {!settings.browserIntegrationEnabled && (
         <div className="notice warning">
           <LuCircleHelp />
-          <span>
-            Browser integration is disabled in Settings. The desktop service
-            will reject extension requests until you enable it.
-          </span>
+          <span>{t("browser.disabledNotice")}</span>
           <Button
             variant="ghost"
             onClick={() => useUIStore.getState().setActiveTab("settings")}
           >
-            Open settings
+            {t("browser.openSettings")}
           </Button>
         </div>
       )}
@@ -192,23 +179,27 @@ export default function BrowserPage() {
           <span
             className={`live-dot ${info?.websocket.running && info?.websocket.enabled ? "live" : ""}`}
           />
-          <span>Desktop bridge</span>
+          <span>{t("browser.bridge")}</span>
           <strong>
             {info
               ? info.websocket.running && info.websocket.enabled
-                ? "Listening"
+                ? t("browser.listening")
                 : info.websocket.enabled
-                  ? "Offline"
-                  : "Disabled"
-              : "Checking…"}
+                  ? t("browser.offline")
+                  : t("browser.disabled")
+              : t("browser.checking")}
           </strong>
         </div>
         <span className="mono">127.0.0.1:{info?.websocket.port || 29615}</span>
         <div>
           <LuShieldCheck />
           <span>
-            {info?.websocket.clients || 0} verified{" "}
-            {info?.websocket.clients === 1 ? "connection" : "connections"}
+            {t(
+              info?.websocket.clients === 1
+                ? "browser.verifiedOne"
+                : "browser.verifiedMany",
+              { count: info?.websocket.clients || 0 },
+            )}
           </span>
         </div>
       </div>
@@ -218,8 +209,8 @@ export default function BrowserPage() {
       <div className="browser-workspace">
         <section className="browser-picker">
           <div className="panel-heading">
-            <h2>Your browsers</h2>
-            <span>SELECT ONE</span>
+            <h2>{t("browser.browsers")}</h2>
+            <span>{t("browser.selectOne")}</span>
           </div>
           {info ? (
             info.browsers.map((item) => {
@@ -241,10 +232,10 @@ export default function BrowserPage() {
                     <strong>{item.name}</strong>
                     <small>
                       {item.connected
-                        ? "Connection verified"
+                        ? t("browser.connectionVerified")
                         : item.installed
-                          ? "Browser detected"
-                          : "Not detected"}
+                          ? t("browser.browserDetected")
+                          : t("browser.notDetected")}
                     </small>
                   </div>
                   {item.connected ? (
@@ -256,16 +247,16 @@ export default function BrowserPage() {
               );
             })
           ) : (
-            <div className="skeleton-stack" aria-label="Detecting browsers">
+            <div
+              className="skeleton-stack"
+              aria-label={t("browser.detecting")}
+            >
               {[1, 2, 3, 4, 5, 6, 7].map((key) => (
                 <div className="skeleton" key={key} />
               ))}
             </div>
           )}
-          <p>
-            Detection checks executable paths, not your personal browsing data.
-            Portable installations can be located manually.
-          </p>
+          <p>{t("browser.detectionNote")}</p>
         </section>
         <section className="browser-setup">
           <div className="browser-setup-heading">
@@ -273,11 +264,19 @@ export default function BrowserPage() {
               <Icon />
             </span>
             <div>
-              <h2>Connect {browser?.name || "your browser"}</h2>
+              <h2>
+                {t("browser.connectTitle", {
+                  name: browser?.name || t("browser.connectFallback"),
+                })}
+              </h2>
               <p>
                 {browser?.connected
-                  ? `Verified over ${browser.transport === "native" ? "Native Messaging" : "paired WebSocket"}. The extension is enabled and talking to this app.`
-                  : "Three straightforward steps. No silent installation, no security bypasses."}
+                  ? t(
+                      browser.transport === "native"
+                        ? "browser.verifiedNative"
+                        : "browser.verifiedWebsocket",
+                    )
+                  : t("browser.threeSteps")}
               </p>
             </div>
           </div>
@@ -288,11 +287,8 @@ export default function BrowserPage() {
               {browser?.prepared && browser?.registered ? <LuCheck /> : "1"}
             </span>
             <div className="step-content">
-              <h3>Prepare the connection</h3>
-              <p>
-                Get the compatible extension files and register the native
-                messaging host for your Windows user.
-              </p>
+              <h3>{t("browser.step1Title")}</h3>
+              <p>{t("browser.step1Text")}</p>
               <div className="step-actions">
                 <Button
                   variant="primary"
@@ -302,17 +298,19 @@ export default function BrowserPage() {
                   onClick={prepare}
                 >
                   {browser?.prepared && browser?.registered
-                    ? "Refresh setup files"
-                    : `Set up ${browser?.name || "browser"}`}
+                    ? t("browser.refreshSetup")
+                    : t("browser.setupBrowser", {
+                        name: browser?.name || t("browser.title"),
+                      })}
                 </Button>
                 <span className="step-result">
                   {browser?.registered ? (
                     <>
                       <LuCheck />
-                      Host registered
+                      {t("browser.hostRegistered")}
                     </>
                   ) : (
-                    "No administrator access required"
+                    t("browser.noAdmin")
                   )}
                 </span>
               </div>
@@ -320,13 +318,13 @@ export default function BrowserPage() {
                 <div className="path-box">
                   <code>{packagePath}</code>
                   <IconButton
-                    label="Copy extension folder"
+                    label={t("browser.copyFolder")}
                     onClick={() => copy(packagePath)}
                   >
                     <LuCopy />
                   </IconButton>
                   <IconButton
-                    label="Open extension folder"
+                    label={t("browser.openFolder")}
                     disabled={!api.desktop}
                     onClick={() =>
                       run(() => api.invoke("browser:open-package", selected))
@@ -343,24 +341,14 @@ export default function BrowserPage() {
               {browser?.connected ? <LuCheck /> : "2"}
             </span>
             <div className="step-content">
-              <h3>Add the extension in your browser</h3>
+              <h3>{t("browser.step2Title")}</h3>
               {selected === "firefox" ? (
-                <p>
-                  In <code>about:debugging</code>, choose{" "}
-                  <b>This Firefox → Load Temporary Add-on</b> and select{" "}
-                  <code>manifest.json</code>. This unsigned development install
-                  lasts until Firefox restarts. Permanent installs require a
-                  Mozilla-signed XPI.
-                </p>
+                <p>{t("browser.firefoxText")}</p>
               ) : (
                 <p>
-                  Open{" "}
-                  <code>
-                    {browser?.extensionsPage || "chrome://extensions"}
-                  </code>
-                  , turn on <b>Developer mode</b>, choose <b>Load unpacked</b>,
-                  and select the prepared folder. Approve the extension
-                  permissions.
+                  {t("browser.chromiumText", {
+                    page: browser?.extensionsPage || "chrome://extensions",
+                  })}
                 </p>
               )}
               <div className="step-actions">
@@ -371,7 +359,7 @@ export default function BrowserPage() {
                     run(() => api.invoke("browser:open-extensions", selected))
                   }
                 >
-                  Open extensions page
+                  {t("browser.openExtensions")}
                 </Button>
                 {api.desktop && !browser?.installed && (
                   <Button
@@ -381,7 +369,7 @@ export default function BrowserPage() {
                       run(() => api.invoke("browser:locate", selected))
                     }
                   >
-                    Locate browser
+                    {t("browser.locate")}
                   </Button>
                 )}
               </div>
@@ -394,12 +382,8 @@ export default function BrowserPage() {
               {browser?.connected ? <LuCheck /> : "3"}
             </span>
             <div className="step-content">
-              <h3>Verify a real connection</h3>
-              <p>
-                Pin GetANNY in the browser toolbar, open its popup, and click{" "}
-                <b>Reconnect</b>. A handshake—not a copied folder—is what marks
-                a connection verified.
-              </p>
+              <h3>{t("browser.step3Title")}</h3>
+              <p>{t("browser.step3Text")}</p>
               <div
                 className={`verification ${browser?.connected ? "verified" : ""}`}
               >
@@ -407,15 +391,17 @@ export default function BrowserPage() {
                 <div>
                   <strong>
                     {browser?.connected
-                      ? "Connected and verified"
-                      : "Waiting for extension handshake"}
+                      ? t("browser.connectedVerified")
+                      : t("browser.waitingHandshake")}
                   </strong>
                   <small>
                     {browser?.connected
-                      ? "Ready to send downloads and media pages."
+                      ? t("browser.readySend")
                       : browser?.lastSeen
-                        ? `Last verified ${new Date(browser.lastSeen).toLocaleString()}. Installed / enabled state is currently unknown.`
-                        : "Extension installed / enabled state is unknown until it connects."}
+                        ? t("browser.lastVerified", {
+                            date: new Date(browser.lastSeen).toLocaleString(),
+                          })
+                        : t("browser.unknownState")}
                   </small>
                 </div>
               </div>
@@ -430,7 +416,7 @@ export default function BrowserPage() {
                     })
                   }
                 >
-                  Start downloading
+                  {t("browser.startDownloading")}
                 </Button>
               )}
             </div>
@@ -440,21 +426,16 @@ export default function BrowserPage() {
       <details className="pairing-panel">
         <summary>
           <LuKeyRound />
-          <span>Need an alternative connection?</span>
+          <span>{t("browser.altTitle")}</span>
           <LuChevronRight />
         </summary>
         <div>
-          <p>
-            If a browser cannot locate its native host, use the authenticated
-            local WebSocket fallback. In the extension’s{" "}
-            <b>Connection & pairing</b> panel, select your browser and paste
-            this key. Keep GetANNY running. Treat the key like a password.
-          </p>
+          <p>{t("browser.altText")}</p>
           {pairing ? (
             <div className="path-box">
               <code className="pairing-secret">{pairing}</code>
               <Button icon={LuCopy} onClick={() => copy(pairing)}>
-                Copy key
+                {t("browser.copyKey")}
               </Button>
             </div>
           ) : (
@@ -466,15 +447,10 @@ export default function BrowserPage() {
                 )
               }
             >
-              Reveal my pairing key
+              {t("browser.revealKey")}
             </Button>
           )}
-          <p className="muted">
-            A prepared package is not an installed extension. A registered host
-            is not proof of a connection. Helium, Brave, Vivaldi, Opera and
-            Chromium use the shared Chromium build; Firefox has a separate
-            manifest.
-          </p>
+          <p className="muted">{t("browser.altNote")}</p>
         </div>
       </details>
     </div>

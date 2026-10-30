@@ -4,6 +4,7 @@ import { errorMessage } from "../api";
 import { ErrorBanner, PageHeader } from "../components/ui";
 import useSettingsStore from "../stores/useSettingsStore";
 import { themes } from "../utils/theme";
+import { useI18n } from "../i18n/useI18n";
 
 function Preview({ theme }) {
   const c = theme.colors;
@@ -43,6 +44,7 @@ function Preview({ theme }) {
 }
 
 export default function ThemesPage() {
+  const { t } = useI18n();
   const selected = useSettingsStore(
     (state) => state.settings.theme || "graphite",
   );
@@ -68,21 +70,25 @@ export default function ThemesPage() {
   return (
     <div className="page themes-page">
       <PageHeader
-        eyebrow="PERSONAL WORKSPACE"
-        title="Themes"
-        description="A considered palette for every workspace. Your choice is saved on this device."
+        eyebrow={t("themes.eyebrow")}
+        title={t("themes.title")}
+        description={t("themes.description")}
       >
         <span className="theme-count">
-          <LuPalette /> {themes.length} curated themes
+          <LuPalette /> {t("themes.count", { count: themes.length })}
         </span>
       </PageHeader>
       {error && <ErrorBanner>{error}</ErrorBanner>}
       <div className="theme-toolbar">
-        <div className="theme-filters" role="group" aria-label="Filter themes">
+        <div
+          className="theme-filters"
+          role="group"
+          aria-label={t("common.filterThemes")}
+        >
           {[
-            ["all", LuPalette, "All themes"],
-            ["dark", LuMoon, "Dark"],
-            ["light", LuSun, "Light"],
+            ["all", LuPalette, t("common.allThemes")],
+            ["dark", LuMoon, t("common.dark")],
+            ["light", LuSun, t("common.light")],
           ].map(([id, Icon, label]) => (
             <button
               key={id}
@@ -94,7 +100,7 @@ export default function ThemesPage() {
             </button>
           ))}
         </div>
-        <span>Applied instantly · Restored at startup</span>
+        <span>{t("themes.appliedNote")}</span>
       </div>
       {filter === "all" && (
         <button
@@ -106,16 +112,16 @@ export default function ThemesPage() {
             <LuMonitor />
           </span>
           <span>
-            <strong>Follow system appearance</strong>
-            <small>Obsidian in dark mode · Porcelain in light mode</small>
+            <strong>{t("themes.systemTitle")}</strong>
+            <small>{t("themes.systemHint")}</small>
           </span>
           <span className="theme-selected-label">
             {selected === "system" ? (
               <>
-                <LuCheck /> Selected
+                <LuCheck /> {t("common.selected")}
               </>
             ) : (
-              "Automatic"
+              t("themes.automatic")
             )}
           </span>
         </button>
@@ -128,7 +134,7 @@ export default function ThemesPage() {
             onClick={() => choose(theme.id)}
             disabled={!!saving}
             aria-pressed={selected === theme.id}
-            aria-label={`${saving === theme.id ? "Applying" : "Apply"} ${theme.name} theme`}
+            aria-label={`${saving === theme.id ? t("common.applying") : t("common.apply")} ${theme.name}`}
           >
             <Preview theme={theme} />
             <span className="theme-card-info">
@@ -153,13 +159,13 @@ export default function ThemesPage() {
                 </span>
                 <span className="theme-selected-label">
                   {saving === theme.id ? (
-                    "Applying…"
+                    t("common.applying")
                   ) : selected === theme.id ? (
                     <>
-                      <LuCheck /> Selected
+                      <LuCheck /> {t("common.selected")}
                     </>
                   ) : (
-                    "Apply theme"
+                    t("common.applyTheme")
                   )}
                 </span>
               </span>
