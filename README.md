@@ -6,7 +6,11 @@
 
 ## Get the Windows app
 
-Download **GetANNY Setup.exe** or **GetANNY Setup.msi**, browser ZIPs, and `SHA256SUMS.txt` from [GitHub Releases](https://github.com/77worldd/GetANNY/releases). Use **one installer format**, not both simultaneously. Windows 10/11 x64 is required.
+The public [**GetANNY 2.0.0-rc.1 release**](https://github.com/77worldd/GetANNY/releases/tag/v2.0.0-rc.1) contains both real Windows installers, eight browser packages, guides, source provenance, verification status and SHA-256 checksums.
+
+**Direct downloads:** [GetANNY Setup.exe](https://github.com/77worldd/GetANNY/releases/download/v2.0.0-rc.1/GetANNY.Setup.exe) · [GetANNY Setup.msi](https://github.com/77worldd/GetANNY/releases/download/v2.0.0-rc.1/GetANNY.Setup.msi) · [SHA256SUMS.txt](https://github.com/77worldd/GetANNY/releases/download/v2.0.0-rc.1/SHA256SUMS.txt).
+
+These are the same unsigned binaries built from `048d137`, now hosted as a real public prerelease—not a new build or a certification. At publication, installed-app/browser verification was still incomplete. Use **one installer format**, not both simultaneously. Windows 10/11 x64 is required.
 
 - EXE: interactive per-user installer, installation-folder selection, Start Menu and optional desktop shortcut.
 - MSI: Windows Installer package for interactive or scripted deployment; optional desktop shortcut.
