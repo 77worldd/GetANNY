@@ -14,11 +14,14 @@ test("Windows packaging fails closed when required runtime resources are absent"
     verify({ packager: { projectDir: root }, electronPlatformName: "win32" }),
     /Required packaged resource missing/,
   );
+  const config = await fs.readFile("electron-builder.yml", "utf8");
+  assert.match(config, /^  - src\/shared\/\*\*\/\*$/m);
 });
 test("Windows packaging rejects existing but checksum-invalid tools", async (t) => {
   const root = await temporary(t);
   for (const file of [
     "src/main/browser-integration/native-host.js",
+    "src/shared/themes.json",
     "node_modules/ws/index.js",
     "node_modules/ws/package.json",
     "dist-renderer/index.html",
