@@ -25,11 +25,59 @@
       this.request = request;
       this.onError = onError;
       this.entries = new Map();
-      this.listener = (item) => this.created(item);
+      this.session = api.storage?.session;
+      this.saveQueue = Promise.resolve();
+      this.ready = Promise.resolve();
+      this.listener = (item) => this.created(item).catch(this.onError);
     }
 
     start() {
+      // MV3 service workers can be suspended between pausing a browser item
+      // and receiving the desktop acknowledgement. Session storage survives a
+      // worker restart, but is cleared by the browser between browser sessions.
+      this.ready = this.restore();
       this.api.downloads?.onCreated.addListener(this.listener);
+    }
+
+    async save() {
+      if (!this.session) return;
+      const entries = [...this.entries.values()].map((entry) => ({ ...entry }));
+      const write = this.saveQueue
+        .catch(() => {})
+        .then(() => this.session.set({ getannyHandoffs: entries }));
+      this.saveQueue = write;
+      await write;
+    }
+
+    async restore() {
+      if (!this.session) return;
+      const stored = await this.session.get("getannyHandoffs");
+      for (const entry of Array.isArray(stored.getannyHandoffs)
+        ? stored.getannyHandoffs
+        : []) {
+        if (
+          !Number.isInteger(entry.downloadId) ||
+          typeof entry.transferId !== "string"
+        )
+          continue;
+        this.entries.set(entry.transferId, entry);
+        if (!entry.requestStarted) {
+          // A worker may die just after pause() but before recording it. Ask
+          // the browser rather than assuming the item is still running.
+          const matches = await this.api.downloads.search({
+            id: entry.downloadId,
+          });
+          if (matches[0]?.state === "in_progress" && matches[0]?.paused) {
+            entry.paused = true;
+            if (!(await this.resumeEntry(entry))) {
+              entry.stage = "restore-resume";
+              continue;
+            }
+          }
+          this.entries.delete(entry.transferId);
+        }
+      }
+      await this.save();
     }
 
     stop() {
@@ -95,6 +143,7 @@
     }
 
     async created(item) {
+      await this.ready;
       const id = Number(item?.id);
       const url = validUrl(item?.finalUrl) ? item.finalUrl : item?.url;
       // Private downloads stay native: the downloads API does not provide a
@@ -111,10 +160,16 @@
         return;
       const entry = this.entry(id);
       try {
-        // Pause before asynchronous cookie access / native connection startup.
+        // Save the identity before pausing, so a restarted worker can return
+        // an unsent request to the browser without guessing ownership.
+        await this.save();
         await this.pause(entry);
+        await this.save();
         const headers = await this.metadata(item, url);
+        if (entry.connectionLost)
+          throw new Error("Desktop disconnected before the handoff began.");
         entry.requestStarted = true;
+        await this.save();
         const result = await this.request({
           type: "download",
           kind: "file",
@@ -127,11 +182,14 @@
         });
         if (result.action === "queued") {
           entry.desktopQueued = true;
+          await this.save();
           await this.cancel(entry.transferId);
           this.entries.delete(entry.transferId);
+          await this.save();
         } else if (result.action === "review") {
           // Keep the browser copy paused while the user reviews it in GetANNY.
           entry.stage = "review";
+          await this.save();
         } else {
           throw new Error("GetANNY returned an unsupported handoff response.");
         }
@@ -143,9 +201,11 @@
         } else if (entry.requestStarted && error.ambiguous) {
           entry.stage = "reconcile";
         } else {
-          this.entries.delete(entry.transferId);
-          await this.resumeEntry(entry);
+          const resumed = await this.resumeEntry(entry);
+          if (entry.paused && !resumed) entry.stage = "restore-resume";
+          else this.entries.delete(entry.transferId);
         }
+        await this.save().catch((failure) => this.onError(failure));
         this.onError(error);
       }
     }
@@ -155,8 +215,15 @@
       if (!entry) throw new Error("Browser transfer is no longer available.");
       const id = entry.downloadId;
       if (entry?.stage !== "cancelling") {
-        await this.api.downloads.cancel(id);
-        if (entry) entry.stage = "cancelling";
+        try {
+          await this.api.downloads.cancel(id);
+        } catch (error) {
+          if (!this.api.downloads.search) throw error;
+          const matches = await this.api.downloads.search({ id });
+          if (matches[0]?.state === "in_progress") throw error;
+        }
+        entry.stage = "cancelling";
+        await this.save();
       }
       // Remove only the browser history entry. Never delete an unknown file.
       await this.api.downloads.erase({ id });
@@ -179,11 +246,14 @@
     async resume(transferId) {
       const entry = this.entries.get(String(transferId));
       const resumed = await this.resumeEntry(entry);
+      if (entry?.paused && !resumed) return false;
       this.entries.delete(String(transferId));
+      await this.save();
       return resumed;
     }
 
     async command(message) {
+      await this.ready;
       const transferId = String(message.transferId || "");
       if (!this.entries.has(transferId)) {
         // Commands are idempotent after a worker restart or duplicate response.
@@ -192,19 +262,25 @@
       if (message.action === "cancel") {
         await this.cancel(transferId);
         this.entries.delete(transferId);
+        await this.save();
         return { success: true };
       }
       if (message.action === "resume") {
-        await this.resume(transferId);
-        return { success: true };
+        const resumed = await this.resume(transferId);
+        return { success: resumed };
       }
       throw new Error("Unsupported browser download command.");
     }
 
     async reconnect() {
+      await this.ready;
       // Resolve the ambiguous period where the desktop may have persisted a
       // request just before its transport disconnected.
       for (const entry of [...this.entries.values()]) {
+        if (entry.stage === "restore-resume") {
+          await this.resume(entry.transferId);
+          continue;
+        }
         if (!entry.requestStarted || entry.stage === "transferred") continue;
         try {
           const result = await this.request({
@@ -214,8 +290,10 @@
           if (result.action === "queued") {
             await this.cancel(entry.transferId);
             this.entries.delete(entry.transferId);
+            await this.save();
           } else if (result.action === "review") {
             entry.stage = "review";
+            await this.save();
           } else if (result.action === "missing") {
             // The desktop did not persist the request, regardless of whether it
             // was awaiting review or an acknowledgement when disconnected.
@@ -229,15 +307,17 @@
     }
 
     async disconnected() {
+      await this.ready;
       // Requests not yet sent can safely return to the browser. Reviews and
       // ambiguous in-flight requests remain paused: the desktop may still be
       // actionable or may have persisted the transfer. Reconnection, dismissal,
       // or clean desktop shutdown resolves them without creating two copies.
-      await Promise.all(
-        [...this.entries.values()]
-          .filter((entry) => !entry.requestStarted)
-          .map((entry) => this.resume(entry.transferId)),
-      );
+      // Do not resume concurrently with pause() or metadata(): that can race
+      // with the original handler and create two transfers or strand a pause.
+      // The active handler checks this flag before it sends anything.
+      for (const entry of this.entries.values())
+        if (!entry.requestStarted) entry.connectionLost = true;
+      await this.save();
     }
   }
 

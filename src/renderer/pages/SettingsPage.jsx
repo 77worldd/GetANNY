@@ -64,6 +64,22 @@ function NumberControl({ value, onChange, min, max, label, suffix, disabled }) {
     </div>
   );
 }
+function ScheduleTime({ value, label, disabled, onChange }) {
+  const minutes = Number.isInteger(value) ? value : 0;
+  const time = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  return (
+    <input
+      type="time"
+      aria-label={label}
+      value={time}
+      disabled={disabled}
+      onChange={(event) => {
+        const match = /^(\d{2}):(\d{2})$/.exec(event.target.value);
+        if (match) onChange(Number(match[1]) * 60 + Number(match[2]));
+      }}
+    />
+  );
+}
 function SettingRow({ title, description, children, disabled = false }) {
   return (
     <div className={`setting-row ${disabled ? "unavailable" : ""}`}>
@@ -207,6 +223,43 @@ export default function SettingsPage({ capabilities, version }) {
               description="Otherwise interrupted transfers stay paused after a restart."
             >
               {toggle("resumeOnStartup")}
+            </SettingRow>
+          </section>
+          <section className="settings-panel">
+            <div className="settings-section-heading">
+              <h2>Download schedule</h2>
+              <p>
+                Times use this device’s local time. Keep GetANNY running to
+                start queued transfers.
+              </p>
+            </div>
+            <SettingRow
+              title="Schedule new transfers"
+              description="Only start queued downloads during the daily window. Transfers already running may finish outside it."
+            >
+              {toggle("scheduleEnabled")}
+            </SettingRow>
+            <SettingRow
+              title="Start time"
+              description="The beginning of the daily start window."
+            >
+              <ScheduleTime
+                label="Schedule start time"
+                value={settings.scheduleStartMinute}
+                disabled={!!saving || !settings.scheduleEnabled}
+                onChange={(value) => persist("scheduleStartMinute", value)}
+              />
+            </SettingRow>
+            <SettingRow
+              title="End time"
+              description="An earlier end time crosses midnight. Equal times allow starts all day."
+            >
+              <ScheduleTime
+                label="Schedule end time"
+                value={settings.scheduleEndMinute}
+                disabled={!!saving || !settings.scheduleEnabled}
+                onChange={(value) => persist("scheduleEndMinute", value)}
+              />
             </SettingRow>
           </section>
           <section className="settings-panel">

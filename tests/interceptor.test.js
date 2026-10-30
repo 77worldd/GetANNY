@@ -22,14 +22,20 @@ function fixture(options = {}) {
   const record = (name, value) => calls.push({ name, value });
   const api = {
     runtime: { id: "getanny-extension" },
+    ...(options.session ? { storage: { session: options.session } } : {}),
     cookies: {
       getAll: async (query) => {
         record("cookies", query);
+        if (options.cookies) return options.cookies();
         return [{ name: "session", value: "abc" }];
       },
     },
     downloads: {
       onCreated: { addListener() {}, removeListener() {} },
+      search: async ({ id }) =>
+        options.search
+          ? options.search(id)
+          : [{ state: "in_progress", paused: true }],
       pause: async (id) => {
         record("pause", id);
         if (options.pauseError) throw new Error("cannot pause");
@@ -258,4 +264,118 @@ test("cookie lookup uses the download's browser cookie store when provided", asy
   const query = f.calls.find((call) => call.name === "cookies").value;
   assert.equal(query.storeId, "firefox-container-2");
   assert.equal(query.url, "https://cdn.example.test/file.bin");
+});
+
+function sessionStorage(initial = []) {
+  let data = { getannyHandoffs: structuredClone(initial) };
+  return {
+    get: async () => structuredClone(data),
+    set: async (value) => {
+      data = structuredClone(value);
+    },
+  };
+}
+
+test("worker restart restores a paused review and can return it to the browser", async () => {
+  const session = sessionStorage();
+  const first = fixture({
+    session,
+    request: async () => ({ action: "review" }),
+  });
+  first.interceptor.start();
+  await first.interceptor.created(item(31));
+  const id = first.interceptor.entry(31).transferId;
+  const next = fixture({ session });
+  next.interceptor.start();
+  await next.interceptor.ready;
+  assert.equal(next.interceptor.entries.get(id).stage, "review");
+  assert.equal(
+    (await next.interceptor.command({ action: "resume", transferId: id }))
+      .success,
+    true,
+  );
+  assert.equal(
+    next.calls.some((call) => call.name === "resume" && call.value === 31),
+    true,
+  );
+  assert.equal((await session.get()).getannyHandoffs.length, 0);
+});
+
+test("worker restart reconciles an acknowledged desktop transfer without resuming the browser copy", async () => {
+  const session = sessionStorage();
+  const error = new Error("connection lost");
+  error.ambiguous = true;
+  const first = fixture({
+    session,
+    request: async () => {
+      throw error;
+    },
+  });
+  first.interceptor.start();
+  await first.interceptor.created(item(32));
+  const id = first.interceptor.entry(32).transferId;
+  const next = fixture({
+    session,
+    request: async () => ({ action: "queued" }),
+  });
+  next.interceptor.start();
+  await next.interceptor.reconnect();
+  assert.equal(
+    next.calls.some((call) => call.name === "cancel" && call.value === 32),
+    true,
+  );
+  assert.equal(
+    next.calls.some((call) => call.name === "resume"),
+    false,
+  );
+  assert.equal(next.interceptor.entries.has(id), false);
+});
+
+test("worker restart resumes an unsent download paused immediately before suspension", async () => {
+  const session = sessionStorage([
+    {
+      downloadId: 33,
+      transferId: "handoff",
+      paused: false,
+      stage: "preparing",
+      requestStarted: false,
+    },
+  ]);
+  const next = fixture({
+    session,
+    search: () => [{ state: "in_progress", paused: true }],
+  });
+  next.interceptor.start();
+  await next.interceptor.ready;
+  assert.equal(
+    next.calls.some((call) => call.name === "resume" && call.value === 33),
+    true,
+  );
+  assert.equal((await session.get()).getannyHandoffs.length, 0);
+});
+
+test("disconnect during metadata gathering cannot start a second desktop copy", async () => {
+  let unblock;
+  let entered;
+  const waiting = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const f = fixture({
+    cookies: () => {
+      entered();
+      return new Promise((resolve) => {
+        unblock = resolve;
+      });
+    },
+  });
+  const handoff = f.interceptor.created(item(34));
+  await waiting;
+  await f.interceptor.disconnected();
+  unblock([]);
+  await handoff;
+  assert.equal(
+    f.calls.some((call) => call.name === "request"),
+    false,
+  );
+  assert.equal(f.calls.filter((call) => call.name === "resume").length, 1);
 });
