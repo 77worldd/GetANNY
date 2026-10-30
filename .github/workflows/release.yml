@@ -12,9 +12,10 @@ on:
 permissions:
   contents: write
 concurrency:
-  # A metadata-only publication request must not cancel the running app tests.
+  # Isolate each commit so an unresponsive older job cannot block verification
+  # of a fix. Repeated runs of the same commit still cancel each other.
   group: >-
-    ${{ contains(github.event.head_commit.message, 'GetANNY-Publish-Existing:') && format('getanny-publication-only-{0}', github.sha) || format('getanny-windows-{0}', github.ref) }}
+    ${{ contains(github.event.head_commit.message, 'GetANNY-Publish-Existing:') && format('getanny-publication-only-{0}', github.sha) || format('getanny-windows-{0}-{1}', github.ref, github.sha) }}
   cancel-in-progress: true
 jobs:
   windows:
