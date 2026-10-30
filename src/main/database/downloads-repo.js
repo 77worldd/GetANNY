@@ -33,9 +33,15 @@ class DownloadsRepo {
         .map((key) => `${key}=excluded.${key}`)
         .join(",")}`,
     );
+    // Prepare hot-path statements once rather than on every progress/sample read.
+    this.getOne = this.db.prepare("SELECT * FROM downloads WHERE id=?");
+    this.all = this.db.prepare(
+      "SELECT * FROM downloads ORDER BY createdAt DESC, rowid DESC",
+    );
+    this.deleteOne = this.db.prepare("DELETE FROM downloads WHERE id=?");
   }
-  normalize(item) {
-    const previous = this.get(item.id);
+  normalize(item, previous) {
+    if (previous === undefined) previous = this.get(item.id);
     const data = { ...previous, ...item };
     return {
       id: data.id,
@@ -90,29 +96,24 @@ class DownloadsRepo {
       item.filePath = path.join(item.savePath, item.filename);
     return item;
   }
-  save(item) {
-    const row = this.normalize(item);
+  save(item, previous) {
+    const row = this.normalize(item, previous);
     this.upsert.run(row);
-    return this.get(row.id);
+    // The normalized row is exactly what was written; avoid a second SELECT on
+    // every status update while retaining the existing decode/migration rules.
+    return this.decode(row);
   }
   get(id) {
-    return this.decode(
-      this.db.prepare("SELECT * FROM downloads WHERE id=?").get(id),
-    );
+    return this.decode(this.getOne.get(id));
   }
   getAll() {
-    return this.db
-      .prepare("SELECT * FROM downloads ORDER BY createdAt DESC, rowid DESC")
-      .all()
-      .map((row) => this.decode(row));
+    return this.all.all().map((row) => this.decode(row));
   }
   byStatus(status) {
     return this.getAll().filter((item) => item.status === status);
   }
   remove(id) {
-    return (
-      this.db.prepare("DELETE FROM downloads WHERE id=?").run(id).changes > 0
-    );
+    return this.deleteOne.run(id).changes > 0;
   }
   clearCompleted() {
     return this.db

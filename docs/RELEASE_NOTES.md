@@ -1,32 +1,46 @@
-# GetANNY 2.0.0-rc.1 — Windows release candidate
+# GetANNY 2.0.0-rc.2 — Windows release candidate
 
-A functional repair and cohesive desktop redesign, not just a screenshot reskin.
+A reliability, browser-handoff, media-workflow, appearance and source-backend performance upgrade. Existing HTTP, media, torrent, history and settings systems remain in place.
 
-## Repaired
+## Downloads and performance
 
-- Reliable queued HTTP/HTTPS transfers with verified parallel ranges, entity-aware continuation, hash-tested large-file transfer, awaited pause/cancel, collision-safe filenames, bounded retries and honest failures.
-- Segmented processing now preserves exact verified bytes and clears network speed/ETA without prematurely publishing a completed file.
-- SQLite metadata migration / restart recovery and a single event contract that keeps real jobs visible in the renderer.
-- Persistent, manageable yt-dlp jobs, playable video/audio format selection, machine-readable progress and bundled FFmpeg merging. Storyboard clutter removed. Unknown size and unreported audio stay unknown.
-- Browser native-messaging permission, real executable launcher (instead of invalid manifest arguments), native-first responses, authenticated fallback and handshake-based status. “Folder prepared” is no longer “extension installed”.
-- Real torrent lifecycle and validated preferences with actual behavioral consumers.
-- Single window chrome, polished dark controls, searchable download library, status-specific actions, accessible dialogs, media workflow, browser onboarding and responsive settings. Muted text is contrast-tested across both dark palettes and system-light surfaces.
+- Replaced per-range worker threads with bounded asynchronous streams and adaptive range counts. One capability request replaces the old HEAD-plus-range sequence where possible; bounded keep-alive agents reuse connections.
+- Batched renderer progress and SQLite persistence, reused prepared statements, reduced browser-detection polling, bounded media-analysis history and memoized download rows.
+- Preserved exact range validation, entity-aware continuation, physical pause snapshots, atomic no-overwrite completion, cancellation cleanup, retries and optional per-transfer rate limiting. No new artificial speed limit is imposed.
+- In the included local 128 MiB source-backend comparison (three fresh-process runs per variant), median throughput was **152.9 → 220.4 MiB/s**, transfer CPU **1452 → 806 ms**, peak RSS **210.8 → 103.9 MiB**, and ten full browser-status calls **46.8 → 12.1 ms**. All outputs were SHA-256 verified. These are local backend measurements, not public-network or installed-Electron claims. Short idle sampling remained near zero and did **not** demonstrate an idle-CPU reduction.
 
-## Delivery
+## Ordinary browser downloads
 
-- **GetANNY Setup.exe** and **GetANNY Setup.msi**.
-- Targeted ZIP packages for Helium, Chrome, Chromium, Brave, Firefox, Vivaldi and Opera; Edge included additionally. Chromium builds reuse one implementation with correct target configuration; Firefox uses a separate manifest.
-- Windows/browser instructions, SHA-256 checksums and a generated `MEASURED_RESULTS.md`. Raw current Windows evidence is attached when available; otherwise `WINDOWS_VERIFICATION_STATUS.json` explicitly records incomplete checks. GitHub provides source ZIP/tar archives for the release tag.
-- Full verification/promotion requires successful backend/media/bridge tests and actual installed EXE/MSI, default-profile/output retention, actual cold-native/shortcut launches and available-browser integration tests. A separately authorized public RC can be published before these finish, but is prominently marked **verification incomplete**, preserves the exact existing binaries and never claims a stable/pass result. Read the attached status/evidence; generating or publishing a package alone is not considered an installation test.
+- Added Chromium/Firefox `downloads` integration for ordinary HTTP(S) files, including documents, archives, images, videos and unknown/large files.
+- Native downloads pause before handoff. The extension forwards the final URL, available filename, URL-specific cookies, referer and browser user agent. Browser APIs do not expose every original request header.
+- Desktop transfer IDs deduplicate acceptance and reconcile ambiguous timeouts/reconnections. Accepted native entries are cancelled and erased without requesting file deletion. Cleanup failure never deliberately resumes a second active copy.
+- Definitive failures and dismissed reviews resume native. Short/unpausable and private/incognito downloads remain native. Reviewed transfers stay paused during temporary disconnection and are resumed on clean desktop shutdown.
+- Reconnection uses bounded backoff. The compact media overlay is dismissible per video for the current page session.
 
-## Important limitations — not a fully certified final release
+## Media studio and library
 
-- Packages are unsigned unless the attached Authenticode report explicitly says Valid. No signing identity was supplied during development.
-- Firefox ZIP is **unsigned development source**, not a Mozilla-signed production XPI. Regular Firefox permanent installation requires authorized signing. Chromium packages are unpacked developer-mode packages, not signed store CRXs or silently installed extensions. No extension-store update service is configured.
-- When the current raw evidence archive is available, read its `browser-matrix/matrix.json` for individually executed browser results. If it is unavailable, current browser checks remain unverified; use the linked workflow and dated `TESTING.md` snapshot rather than infer success. Chromium success alone does not certify any branded browser. Available Helium, Brave, Vivaldi, Opera and Firefox binaries are exercised separately; unavailable downloads are explicitly unverified. A Vivaldi startup failure in a separate clean baseline without GetANNY is also unverified, not a passed integration. Google Chrome is exercised through its normal visible developer-mode controls and native folder picker in a disposable CI profile, never through policy/profile edits; production consent and store installation remain manual. Edge remains additionally supported but individually unverified.
-- The Windows runner is not a pristine consumer VM; interactive wizard/UAC flows, nondefault shortcut options, real cross-version v1 upgrades and clean-machine dependency checks remain manual.
-- Local HTML5 / DASH media tests verify real extraction/download/merging but do not certify every live website, authenticated media, regional access, DRM or playlist support. DRM and playlist downloading are not provided.
-- Per-download bandwidth / connection changes apply to new/resumed jobs. The limit is explicitly **per transfer**, not a misrepresented global limit.
-- Multi-terabyte / disk-full / power-loss / high-DPI / multiple-user edge cases need broader field testing.
+- Added separate **Video & Audio, Thumbnails, Description, Tags and Subtitles** tabs using metadata legitimately returned by yt-dlp.
+- Download accessible thumbnail renditions, full manual/automatic caption catalogs independently as VTT or SRT, or queue a separate subtitle alongside video. FFmpeg converts captions when the requested format is not directly available.
+- Completed rows now include format, size, completion time and location, with open/reveal actions and lazy cached previews. OS thumbnails are preferred; bounded FFmpeg extraction is a fallback. Preview cache and IPC sizes are bounded, and full media files are not loaded into renderer memory.
 
-See [test matrix and manual gates](https://github.com/77worldd/GetANNY/blob/arena/9c64a2a0-getanny/docs/TESTING.md), [Windows instructions](https://github.com/77worldd/GetANNY/blob/arena/9c64a2a0-getanny/docs/INSTALL_WINDOWS.md), and [browser guides](https://github.com/77worldd/GetANNY/blob/arena/9c64a2a0-getanny/docs/BROWSERS.md). This release remains a **prerelease** until those gaps are resolved; it does not claim every original acceptance criterion is complete.
+## Appearance
+
+- Added twelve coordinated dark, light and alternative palettes, system appearance, a dedicated Themes gallery and a compact top-left quick switcher.
+- Renderer tests apply every palette and both system modes, checking text-token contrast of at least 4.5:1 on normal, raised and selected surfaces. This is not a complete accessibility certification.
+
+## Delivery and verification
+
+- **GetANNY Setup.exe** and **GetANNY Setup.msi**, plus targeted packages for Helium, Chrome, Chromium, Brave, Firefox, Vivaldi, Opera and Edge.
+- The Windows workflow builds with pinned SHA-256-verified tools, runs the backend/media suites, installs and exercises both installer formats, checks lifecycle/history retention and runs available real-browser tests. Ordinary browser interception checks include cookie forwarding, desktop hash verification and native-entry cleanup.
+- Read the appended `MEASURED_RESULTS.md`, source/run identity, SHA-256 sums and raw evidence for the actual result. A package being built or published is not by itself an installation or browser certification.
+
+## Important limitations
+
+- Packages are unsigned unless the attached Authenticode report explicitly says Valid. No signing identity was supplied.
+- Firefox ZIP is unsigned development source, not a Mozilla-signed permanent XPI. Chromium packages use developer-mode installation, not signed store CRXs or silent installation. Store signing/update credentials are not configured.
+- A Windows CI runner is not a pristine consumer VM. Interactive wizard/UAC choices, real cross-version v1 upgrades, multiple users, high-DPI/multiple monitors and assistive-technology review remain manual.
+- Local HTML5/DASH/caption fixtures verify real extraction and output but do not certify YouTube or every live site, authenticated/region-restricted media, DRM or playlists. DRM and playlist downloading are not provided.
+- Public-network performance, installed whole-desktop RAM/idle CPU, disk-full/power-loss, proxies, antivirus and real-world tracker behavior require broader field evidence.
+- Per-download connection/rate changes apply to new/resumed jobs. The optional limit is per transfer, not a hidden global limit.
+
+See [test evidence](https://github.com/77worldd/GetANNY/blob/arena/456bcab4-getanny/docs/TESTING.md), [Windows instructions](https://github.com/77worldd/GetANNY/blob/arena/456bcab4-getanny/docs/INSTALL_WINDOWS.md), and [browser guides](https://github.com/77worldd/GetANNY/blob/arena/456bcab4-getanny/docs/BROWSERS.md). This remains a **prerelease** until the attached verification gates and disclosed manual requirements are resolved.

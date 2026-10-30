@@ -10,6 +10,7 @@ import {
   LuMagnet,
   LuGlobe,
   LuSettings2,
+  LuPalette,
   LuMinus,
   LuSquare,
   LuCopy,
@@ -32,6 +33,9 @@ import DownloadsPage from "./pages/DownloadsPage";
 import MediaPage from "./pages/MediaPage";
 import BrowserPage from "./pages/BrowserPage";
 import SettingsPage from "./pages/SettingsPage";
+import ThemesPage from "./pages/ThemesPage";
+import ThemeSwitcher from "./components/ThemeSwitcher";
+import { applyTheme } from "./utils/theme";
 import AddDownloadDialog from "./components/AddDownloadDialog";
 import DownloadDetails from "./components/DownloadDetails";
 import { Button, IconButton, Toasts } from "./components/ui";
@@ -88,6 +92,7 @@ function Sidebar({ bridge, version }) {
         ))}
         <div className="nav-group-label tools-label">TOOLS</div>
         <Nav id="media" icon={LuFilm} label="Media studio" />
+        <Nav id="themes" icon={LuPalette} label="Themes" />
         <Nav
           id="torrent"
           icon={LuMagnet}
@@ -183,12 +188,16 @@ export default function App() {
     if (!boot) return;
     const poll = () =>
       api
-        .invoke("browser:status")
-        .then((value) => setBridge(value.websocket))
+        .invoke("browser:bridge-status")
+        .then(setBridge)
         .catch(() =>
           setBridge((old) => ({ ...old, running: false, clients: 0 })),
         );
-    const timer = setInterval(poll, 6000);
+    // Connection events are primary; this lightweight visible-window fallback
+    // expires stale sessions without repeatedly scanning browser installations.
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") poll();
+    }, 30000);
     const cleanup = api.on("browser:changed", setBridge);
     return () => {
       clearInterval(timer);
@@ -196,14 +205,22 @@ export default function App() {
     };
   }, [!!boot]);
   useEffect(() => {
-    document.documentElement.dataset.theme = settings.theme || "graphite";
+    applyTheme(settings.theme || "graphite");
+    const system = window.matchMedia("(prefers-color-scheme: light)");
+    const update = () => {
+      if ((settings.theme || "graphite") === "system") applyTheme("system");
+    };
+    system.addEventListener("change", update);
+    return () => system.removeEventListener("change", update);
+  }, [settings.theme]);
+  useEffect(() => {
     document.documentElement.dataset.motion = settings.reduceMotion
       ? "reduced"
       : "full";
     document.documentElement.dataset.density = settings.compactList
       ? "compact"
       : "comfortable";
-  }, [settings.theme, settings.reduceMotion, settings.compactList]);
+  }, [settings.reduceMotion, settings.compactList]);
   const detail = downloads.find((item) => item.id === detailId);
   const review = (request) => {
     if (request.kind === "media") useUIStore.getState().openMedia(request.url);
@@ -212,13 +229,39 @@ export default function App() {
         url: request.url,
         source: request.source,
         filename: request.filename,
+        headers: request.headers,
+        browserRequestId: request.intercepted ? request.id : null,
+        browserTransferId: request.transferId,
+        browserSource: request.source,
       });
-    useUIStore.getState().removeRequest(request.id);
-    api
-      .invoke("browser:ack-request", request.id)
-      .catch((error) =>
-        useUIStore.getState().notify(errorMessage(error), "error"),
-      );
+    // An intercepted native download stays paused until the review is actually
+    // submitted. Explicit link/media reviews retain the existing quick flow.
+    if (!request.intercepted) {
+      useUIStore.getState().removeRequest(request.id);
+      api
+        .invoke("browser:ack-request", request.id)
+        .catch((error) =>
+          useUIStore.getState().notify(errorMessage(error), "error"),
+        );
+    }
+  };
+  const closeAdd = (submitted = false) => {
+    const requestId = addModal?.browserRequestId;
+    setAddModal(null);
+    if (
+      !submitted &&
+      requestId &&
+      useUIStore
+        .getState()
+        .browserRequests.some((request) => request.id === requestId)
+    ) {
+      useUIStore.getState().removeRequest(requestId);
+      api
+        .invoke("browser:ack-request", requestId)
+        .catch((error) =>
+          useUIStore.getState().notify(errorMessage(error), "error"),
+        );
+    }
   };
   const speed = downloads
     .filter((item) => item.status === "downloading")
@@ -230,11 +273,14 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="titlebar">
-        <div className="app-brand">
-          <img src="./icon.png" alt="" />
-          <strong>GetANNY</strong>
-          <span className="brand-divider" />
-          <span className="app-caption">Download manager</span>
+        <div className="titlebar-left">
+          <div className="app-brand">
+            <img src="./icon.png" alt="" />
+            <strong>GetANNY</strong>
+            <span className="brand-divider" />
+            <span className="app-caption">Download manager</span>
+          </div>
+          <ThemeSwitcher />
         </div>
         <div className="titlebar-right">
           {!api.desktop && (
@@ -315,6 +361,8 @@ export default function App() {
                 <MediaPage tools={boot.tools} />
               ) : tab === "browser" ? (
                 <BrowserPage />
+              ) : tab === "themes" ? (
+                <ThemesPage />
               ) : tab === "settings" ? (
                 <SettingsPage
                   capabilities={boot.capabilities}

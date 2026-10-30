@@ -2,7 +2,7 @@
 
 ## What can actually be detected
 
-GetANNY checks executable locations and Windows App Paths registrations. Portable or nonstandard installations may need **Locate browser**. It never reads cookies, history or personal profiles.
+GetANNY checks executable locations and Windows App Paths registrations. Portable or nonstandard installations may need **Locate browser**. Detection never reads history or personal profile files. During an ordinary download handoff, the extension uses the browser cookies API for that specific URL; it does not read cookie databases directly.
 
 Browsers do not provide an external trustworthy installed/enabled query to this application. Therefore:
 
@@ -45,8 +45,9 @@ Forks may change lookup behavior. Native failures are reported; paired WebSocket
 3. Click **Open extensions page**, or enter the management URL above manually. If the executable was not detected, use **Locate browser**.
 4. Enable **Developer mode**, click **Load unpacked**, and choose the displayed extension folder. Confirm the requested permissions. Pin the toolbar icon.
 5. Open the GetANNY popup, click **Reconnect**, and check both popup and desktop for a verified **Native host** connection.
-6. Right-click a direct download link → **Download with GetANNY**. Depending on your desktop preference the request is queued or opened for review.
-7. For a video page choose **Analyze media in GetANNY**, use the popup's media action, or the video overlay. Select a real format and destination in Media studio. “Sent for review” / “media page opened” does not mean a file has already downloaded.
+6. Start an ordinary HTTP(S) download, or right-click a direct download link → **Download with GetANNY**. Ordinary downloads are paused before handoff; depending on your desktop preference the request is queued or opened for review. After acceptance, the paused native entry is cancelled and erased without using the browser's delete-file action.
+7. If confirmation is enabled, dismissing the review returns the native download to the browser. Accepting it keeps the desktop job associated with the browser transfer ID so reconnection cannot queue it twice.
+8. For a video page choose **Analyze media in GetANNY**, use the popup's media action, or the compact video overlay. Select a real format and destination in Media studio. “Sent for review” / “media page opened” does not mean a file has already downloaded. The overlay's X dismisses it for that video during the current page session.
 
 Alternatively extract the corresponding `GetANNY-<browser>-<version>.zip` from the Release to a permanent folder and load it there. Still run desktop setup to register the host. Keep the folder in place. Each ZIP shares the same reviewed scripts but carries the correct target-browser configuration and instructions. This is intentional code reuse, not seven separate placeholder extensions.
 
@@ -78,8 +79,12 @@ If native messaging fails, open **Need an alternative connection?** on the deskt
 - `storage`: browser choice and optional pairing secret.
 - `tabs`: current page context and per-tab detections.
 - `contextMenus`: explicit link/media/page send actions.
-- `webRequest` + HTTP(S) host permissions: inspect response content types and provide HTML5 media detection/actions.
-- No cookies permission, password access, browser profile editing, enterprise policies, forced extension installation, or blanket automatic download interception.
+- `downloads`: observe ordinary native downloads, pause them before handoff, resume a rejected/dismissed request, and cancel/erase the native history entry after GetANNY accepts ownership. GetANNY does not request the browser's delete-file operation.
+- `cookies` + HTTP(S) host permissions: forward cookies applicable to the intercepted URL so authenticated direct downloads can continue in the desktop engine.
+- `webRequest`: inspect response content types and provide HTML5 media detection/actions.
+- No password access, browser profile editing, enterprise policies, forced extension installation, or silent extension updates.
+
+The handoff includes the available final URL, filename, URL-specific cookies, referer and browser user agent. **Browser download APIs do not expose every original request header**, so identical arbitrary-header forwarding is not claimed. Short, completed or otherwise unpausable downloads stay in the native manager rather than risking two active copies. Private/incognito downloads also stay native because a reliable cookie-store identity is not available to this handoff. If a response is ambiguous after timeout/disconnection, the native copy remains paused until status reconciliation; a definitive rejection resumes it. Clean desktop shutdown resumes still-reviewed native transfers.
 
 Blob URLs are not transferable files; the original page is analyzed instead. DRM is unsupported. Logged-in media / signed short-lived URLs may fail without website-specific authentication. Detection is limited to accessible media/network responses and supported pages, not a claim to extract every site.
 
@@ -90,5 +95,6 @@ Blob URLs are not transferable files; the original page is analyzed instead. DRM
 - **Key rejected**: copy the full current key from the same running desktop user's data directory. Do not reuse another account's key.
 - **No response**: start GetANNY, enable Browser integration in Settings, check port 29615 and connection status. Native port existence alone is not success.
 - **Queued but no file yet**: check download status, the queue concurrency limit, auto-start preference, and whether confirmation is awaiting review in the desktop app.
+- **Browser download remains paused after a connection loss**: reopen GetANNY and the extension popup, then Reconnect. The extension reconciles the transfer ID before choosing desktop ownership or native resume. This pause is intentional duplicate protection, not a second active download.
 - **No detected media**: restricted browser pages, inaccessible/DRM players and some dynamically fetched streams are not downloadable. Send the original supported media page to analysis. See the actual error if the extractor rejects it.
 - **After uninstall**: remove the extension through the browser UI. Prepared files / native keys are cleaned where owned; personal profiles are never edited. Close browsers to release native-executable locks before uninstalling.

@@ -23,7 +23,10 @@ class MediaEngine extends EventEmitter {
   async run() {
     try {
       const media = this.media;
-      if (!media?.formatId)
+      if (
+        (media?.type === "subtitle" && !media.subtitle?.language) ||
+        (media?.type !== "subtitle" && !media?.formatId)
+      )
         throw new Error(
           "The media selection is missing. Analyze the page again.",
         );
@@ -33,60 +36,72 @@ class MediaEngine extends EventEmitter {
       const outputTemplate =
         path.join(this.savePath, stem).replaceAll("%", "%%") + ".%(ext)s";
       let filePath;
-      await this.wrapper.download({
-        url: this.url,
-        formatId: media.formatId,
-        mergeAudio: media.mergeAudio,
-        outputTemplate,
-        speedLimit: this.speedLimit,
-        timeout: this.timeout / 1000,
-        signal: this.controller.signal,
-        onFile: (value) => {
-          filePath = value;
-        },
-        onProgress: (value) => {
-          if (this.controller.signal.aborted) return;
-          const key = value.filename || value.info_dict?.format_id || "stream";
-          this.tracks.set(key, {
-            bytes: Number(value.downloaded_bytes) || 0,
-            total: Number(value.total_bytes || value.total_bytes_estimate) || 0,
-            approximate:
-              !value.total_bytes && Number(value.total_bytes_estimate) > 0,
-          });
-          const tracks = [...this.tracks.values()];
-          const downloadedSize = tracks.reduce(
-            (sum, track) => sum + track.bytes,
-            0,
-          );
-          // A finished video track is not the whole adaptive download.
-          // Until both track totals are known, show unknown instead of a false 100%.
-          const totalSize =
-            tracks.length >= (media.mergeAudio ? 2 : 1) &&
-            tracks.every((track) => track.total > 0)
-              ? tracks.reduce((sum, track) => sum + track.total, 0)
-              : 0;
-          if (value.status === "downloading" && this.status !== "downloading")
-            this.setStatus("downloading");
-          const finalizing =
-            value.status === "finished" &&
-            tracks.length >= (media.mergeAudio ? 2 : 1);
-          if (finalizing)
-            this.setStatus("processing", { phase: "Finalizing media" });
-          this.emit("progress", this.id, {
-            downloadedSize,
-            totalSize,
-            approximateSize:
-              totalSize > 0 && tracks.some((track) => track.approximate),
-            speed: Number(value.speed) || 0,
-            eta: Number.isFinite(value.eta) ? value.eta : null,
-            phase: finalizing
-              ? "Finalizing media"
-              : media.mergeAudio && tracks.length < 2
-                ? "Downloading video; audio follows"
-                : "Downloading media",
-          });
-        },
-      });
+      if (media.type === "subtitle") {
+        this.setStatus("downloading", { phase: "Downloading subtitles" });
+        filePath = await this.wrapper.downloadSubtitles({
+          url: this.url,
+          ...media.subtitle,
+          outputTemplate,
+          timeout: this.timeout / 1000,
+          signal: this.controller.signal,
+        });
+      } else {
+        await this.wrapper.download({
+          url: this.url,
+          formatId: media.formatId,
+          mergeAudio: media.mergeAudio,
+          outputTemplate,
+          speedLimit: this.speedLimit,
+          timeout: this.timeout / 1000,
+          signal: this.controller.signal,
+          onFile: (value) => {
+            filePath = value;
+          },
+          onProgress: (value) => {
+            if (this.controller.signal.aborted) return;
+            const key =
+              value.filename || value.info_dict?.format_id || "stream";
+            this.tracks.set(key, {
+              bytes: Number(value.downloaded_bytes) || 0,
+              total:
+                Number(value.total_bytes || value.total_bytes_estimate) || 0,
+              approximate:
+                !value.total_bytes && Number(value.total_bytes_estimate) > 0,
+            });
+            const tracks = [...this.tracks.values()];
+            const downloadedSize = tracks.reduce(
+              (sum, track) => sum + track.bytes,
+              0,
+            );
+            // A finished video track is not the whole adaptive download.
+            const totalSize =
+              tracks.length >= (media.mergeAudio ? 2 : 1) &&
+              tracks.every((track) => track.total > 0)
+                ? tracks.reduce((sum, track) => sum + track.total, 0)
+                : 0;
+            if (value.status === "downloading" && this.status !== "downloading")
+              this.setStatus("downloading");
+            const finalizing =
+              value.status === "finished" &&
+              tracks.length >= (media.mergeAudio ? 2 : 1);
+            if (finalizing)
+              this.setStatus("processing", { phase: "Finalizing media" });
+            this.emit("progress", this.id, {
+              downloadedSize,
+              totalSize,
+              approximateSize:
+                totalSize > 0 && tracks.some((track) => track.approximate),
+              speed: Number(value.speed) || 0,
+              eta: Number.isFinite(value.eta) ? value.eta : null,
+              phase: finalizing
+                ? "Finalizing media"
+                : media.mergeAudio && tracks.length < 2
+                  ? "Downloading video; audio follows"
+                  : "Downloading media",
+            });
+          },
+        });
+      }
       this.controller.signal.throwIfAborted();
       if (!filePath)
         throw new Error(

@@ -97,4 +97,81 @@ function normalizeFormats(info) {
       return true;
     });
 }
-module.exports = { normalizeFormats };
+function mediaUrl(value) {
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+function normalizeThumbnails(info) {
+  const seen = new Set();
+  return [
+    ...(info.thumbnails || []),
+    ...(info.thumbnail ? [{ url: info.thumbnail }] : []),
+  ]
+    .map((thumbnail) => {
+      const url = mediaUrl(thumbnail.url);
+      if (!url || seen.has(url)) return null;
+      seen.add(url);
+      const width = Number(thumbnail.width) || null;
+      const height = Number(thumbnail.height) || null;
+      const fromUrl = new URL(url).pathname.match(
+        /\.(jpe?g|png|webp|avif|gif)$/i,
+      )?.[1];
+      const ext = String(thumbnail.ext || fromUrl || "jpg")
+        .toLowerCase()
+        .replace("jpeg", "jpg");
+      return {
+        id: "",
+        url,
+        width,
+        height,
+        ext: /^(jpg|png|webp|avif|gif)$/.test(ext) ? ext : "jpg",
+        httpHeaders: thumbnail.http_headers || undefined,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.width * b.height || 0) - (a.width * a.height || 0))
+    .slice(0, 30)
+    .map((thumbnail, index) => ({
+      ...thumbnail,
+      id: `thumbnail-${index}`,
+      label: thumbnail.width
+        ? `${thumbnail.width} × ${thumbnail.height || "?"}`
+        : `Image ${index + 1}`,
+    }));
+}
+function normalizeSubtitles(info) {
+  const result = [];
+  for (const [automatic, groups] of [
+    [false, info.subtitles],
+    [true, info.automatic_captions],
+  ]) {
+    for (const [language, tracks] of Object.entries(groups || {})) {
+      const formats = (tracks || [])
+        .map((track) => ({
+          ext: String(track.ext || "").toLowerCase(),
+          url: mediaUrl(track.url),
+          name: track.name || null,
+        }))
+        .filter((track) => track.url && /^[a-z0-9]{1,12}$/.test(track.ext));
+      if (!formats.length) continue;
+      result.push({
+        id: `${automatic ? "automatic" : "manual"}:${language}`,
+        language,
+        name: formats.find((track) => track.name)?.name || language,
+        automatic,
+        formats: [...new Set(formats.map((track) => track.ext))],
+      });
+    }
+  }
+  return result.sort(
+    (a, b) =>
+      a.automatic - b.automatic ||
+      a.name.localeCompare(b.name) ||
+      a.language.localeCompare(b.language),
+  );
+}
+module.exports = { normalizeFormats, normalizeThumbnails, normalizeSubtitles };

@@ -350,6 +350,14 @@ test("browser review and media requests are acknowledged as review, not fake sta
     ).success,
     false,
   );
+  services.browserDetector.exists = async () => false;
+  const stages = [];
+  await services.setupInstalledBrowsers(async (stage) => stages.push(stage));
+  assert.deepEqual(stages, [
+    "browser-detect",
+    "browser-detected",
+    "write-setup-report",
+  ]);
 });
 
 test("read-only MSI extension resources and older prepared copies remain updateable without changing installed source", async (t) => {

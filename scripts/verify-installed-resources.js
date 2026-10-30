@@ -17,7 +17,6 @@ module.exports = async (context) => {
     "extension/firefox/manifest.json",
     "app.asar.unpacked/node_modules/better-sqlite3/prebuilds/win32-x64.node",
     "app.asar.unpacked/node_modules/node-datachannel/build/Release/node_datachannel.node",
-    "app.asar.unpacked/src/main/engine/chunk-worker.js",
   ])
     await fs.access(path.join(resources, file)).catch(() => {
       throw new Error(`Packaged resource missing: ${file}`);

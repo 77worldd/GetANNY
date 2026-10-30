@@ -168,6 +168,16 @@ const exec = promisify(execFile);
     await driver.switchTo().newWindow("tab");
     await driver.get(media.server.url + "/watch.html");
     await driver.findElement(By.css("video"));
+    const ordinaryUrl = fixture.url + "/file.bin?ordinary-firefox=1";
+    await driver.executeScript(function (url) {
+      document.cookie = "getanny_e2e=firefox-cookie; SameSite=Lax";
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "ordinary-firefox.bin";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    }, ordinaryUrl);
     await driver.switchTo().window(popupHandle);
     await waitFor(
       () =>
@@ -190,6 +200,45 @@ const exec = promisify(execFile);
       15000,
       "Firefox content-script media detection",
     );
+    await waitFor(
+      async () =>
+        (await invoke("download:get-all")).some(
+          (item) => item.url === ordinaryUrl && item.status === "completed",
+        ),
+      30000,
+      "ordinary Firefox download interception",
+    );
+    const ordinary = (await invoke("download:get-all")).find(
+      (item) => item.url === ordinaryUrl,
+    );
+    if (!ordinary.browserTransferId || ordinary.browserSource !== "firefox")
+      throw new Error("Firefox ordinary download lacks handoff identity");
+    if (
+      checksum(await fs.readFile(ordinary.filePath)) !==
+      checksum(fixture.state.data)
+    )
+      throw new Error("Firefox intercepted download hash mismatch");
+    const desktopProbe = fixture.state.requests.find(
+      (request) =>
+        request.url.includes("ordinary-firefox=1") &&
+        request.range === "bytes=0-0",
+    );
+    if (!desktopProbe?.cookie?.includes("getanny_e2e=firefox-cookie"))
+      throw new Error("Firefox handoff did not forward the browser cookie");
+    const remainingNative = await driver.executeAsyncScript(function (
+      url,
+      done,
+    ) {
+      browser.downloads.search({}).then(
+        (downloads) =>
+          done(downloads.filter((item) => (item.finalUrl || item.url) === url)),
+        () => done([{ id: "search-failed" }]),
+      );
+    }, ordinaryUrl);
+    if (remainingNative.length)
+      throw new Error(
+        "Firefox native entry was not cancelled and erased after handoff",
+      );
     const urlInput = await driver.findElement(By.id("url"));
     await urlInput.clear();
     await urlInput.sendKeys(media.server.url + "/watch.html");
@@ -236,6 +285,7 @@ const exec = promisify(execFile);
             "Actual Firefox supported temporary add-on install",
             "Verified native host handshake in popup and desktop",
             "Popup-origin HTTP download SHA-256 verified",
+            "Ordinary Firefox download intercepted with cookie forwarding, desktop hash verification and native-entry cleanup",
             "Actual content-script media detection",
             "Popup-origin media analysis and real desktop download",
           ],

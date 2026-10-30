@@ -36,6 +36,10 @@ class DownloadManager extends EventEmitter {
     this.running = new Map();
     this.queue = [];
     this.retryTimers = new Map();
+    this.pendingProgress = new Map();
+    this.progressDirty = new Set();
+    this.progressTimer = null;
+    this.persistenceTimer = null;
     this.stopped = false;
     this.reservationQueue = Promise.resolve();
   }
@@ -43,7 +47,44 @@ class DownloadManager extends EventEmitter {
     this.emit("changed", this.getAll());
   }
   persist(item) {
-    if (this.repo) Object.assign(item, this.repo.save(item));
+    this.progressDirty.delete(item.id);
+    if (this.repo) Object.assign(item, this.repo.save(item, item));
+  }
+  queueProgress(id, progress) {
+    this.pendingProgress.set(id, progress);
+    this.progressDirty.add(id);
+    if (!this.progressTimer) {
+      this.progressTimer = setTimeout(() => this.flushProgress(), 150);
+      this.progressTimer.unref?.();
+    }
+    if (!this.persistenceTimer) {
+      this.persistenceTimer = setTimeout(() => this.flushPersistence(), 2000);
+      this.persistenceTimer.unref?.();
+    }
+  }
+  flushProgress() {
+    clearTimeout(this.progressTimer);
+    this.progressTimer = null;
+    const pending = [...this.pendingProgress];
+    this.pendingProgress.clear();
+    for (const [id, progress] of pending) {
+      if (!this.items.has(id)) continue;
+      this.onProgress(id, progress);
+      this.emit("progress", { id, ...progress });
+    }
+  }
+  flushPersistence() {
+    clearTimeout(this.persistenceTimer);
+    this.persistenceTimer = null;
+    for (const id of this.progressDirty) {
+      const item = this.items.get(id);
+      if (item) this.persist(item);
+    }
+    this.progressDirty.clear();
+  }
+  discardProgress(id) {
+    this.pendingProgress.delete(id);
+    this.progressDirty.delete(id);
   }
   async addDownload(input) {
     return this.add({ ...input, kind: "file" });
@@ -78,7 +119,11 @@ class DownloadManager extends EventEmitter {
     ) {
       input.savePath = path.join(
         savePath,
-        input.media.audioOnly ? "Audio" : "Video",
+        input.media.type === "subtitle"
+          ? "Subtitles"
+          : input.media.audioOnly
+            ? "Audio"
+            : "Video",
       );
       await fs.mkdir(input.savePath, { recursive: true });
     }
@@ -102,11 +147,18 @@ class DownloadManager extends EventEmitter {
       createdAt: new Date().toISOString(),
       kind: input.kind || "file",
       headers: validateHeaders(input.headers),
+      browserTransferId: input.browserTransferId || undefined,
+      browserSource: input.browserSource || undefined,
       ...(input.kind === "media"
         ? {
             media: input.media,
             filename: input.media.title,
-            category: input.media.audioOnly ? "Audio" : "Video",
+            category:
+              input.media.type === "subtitle"
+                ? "Documents"
+                : input.media.audioOnly
+                  ? "Audio"
+                  : "Video",
           }
         : {}),
     };
@@ -171,11 +223,10 @@ class DownloadManager extends EventEmitter {
     engine.on("progress", (_id, progress) => {
       if (this.running.get(item.id) !== engine) return;
       Object.assign(item, progress);
-      this.persist(item);
-      this.onProgress(item.id, progress);
-      this.emit("progress", { id: item.id, ...progress });
+      this.queueProgress(item.id, progress);
     });
     engine.on("status", (_id, status, data = {}) => {
+      this.flushProgress();
       Object.assign(item, data, { status, speed: 0, eta: null });
       this.persist(item);
       this.onStatusChange(item.id, status, data);
@@ -183,8 +234,10 @@ class DownloadManager extends EventEmitter {
       this.snapshot();
     });
     engine.on("complete", (_id, data) => {
+      this.flushProgress();
       Object.assign(item, data, {
         status: "completed",
+        completedAt: item.completedAt || new Date().toISOString(),
         speed: 0,
         eta: null,
         error: null,
@@ -195,6 +248,7 @@ class DownloadManager extends EventEmitter {
       this.snapshot();
     });
     engine.on("error", (_id, error) => {
+      this.flushProgress();
       item.error = error.message;
       item.speed = 0;
       item.status = "failed";
@@ -334,6 +388,7 @@ class DownloadManager extends EventEmitter {
     await this.cleanup(item);
     if (deleteFile && item.filePath && item.kind !== "torrent")
       await fs.rm(item.filePath, { force: true });
+    this.discardProgress(id);
     this.items.delete(id);
     this.repo?.remove(id);
     this.snapshot();
@@ -344,6 +399,7 @@ class DownloadManager extends EventEmitter {
       .filter((item) => item.status === "completed")
       .map((item) => item.id);
     for (const id of ids) {
+      this.discardProgress(id);
       this.items.delete(id);
       this.repo?.remove(id);
     }
@@ -373,6 +429,8 @@ class DownloadManager extends EventEmitter {
   }
   async shutdown() {
     this.stopped = true;
+    this.flushProgress();
+    this.flushPersistence();
     for (const timer of this.retryTimers.values()) clearTimeout(timer);
     this.retryTimers.clear();
     await Promise.all(

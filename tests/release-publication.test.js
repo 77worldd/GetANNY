@@ -10,6 +10,7 @@ const {
 test("publication provenance rejects source/run/digest mismatches and expired artifacts", () => {
   const expected = {
     source: "a".repeat(40),
+    branch: "arena/9c64a2a0-getanny",
     runId: 12,
     artifactId: 34,
     archiveSha256: "b".repeat(64),

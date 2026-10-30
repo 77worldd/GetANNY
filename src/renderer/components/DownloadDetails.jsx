@@ -6,6 +6,18 @@ export default function DownloadDetails({ item, onClose }) {
     ["Status", statusLabel(item)],
     ["Type", item.kind],
     [
+      "Format",
+      item.filename.match(/\.([^.]+)$/)?.[1]?.toUpperCase() ||
+        item.mimeType ||
+        "Unknown",
+    ],
+    [
+      "Completed",
+      item.completedAt
+        ? new Date(item.completedAt).toLocaleString()
+        : "Not completed",
+    ],
+    [
       "File size",
       item.totalSize > 0 || item.status === "completed"
         ? `${item.approximateSize ? "Approximately " : ""}${bytes(item.totalSize)}`

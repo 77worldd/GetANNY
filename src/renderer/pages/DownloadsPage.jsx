@@ -142,6 +142,62 @@ function ContextMenu({ position, actions, onClose }) {
     document.body,
   );
 }
+const previewCache = new Map();
+function DownloadPreview({ item, Icon }) {
+  const supported = [
+    "Images",
+    "Video",
+    "Audio",
+    "Documents",
+    "Applications",
+  ].includes(item.category);
+  const [url, setUrl] = useState(previewCache.get(item.id) || null);
+  const ref = useRef();
+  useEffect(() => {
+    if (
+      item.status !== "completed" ||
+      !supported ||
+      previewCache.has(item.id)
+    ) {
+      if (previewCache.has(item.id)) setUrl(previewCache.get(item.id));
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const result = await api.invoke("download:preview", item.id);
+        const value = result?.url || null;
+        previewCache.set(item.id, value);
+        if (previewCache.size > 100)
+          previewCache.delete(previewCache.keys().next().value);
+        if (!cancelled) setUrl(value);
+      } catch {
+        if (!cancelled) setUrl(null);
+      }
+    };
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        load();
+      },
+      { rootMargin: "120px" },
+    );
+    if (ref.current) observer.observe(ref.current);
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+    };
+  }, [item.id, item.status, supported]);
+  return (
+    <div
+      ref={ref}
+      className={`file-icon ${item.category?.toLowerCase()} ${url ? "has-preview" : ""}`}
+    >
+      {url ? <img src={url} alt="" loading="lazy" /> : <Icon />}
+    </div>
+  );
+}
 function DownloadRow({ item, onConfirm }) {
   const [busy, setBusy] = useState(false),
     [menu, setMenu] = useState(null);
@@ -267,9 +323,7 @@ function DownloadRow({ item, onConfirm }) {
         setMenu({ x: event.clientX, y: event.clientY });
       }}
     >
-      <div className={`file-icon ${item.category?.toLowerCase()}`}>
-        <Icon />
-      </div>
+      <DownloadPreview item={item} Icon={Icon} />
       <div className="file-info">
         <button
           className="filename"
@@ -279,19 +333,52 @@ function DownloadRow({ item, onConfirm }) {
           {item.filename}
         </button>
         <div className="file-source">
-          {shortHost(item.url)}
-          <span>·</span>
-          {new Date(item.createdAt).toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-          })}
-          {item.kind === "media" && (
+          {item.status === "completed" ? (
             <>
+              <span>
+                {item.filename.match(/\.([^.]+)$/)?.[1]?.toUpperCase() ||
+                  item.kind.toUpperCase()}
+              </span>
               <span>·</span>
-              {item.media?.quality}
+              <span>{bytes(item.totalSize)}</span>
+              <span>·</span>
+              <span>
+                {new Date(
+                  item.completedAt || item.updatedAt || item.createdAt,
+                ).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </>
+          ) : (
+            <>
+              {shortHost(item.url)}
+              <span>·</span>
+              {new Date(item.createdAt).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              })}
+              {item.kind === "media" && (
+                <>
+                  <span>·</span>
+                  {item.media?.quality}
+                </>
+              )}
             </>
           )}
         </div>
+        {item.status === "completed" && (
+          <div
+            className="completed-location"
+            title={item.filePath || item.savePath}
+          >
+            <LuFolderOpen />
+            {item.filePath || item.savePath}
+          </div>
+        )}
         {item.error && (
           <div className="row-error" title={item.error}>
             {item.error}
@@ -418,6 +505,7 @@ function DownloadRow({ item, onConfirm }) {
     </article>
   );
 }
+const MemoDownloadRow = React.memo(DownloadRow);
 export default function DownloadsPage({ filter }) {
   const downloads = useDownloadStore((state) => state.downloads);
   const [search, setSearch] = useState(""),
@@ -426,13 +514,17 @@ export default function DownloadsPage({ filter }) {
     [confirm, setConfirm] = useState(null),
     [bulkBusy, setBulkBusy] = useState(false);
   const [title, description] = titles[filter] || titles.all;
-  const base = downloads.filter(
-    (item) =>
-      filter === "all" ||
-      (filter === "active" &&
-        (active(item) || ["queued", "retrying"].includes(item.status))) ||
-      (filter === "torrent" && item.kind === "torrent") ||
-      filter === item.status,
+  const base = useMemo(
+    () =>
+      downloads.filter(
+        (item) =>
+          filter === "all" ||
+          (filter === "active" &&
+            (active(item) || ["queued", "retrying"].includes(item.status))) ||
+          (filter === "torrent" && item.kind === "torrent") ||
+          filter === item.status,
+      ),
+    [downloads, filter],
   );
   const rows = useMemo(
     () =>
@@ -624,7 +716,11 @@ export default function DownloadsPage({ filter }) {
         <div role="list" aria-label={title} className="download-list">
           {rows.length ? (
             rows.map((item) => (
-              <DownloadRow key={item.id} item={item} onConfirm={setConfirm} />
+              <MemoDownloadRow
+                key={item.id}
+                item={item}
+                onConfirm={setConfirm}
+              />
             ))
           ) : (
             <div className="empty-state">

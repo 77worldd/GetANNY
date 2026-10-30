@@ -13,9 +13,30 @@ New-Item $results -ItemType Directory -Force | Out-Null
 New-Item $installRoot -ItemType Directory -Force | Out-Null
 $exePackage = Join-Path $root 'dist\GetANNY Setup.exe'
 $msiPackage = Join-Path $root 'dist\GetANNY Setup.msi'
-function Run-Checked([string] $File, [string[]] $Arguments, [int] $Timeout = 420000) {
-  $p = Start-Process -FilePath $File -ArgumentList $Arguments -PassThru
-  if (-not $p.WaitForExit($Timeout)) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; throw "Timed out: $File" }
+function Run-Checked([string] $File, [string[]] $Arguments, [int] $Timeout = 420000, [switch] $CaptureOutput) {
+  $started = Get-Date
+  "START $($started.ToString('o')) PID-pending $File $($Arguments -join ' ')" | Add-Content (Join-Path $results 'processes.log')
+  $start = @{FilePath=$File;ArgumentList=$Arguments;PassThru=$true}
+  if ($CaptureOutput) {
+    $prefix = 'process-' + [guid]::NewGuid().ToString('N')
+    $start.RedirectStandardOutput = Join-Path $results "$prefix.stdout.log"
+    $start.RedirectStandardError = Join-Path $results "$prefix.stderr.log"
+  }
+  $p = Start-Process @start
+  "STARTED $($started.ToString('o')) PID=$($p.Id) $File" | Add-Content (Join-Path $results 'processes.log')
+  if (-not $p.WaitForExit($Timeout)) {
+    $processInfo = @(Get-CimInstance Win32_Process | Where-Object {
+      $_.ProcessId -eq $p.Id -or $_.ParentProcessId -eq $p.Id -or $_.Name -in @('GetANNY.exe','GetANNY Setup.exe')
+    } | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine)
+    $files = @()
+    if (Test-Path $installRoot) {
+      $files = @(Get-ChildItem $installRoot -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object FullName,Length,LastWriteTime)
+    }
+    @{passed=$false;date=(Get-Date -Format o);file=$File;arguments=$Arguments;timeoutMs=$Timeout;processes=$processInfo;installFiles=$files} | ConvertTo-Json -Depth 7 | Set-Content (Join-Path $results 'process-timeout.json')
+    & taskkill.exe /PID $p.Id /T /F 2>&1 | Add-Content (Join-Path $results 'processes.log')
+    throw "Timed out: $File. See process-timeout.json and processes.log"
+  }
+  "EXIT $((Get-Date).ToString('o')) PID=$($p.Id) code=$($p.ExitCode) elapsedMs=$([int]((Get-Date)-$started).TotalMilliseconds)" | Add-Content (Join-Path $results 'processes.log')
   if ($p.ExitCode -notin @(0, 3010)) { throw "$File exited $($p.ExitCode)" }
 }
 function Self-Test([string] $InstalledExe, [string] $Name, [string] $Data) {
@@ -93,6 +114,9 @@ function Assert-Uninstalled([string] $InstalledExe, $Shortcuts, [string] $Data, 
 $defaultData = Join-Path $env:APPDATA 'getanny'
 $exeDir = Join-Path $installRoot 'exe-app'
 $exeData = Join-Path $installRoot 'exe-data'
+Write-Host 'Checking the unpacked browser-setup helper before NSIS installation...'
+$setupReport = Join-Path $results 'setup-helper.json'
+Run-Checked (Join-Path $root 'dist\win-unpacked\GetANNY.exe') @('--setup-browser-hosts','--quiet','--enable-logging','--report',"`"$setupReport`"") 90000 -CaptureOutput
 Write-Host 'Installing the actual NSIS EXE package...'
 Run-Checked $exePackage @('/S','/currentuser',"/D=$exeDir")
 $installedExe = Join-Path $exeDir 'GetANNY.exe'

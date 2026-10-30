@@ -1,7 +1,7 @@
 name: Windows installers and integration tests
 on:
   push:
-    branches: [arena/9c64a2a0-getanny]
+    branches: [arena/456bcab4-getanny]
     paths-ignore: ["**/*.md"]
   workflow_dispatch:
     inputs:

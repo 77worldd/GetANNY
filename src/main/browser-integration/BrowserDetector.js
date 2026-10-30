@@ -23,6 +23,9 @@ class BrowserDetector {
           () => false,
         ));
     this.overrides = {};
+    this.detected = null;
+    this.detectedAt = 0;
+    this.detectionPromise = null;
   }
   expand(value) {
     return value
@@ -52,7 +55,22 @@ class BrowserDetector {
         /* none */
       }
   }
-  async detect() {
+  async detect(fresh = false) {
+    if (!fresh && this.detected && Date.now() - this.detectedAt < 60 * 1000)
+      return this.detected;
+    if (this.detectionPromise) return this.detectionPromise;
+    this.detectionPromise = this.scan()
+      .then((result) => {
+        this.detected = result;
+        this.detectedAt = Date.now();
+        return result;
+      })
+      .finally(() => {
+        this.detectionPromise = null;
+      });
+    return this.detectionPromise;
+  }
+  async scan() {
     await this.loadOverrides();
     return Promise.all(
       browsers.map(async (browser) => {
@@ -150,7 +168,7 @@ class BrowserDetector {
         path.join(this.userDataPath, "browser-paths.json"),
         JSON.stringify(this.overrides, null, 2),
       );
-    return this.detect();
+    return this.detect(true);
   }
   async openExtensions(browserId) {
     const browser = getBrowser(browserId);

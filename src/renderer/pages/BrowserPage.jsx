@@ -55,8 +55,14 @@ export default function BrowserPage() {
   }, []);
   useEffect(() => {
     refresh();
-    const timer = setInterval(() => refresh(), 4000);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, 30000);
+    const cleanup = api.on("browser:changed", () => refresh());
+    return () => {
+      clearInterval(timer);
+      cleanup();
+    };
   }, [refresh]);
   const browser = info?.browsers.find((item) => item.id === selected);
   const Icon = browserIcons[selected] || LuGlobe;

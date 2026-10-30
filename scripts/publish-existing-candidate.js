@@ -36,7 +36,7 @@ function assertProvenance(artifact, run, expected) {
   assert.equal(artifact.digest, `sha256:${expected.archiveSha256}`);
   assert.equal(artifact.workflow_run.id, expected.runId);
   assert.equal(artifact.workflow_run.head_sha, expected.source);
-  assert.equal(artifact.workflow_run.head_branch, "arena/9c64a2a0-getanny");
+  assert.equal(artifact.workflow_run.head_branch, expected.branch);
   assert.equal(run.id, expected.runId);
   assert.equal(run.head_sha, expected.source);
 }
@@ -103,6 +103,7 @@ async function main() {
   assert.equal(process.env.CI, "true", "Use the explicit CI publication job");
   const expected = {
     source: process.env.GETANNY_SOURCE_SHA,
+    branch: process.env.GETANNY_SOURCE_BRANCH,
     runId: Number(process.env.GETANNY_SOURCE_RUN),
     artifactId: Number(process.env.GETANNY_ARTIFACT_ID),
     archiveSha256: process.env.GETANNY_ARTIFACT_SHA256,

@@ -1,5 +1,5 @@
 const WebSocket = require("ws");
-const { timingSafeEqual, randomBytes } = require("node:crypto");
+const { timingSafeEqual, randomBytes, randomUUID } = require("node:crypto");
 const { getBrowser, CHROMIUM_ID, FIREFOX_ID } = require("./catalog");
 function equalSecret(a, b) {
   if (
@@ -19,6 +19,7 @@ class WebSocketServer {
     onDownloadRequest = async () => {
       throw new Error("Download handler unavailable.");
     },
+    onDownloadStatus = async () => ({ action: "missing" }),
     onHello = () => {},
   } = {}) {
     Object.assign(this, {
@@ -27,9 +28,11 @@ class WebSocketServer {
       enabled,
       onMediaDetected,
       onDownloadRequest,
+      onDownloadStatus,
       onHello,
     });
     this.clients = new Map();
+    this.browserCommands = new Map();
     this.server = new WebSocket.Server({
       host: "127.0.0.1",
       port,
@@ -47,9 +50,11 @@ class WebSocketServer {
     });
     this.server.on("connection", (socket, request) => {
       const state = {
+        sessionId: randomUUID(),
         authenticated: false,
         lastSeen: Date.now(),
         origin: request.headers.origin || null,
+        pendingRequests: new Set(),
       };
       this.clients.set(socket, state);
       const authTimeout = setTimeout(() => {
@@ -138,19 +143,51 @@ class WebSocketServer {
         throw new Error(
           "Extension handshake is incomplete. Reconnect the extension.",
         );
-      else if (message.type === "download") {
-        if (state.busy)
-          throw new Error(
-            "A browser download request is already awaiting confirmation.",
-          );
-        state.busy = true;
-        try {
-          const result = await this.onDownloadRequest({
-            url: message.url,
-            filename: message.filename,
-            kind: message.kind === "media" ? "media" : "file",
+      else if (message.type === "browser-download-result") {
+        const pending = this.browserCommands.get(message.requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          this.browserCommands.delete(message.requestId);
+          pending.resolve(message);
+        }
+      } else if (message.type === "download-status") {
+        const result = await this.onDownloadStatus(
+          {
+            transferId: String(message.transferId || "").slice(0, 100),
             source: state.browserId,
-          });
+          },
+          { sessionId: state.sessionId },
+        );
+        this.reply(socket, {
+          type: "download-status-result",
+          requestId: message.requestId,
+          success: true,
+          ...result,
+        });
+      } else if (message.type === "download") {
+        if (state.pendingRequests.size >= 20)
+          throw new Error(
+            "Too many browser downloads are being handed off. Try again shortly.",
+          );
+        const key = String(message.requestId || randomUUID());
+        state.pendingRequests.add(key);
+        try {
+          const result = await this.onDownloadRequest(
+            {
+              url: message.url,
+              filename: message.filename,
+              headers: message.headers,
+              mimeType: message.mimeType,
+              kind: message.kind === "media" ? "media" : "file",
+              intercepted: message.intercepted === true,
+              transferId:
+                typeof message.transferId === "string"
+                  ? message.transferId.slice(0, 100)
+                  : null,
+              source: state.browserId,
+            },
+            { sessionId: state.sessionId },
+          );
           this.reply(socket, {
             type: "download-result",
             requestId: message.requestId,
@@ -158,7 +195,7 @@ class WebSocketServer {
             ...result,
           });
         } finally {
-          state.busy = false;
+          state.pendingRequests.delete(key);
         }
       } else if (message.type === "media-detected") {
         if (
@@ -185,6 +222,30 @@ class WebSocketServer {
   }
   reply(socket, data) {
     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(data));
+  }
+  downloadCommand(sessionId, action, transferId) {
+    const session = [...this.clients.entries()].find(
+      ([socket, state]) =>
+        state.sessionId === sessionId &&
+        state.browserId &&
+        socket.readyState === WebSocket.OPEN,
+    );
+    if (!session) return Promise.resolve({ success: false, missing: true });
+    const [socket] = session;
+    const requestId = randomUUID();
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.browserCommands.delete(requestId);
+        resolve({ success: false, error: "Browser command timed out." });
+      }, 8000);
+      this.browserCommands.set(requestId, { resolve, timer });
+      this.reply(socket, {
+        type: "browser-download-command",
+        requestId,
+        action,
+        transferId: String(transferId),
+      });
+    });
   }
   status() {
     const sessions = [...this.clients.values()]
@@ -217,6 +278,11 @@ class WebSocketServer {
   }
   async close() {
     clearInterval(this.heartbeat);
+    for (const pending of this.browserCommands.values()) {
+      clearTimeout(pending.timer);
+      pending.resolve({ success: false, error: "Desktop bridge closed." });
+    }
+    this.browserCommands.clear();
     for (const socket of this.clients.keys()) socket.terminate();
     this.clients.clear();
     await new Promise((resolve) => this.server.close(resolve));

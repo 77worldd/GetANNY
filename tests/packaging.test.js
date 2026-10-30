@@ -14,11 +14,14 @@ test("Windows packaging fails closed when required runtime resources are absent"
     verify({ packager: { projectDir: root }, electronPlatformName: "win32" }),
     /Required packaged resource missing/,
   );
+  const config = await fs.readFile("electron-builder.yml", "utf8");
+  assert.match(config, /^  - src\/shared\/\*\*\/\*$/m);
 });
 test("Windows packaging rejects existing but checksum-invalid tools", async (t) => {
   const root = await temporary(t);
   for (const file of [
     "src/main/browser-integration/native-host.js",
+    "src/shared/themes.json",
     "node_modules/ws/index.js",
     "node_modules/ws/package.json",
     "dist-renderer/index.html",
@@ -119,7 +122,7 @@ test("checked-in Chromium public key derives the allowlisted extension ID", asyn
   assert.ok(manifest.permissions.includes("nativeMessaging"));
 });
 
-test("afterPack verifies the real SQLite N-API layout, torrent binary and worker; missing payloads fail closed", async (t) => {
+test("afterPack verifies the real SQLite N-API layout and torrent binary; missing payloads fail closed", async (t) => {
   const afterPack = require("../scripts/verify-installed-resources");
   const root = await temporary(t),
     resources = path.join(root, "resources");
@@ -137,7 +140,6 @@ test("afterPack verifies the real SQLite N-API layout, torrent binary and worker
     "extension/firefox/manifest.json",
     "app.asar.unpacked/node_modules/better-sqlite3/prebuilds/win32-x64.node",
     "app.asar.unpacked/node_modules/node-datachannel/build/Release/node_datachannel.node",
-    "app.asar.unpacked/src/main/engine/chunk-worker.js",
   ];
   // Structural fixtures only. Real executable loading is a separate installed
   // Windows gate; a two-byte MZ fixture does not establish PE validity.

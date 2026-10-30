@@ -9,6 +9,10 @@ import {
   LuInfo,
   LuExternalLink,
   LuSparkles,
+  LuImage,
+  LuFileText,
+  LuTags,
+  LuCaptions,
 } from "react-icons/lu";
 import { api, errorMessage } from "../api";
 import {
@@ -17,7 +21,9 @@ import {
   Field,
   FolderField,
   PageHeader,
+  Select,
 } from "../components/ui";
+import MediaMetadata from "../components/MediaMetadata";
 import useSettingsStore from "../stores/useSettingsStore";
 import useUIStore from "../stores/useUIStore";
 import { bytes, duration } from "../utils/format";
@@ -32,7 +38,11 @@ export default function MediaPage({ tools }) {
     [folder, setFolder] = useState(settings.defaultDownloadPath || ""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [adding, setAdding] = useState(false);
+    [adding, setAdding] = useState(false),
+    [section, setSection] = useState("media"),
+    [withSubtitles, setWithSubtitles] = useState(false),
+    [subtitleLanguage, setSubtitleLanguage] = useState(""),
+    [subtitleFormat, setSubtitleFormat] = useState("vtt");
   const generation = useRef(0),
     lastAuto = useRef(0);
   const analyze = async (event) => {
@@ -42,12 +52,15 @@ export default function MediaPage({ tools }) {
     setError("");
     setResult(null);
     setSelected(null);
+    setSection("media");
+    setWithSubtitles(false);
     try {
       if (!/^https?:\/\//i.test(url.trim()))
         throw new Error("Paste an HTTP or HTTPS video or audio page URL.");
       const info = await api.invoke("media:get-formats", url.trim());
       if (current !== generation.current) return;
       setResult(info);
+      setSubtitleLanguage(info.subtitles[0]?.id || "");
       const video = info.formats.filter((format) => format.group === "video");
       const preferred =
         video.find((format) => format.hasAudio) || video[0] || info.formats[0];
@@ -84,11 +97,25 @@ export default function MediaPage({ tools }) {
       await api.invoke("media:download", {
         analysisId: result.analysisId,
         formatId: format.formatId,
+        ...(withSubtitles && subtitleLanguage
+          ? {
+              subtitle: {
+                languageId: subtitleLanguage,
+                format: subtitleFormat,
+              },
+            }
+          : {}),
         ...(folder !== settings.defaultDownloadPath
           ? { savePath: folder }
           : {}),
       });
-      useUIStore.getState().notify("Media added to Downloads.");
+      useUIStore
+        .getState()
+        .notify(
+          withSubtitles
+            ? "Media and subtitles added to Downloads."
+            : "Media added to Downloads.",
+        );
       useUIStore.getState().setActiveTab("all");
     } catch (error) {
       setError(errorMessage(error));
@@ -193,186 +220,266 @@ export default function MediaPage({ tools }) {
               </p>
             </div>
           </div>
-          <div className="media-result-body">
-            <div className="format-panel">
-              <div
-                className="format-tabs"
-                role="tablist"
-                aria-label="Media format type"
+          <div
+            className="media-section-tabs"
+            role="tablist"
+            aria-label="Media tools"
+          >
+            {[
+              ["media", LuFilm, "Video & Audio", result.formats.length],
+              ["thumbnails", LuImage, "Thumbnails", result.thumbnails.length],
+              ["description", LuFileText, "Description", null],
+              ["tags", LuTags, "Tags", result.tags.length],
+              ["subtitles", LuCaptions, "Subtitles", result.subtitles.length],
+            ].map(([id, Icon, label, count]) => (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={section === id}
+                onClick={() => setSection(id)}
               >
-                {[
-                  ["video", LuFilm, "Video"],
-                  ["audio", LuAudioLines, "Audio only"],
-                ].map(([key, Icon, label]) => (
-                  <button
-                    role="tab"
-                    aria-selected={group === key}
-                    key={key}
-                    onClick={() => {
-                      setGroup(key);
-                      const first = result.formats.find(
-                        (item) => item.group === key,
-                      );
-                      setSelected(first?.formatId || null);
-                    }}
-                  >
-                    <Icon />
-                    {label}
-                    <span>
-                      {
-                        result.formats.filter((item) => item.group === key)
-                          .length
-                      }
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <div className="format-heading">
-                <span>QUALITY / FORMAT</span>
-                <span>SIZE</span>
-              </div>
-              <div
-                className="format-list"
-                role="radiogroup"
-                aria-label={`${group} formats`}
-              >
-                {result.formats
-                  .filter((item) => item.group === group)
-                  .map((item) => (
-                    <label
-                      key={item.formatId}
-                      className={`format-option ${selected === item.formatId ? "selected" : ""} ${item.mergeAudio && !result.tools.ffmpeg ? "unavailable" : ""}`}
+                <Icon />
+                {label}
+                {count != null && <span>{count}</span>}
+              </button>
+            ))}
+          </div>
+          {section === "media" && (
+            <div className="media-result-body">
+              <div className="format-panel">
+                <div
+                  className="format-tabs"
+                  role="tablist"
+                  aria-label="Media format type"
+                >
+                  {[
+                    ["video", LuFilm, "Video"],
+                    ["audio", LuAudioLines, "Audio only"],
+                  ].map(([key, Icon, label]) => (
+                    <button
+                      role="tab"
+                      aria-selected={group === key}
+                      key={key}
+                      onClick={() => {
+                        setGroup(key);
+                        const first = result.formats.find(
+                          (item) => item.group === key,
+                        );
+                        setSelected(first?.formatId || null);
+                      }}
                     >
-                      <input
-                        type="radio"
-                        name="media-format"
-                        value={item.formatId}
-                        checked={selected === item.formatId}
-                        disabled={item.mergeAudio && !result.tools.ffmpeg}
-                        onChange={() => setSelected(item.formatId)}
-                      />
-                      <span className="format-radio">
-                        <LuCheck />
+                      <Icon />
+                      {label}
+                      <span>
+                        {
+                          result.formats.filter((item) => item.group === key)
+                            .length
+                        }
                       </span>
-                      <div className="format-description">
-                        <strong>
-                          {item.quality} <span>{item.ext.toUpperCase()}</span>
-                          {item.fps > 30 && <span>{item.fps} FPS</span>}
-                        </strong>
-                        <small>
-                          {[
-                            item.resolution,
-                            item.vcodec?.split(".")[0],
-                            item.acodec?.split(".")[0],
-                            item.language,
-                            item.mergeAudio
-                              ? "Audio merged automatically"
-                              : item.hasVideo
-                                ? item.audioUnknown
-                                  ? "Audio not reported"
-                                  : item.hasAudio
-                                    ? "Video + audio included"
-                                    : "Video only · no audio track"
-                                : item.audioChannels
-                                  ? `${item.audioChannels} channels`
-                                  : "Audio stream",
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </small>
-                      </div>
-                      <span className="format-size">
-                        {item.filesize
-                          ? `${item.approximateSize ? "≈ " : ""}${bytes(item.filesize)}`
-                          : "Unknown"}
-                        {item.mergeAudio && item.filesize ? (
-                          <small>+ audio</small>
-                        ) : null}
-                      </span>
-                    </label>
+                    </button>
                   ))}
-                {!result.formats.some((item) => item.group === group) && (
-                  <div className="format-empty">
-                    This page has no separate{" "}
-                    {group === "audio" ? "audio-only" : "video"} formats.
+                </div>
+                <div className="format-heading">
+                  <span>QUALITY / FORMAT</span>
+                  <span>SIZE</span>
+                </div>
+                <div
+                  className="format-list"
+                  role="radiogroup"
+                  aria-label={`${group} formats`}
+                >
+                  {result.formats
+                    .filter((item) => item.group === group)
+                    .map((item) => (
+                      <label
+                        key={item.formatId}
+                        className={`format-option ${selected === item.formatId ? "selected" : ""} ${item.mergeAudio && !result.tools.ffmpeg ? "unavailable" : ""}`}
+                      >
+                        <input
+                          type="radio"
+                          name="media-format"
+                          value={item.formatId}
+                          checked={selected === item.formatId}
+                          disabled={item.mergeAudio && !result.tools.ffmpeg}
+                          onChange={() => setSelected(item.formatId)}
+                        />
+                        <span className="format-radio">
+                          <LuCheck />
+                        </span>
+                        <div className="format-description">
+                          <strong>
+                            {item.quality} <span>{item.ext.toUpperCase()}</span>
+                            {item.fps > 30 && <span>{item.fps} FPS</span>}
+                          </strong>
+                          <small>
+                            {[
+                              item.resolution,
+                              item.vcodec?.split(".")[0],
+                              item.acodec?.split(".")[0],
+                              item.language,
+                              item.mergeAudio
+                                ? "Audio merged automatically"
+                                : item.hasVideo
+                                  ? item.audioUnknown
+                                    ? "Audio not reported"
+                                    : item.hasAudio
+                                      ? "Video + audio included"
+                                      : "Video only · no audio track"
+                                  : item.audioChannels
+                                    ? `${item.audioChannels} channels`
+                                    : "Audio stream",
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </small>
+                        </div>
+                        <span className="format-size">
+                          {item.filesize
+                            ? `${item.approximateSize ? "≈ " : ""}${bytes(item.filesize)}`
+                            : "Unknown"}
+                          {item.mergeAudio && item.filesize ? (
+                            <small>+ audio</small>
+                          ) : null}
+                        </span>
+                      </label>
+                    ))}
+                  {!result.formats.some((item) => item.group === group) && (
+                    <div className="format-empty">
+                      This page has no separate{" "}
+                      {group === "audio" ? "audio-only" : "video"} formats.
+                    </div>
+                  )}
+                </div>
+                <p className="format-footnote">
+                  <LuInfo />
+                  Unknown sizes are not estimates. Video-only sizes exclude the
+                  audio stream.
+                </p>
+              </div>
+              <aside className="media-output">
+                <div className="eyebrow">YOUR DOWNLOAD</div>
+                <div className="selected-quality">
+                  {format?.quality || "Choose a format"}
+                  <span>{format?.ext.toUpperCase()}</span>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Content</dt>
+                    <dd>
+                      {format?.group === "audio"
+                        ? "Audio only"
+                        : format?.audioUnknown
+                          ? "Video · tracks unreported"
+                          : format?.hasAudio || format?.mergeAudio
+                            ? "Video with audio"
+                            : "Video only"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Audio</dt>
+                    <dd>
+                      {format?.mergeAudio
+                        ? "Merged with FFmpeg"
+                        : format?.hasAudio
+                          ? "Included"
+                          : format?.audioUnknown
+                            ? "Not reported"
+                            : "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>File size</dt>
+                    <dd>
+                      {format?.filesize
+                        ? `${format.approximateSize ? "≈ " : ""}${bytes(format.filesize)}${format.mergeAudio ? " + audio" : ""}`
+                        : "Not provided"}
+                    </dd>
+                  </div>
+                </dl>
+                <FolderField
+                  value={folder}
+                  onChange={setFolder}
+                  id="media-folder"
+                />
+                {group === "video" && result.subtitles.length > 0 && (
+                  <div className="subtitle-companion">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={withSubtitles}
+                        onChange={(event) =>
+                          setWithSubtitles(event.target.checked)
+                        }
+                      />
+                      Include subtitles as a separate download
+                    </label>
+                    {withSubtitles && (
+                      <div>
+                        <Select
+                          aria-label="Subtitle language"
+                          value={subtitleLanguage}
+                          onChange={(event) =>
+                            setSubtitleLanguage(event.target.value)
+                          }
+                        >
+                          {result.subtitles.map((subtitle) => (
+                            <option key={subtitle.id} value={subtitle.id}>
+                              {subtitle.name}
+                              {subtitle.automatic ? " (auto)" : ""}
+                            </option>
+                          ))}
+                        </Select>
+                        <Select
+                          aria-label="Subtitle format"
+                          value={subtitleFormat}
+                          onChange={(event) =>
+                            setSubtitleFormat(event.target.value)
+                          }
+                        >
+                          <option value="vtt">VTT</option>
+                          <option value="srt">SRT</option>
+                        </Select>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-              <p className="format-footnote">
-                <LuInfo />
-                Unknown sizes are not estimates. Video-only sizes exclude the
-                audio stream.
-              </p>
+                <Button
+                  variant="primary"
+                  icon={LuArrowDownToLine}
+                  busy={adding}
+                  disabled={
+                    !format ||
+                    !folder ||
+                    (withSubtitles && !subtitleLanguage) ||
+                    (format.mergeAudio && !result.tools.ffmpeg)
+                  }
+                  onClick={add}
+                >
+                  Download {group === "audio" ? "audio" : "video"}
+                </Button>
+                <p>
+                  Progress, pause, cancel, and history are available in
+                  Downloads.
+                </p>
+                {!result.tools.ffmpeg && (
+                  <div className="small-warning">
+                    FFmpeg is missing. Video-only formats that need audio
+                    merging are disabled.
+                  </div>
+                )}
+              </aside>
             </div>
-            <aside className="media-output">
-              <div className="eyebrow">YOUR DOWNLOAD</div>
-              <div className="selected-quality">
-                {format?.quality || "Choose a format"}
-                <span>{format?.ext.toUpperCase()}</span>
-              </div>
-              <dl>
-                <div>
-                  <dt>Content</dt>
-                  <dd>
-                    {format?.group === "audio"
-                      ? "Audio only"
-                      : format?.audioUnknown
-                        ? "Video · tracks unreported"
-                        : format?.hasAudio || format?.mergeAudio
-                          ? "Video with audio"
-                          : "Video only"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Audio</dt>
-                  <dd>
-                    {format?.mergeAudio
-                      ? "Merged with FFmpeg"
-                      : format?.hasAudio
-                        ? "Included"
-                        : format?.audioUnknown
-                          ? "Not reported"
-                          : "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>File size</dt>
-                  <dd>
-                    {format?.filesize
-                      ? `${format.approximateSize ? "≈ " : ""}${bytes(format.filesize)}${format.mergeAudio ? " + audio" : ""}`
-                      : "Not provided"}
-                  </dd>
-                </div>
-              </dl>
-              <FolderField
-                value={folder}
-                onChange={setFolder}
-                id="media-folder"
-              />
-              <Button
-                variant="primary"
-                icon={LuArrowDownToLine}
-                busy={adding}
-                disabled={
-                  !format ||
-                  !folder ||
-                  (format.mergeAudio && !result.tools.ffmpeg)
-                }
-                onClick={add}
-              >
-                Download {group === "audio" ? "audio" : "video"}
-              </Button>
-              <p>
-                Progress, pause, cancel, and history are available in Downloads.
-              </p>
-              {!result.tools.ffmpeg && (
-                <div className="small-warning">
-                  FFmpeg is missing. Video-only formats that need audio merging
-                  are disabled.
-                </div>
-              )}
-            </aside>
-          </div>
+          )}
+          {section !== "media" && (
+            <MediaMetadata
+              section={section}
+              result={result}
+              savePath={
+                folder !== settings.defaultDownloadPath ? folder : undefined
+              }
+              onError={setError}
+            />
+          )}
         </section>
       )}
       {!busy && !result && !error && (

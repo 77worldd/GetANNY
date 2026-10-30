@@ -9,6 +9,7 @@ import {
   LuExternalLink,
   LuCircleHelp,
   LuMonitor,
+  LuPalette,
 } from "react-icons/lu";
 import { api, errorMessage } from "../api";
 import {
@@ -387,18 +388,14 @@ export default function SettingsPage({ capabilities, version }) {
             </div>
             <SettingRow
               title="Color theme"
-              description="Graphite and Midnight are dark themes. System follows your operating system."
+              description="Explore twelve coordinated palettes, or follow your operating system."
             >
-              <Select
-                aria-label="Color theme"
-                value={settings.theme}
-                disabled={!!saving}
-                onChange={(event) => persist("theme", event.target.value)}
+              <Button
+                icon={LuPalette}
+                onClick={() => useUIStore.getState().setActiveTab("themes")}
               >
-                <option value="graphite">Graphite</option>
-                <option value="midnight">Midnight</option>
-                <option value="system">Use system theme</option>
-              </Select>
+                Open theme gallery
+              </Button>
             </SettingRow>
             <SettingRow
               title="Compact download rows"

@@ -22,6 +22,21 @@ Audit baseline: `f74fea83`, 29 October 2026. Screenshots supplied by the owner w
 | Torrent               | No authoritative pause state/history; unhandled EventEmitter `error`; paused torrents restarted automatically; no metadata timeout           | Unified managed torrent lifecycle, safe stop / restore, actionable errors                                                 |
 | Packaging             | Only NSIS; bundled tools not mandatory; native rebuild disabled; workflow targets an obsolete branch; no installed-app test                  | EXE + MSI, tool verification, branch CI, installed-app checks, release checksums                                          |
 
+## 2.0.0-rc.2 upgrade audit
+
+- Both browser manifests lacked `downloads`, so ordinary native downloads could not be intercepted reliably. Added real Chromium/Firefox handoff with `downloads` and URL-specific `cookies` permissions, plus generated permission documentation.
+- The first handoff design could continue after native pause failure or resume after ambiguous acceptance/cleanup failure. Final failure semantics distinguish definitive rejection from timeout/disconnection, retain accepted entries for cleanup reconciliation, and never deliberately resume a second active desktop-owned copy. Unit tests cover these branches; installed-browser checks assert real cookie forwarding, hashes and native-entry erasure.
+- Reviewed native transfers could be resumed by extension disconnect while the desktop review remained actionable. They now remain paused until dismissal, acceptance, status reconciliation or clean desktop shutdown.
+- Per-range worker threads and separate HEAD/range probes added memory, CPU and request overhead. Bounded asynchronous streams, adaptive ranges, one capability request and keep-alive agents replace them. The obsolete worker payload was removed from packaging. See `TESTING.md` for the measured local backend comparison and its idle-CPU caveat.
+- Full browser executable detection ran through global six-second status polling. Detection now has a 60-second cache/in-flight deduplication, the app uses lightweight bridge status with visible-window 30-second fallback, and native reconnect uses bounded backoff.
+- SQLite prepared statements are reused; renderer progress/persistence are batched with terminal flushing. Download rows are memoized and media analyses/preview caches are bounded.
+- yt-dlp metadata was limited to title/thumbnail/formats. It now normalizes descriptions, tags, safe HTTP(S) thumbnail renditions and manual/automatic caption catalogs. Independent and alongside-video SRT/VTT jobs use the existing manager and verify actual outputs.
+- Completed files had no cached visual preview. Visible rows now use OS thumbnails or bounded FFmpeg extraction with path/size/mtime keys, atomic cache files, response/disk/renderer limits and no full-file renderer reads.
+- Only two dark palettes plus system appearance were available. A shared 12-theme catalog now drives main-process validation and renderer application, gallery filtering and the top-left quick switcher. All palettes and both system modes have live token-contrast checks.
+- The media overlay performed broad mutation scans and lacked predictable dismissal. Scanning is limited to added subtrees with bounded seen state; the overlay is compact and X dismissal is scoped to that video for the page session.
+
+Remaining boundaries are explicit: browser APIs do not expose every original request header; private downloads stay native; live third-party media and every branded browser require their own evidence; source-backend memory/throughput results are not whole-desktop certification; signing/store credentials and pristine consumer Windows validation remain external gates.
+
 ## Security and scope
 
 Never silently install browser extensions, modify browser profiles, or use enterprise policies. Browsers do not expose a trustworthy external installed/enabled query: **no connection means unknown**, not “not installed”. Firefox production installation requires Mozilla signing. Unsigned unpacked Chromium packages require explicit developer-mode consent. Local tests and mocked external process tests are not evidence that a live media website, browser or Windows installation works.

@@ -24,12 +24,18 @@ class MediaDetector {
       originalUrl: url,
       createdAt: Date.now(),
     });
+    while (this.analyses.size > 20)
+      this.analyses.delete(this.analyses.keys().next().value);
     return { ...result, analysisId, tools: await this.ytdlp.availability() };
   }
-  selection({ analysisId, formatId }) {
+  analysis(analysisId) {
     const analysis = this.analyses.get(analysisId);
     if (!analysis || Date.now() - analysis.createdAt > 30 * 60 * 1000)
       throw new Error("This format list has expired. Analyze the URL again.");
+    return analysis;
+  }
+  selection({ analysisId, formatId }) {
+    const analysis = this.analysis(analysisId);
     const format = analysis.formats.find(
       (value) => value.formatId === formatId,
     );
@@ -37,6 +43,7 @@ class MediaDetector {
     return {
       url: analysis.originalUrl,
       media: {
+        type: "video",
         title: analysis.title,
         formatId: format.formatId,
         mergeAudio: format.mergeAudio,
@@ -45,6 +52,39 @@ class MediaDetector {
         quality: format.quality,
         audioUnknown: format.audioUnknown,
       },
+    };
+  }
+  subtitleSelection({ analysisId, languageId, format }) {
+    const analysis = this.analysis(analysisId);
+    const subtitle = analysis.subtitles.find((item) => item.id === languageId);
+    if (!subtitle) throw new Error("Choose an available subtitle language.");
+    if (!["srt", "vtt"].includes(format))
+      throw new Error("Choose SRT or VTT subtitles.");
+    return {
+      url: analysis.originalUrl,
+      media: {
+        type: "subtitle",
+        title: analysis.title,
+        quality: `${subtitle.language} · ${format.toUpperCase()}`,
+        subtitle: {
+          language: subtitle.language,
+          automatic: subtitle.automatic,
+          format,
+          sourceFormats: subtitle.formats,
+        },
+      },
+    };
+  }
+  thumbnailSelection({ analysisId, thumbnailId }) {
+    const analysis = this.analysis(analysisId);
+    const thumbnail = analysis.thumbnails.find(
+      (item) => item.id === thumbnailId,
+    );
+    if (!thumbnail) throw new Error("Choose an available thumbnail image.");
+    return {
+      url: thumbnail.url,
+      filename: `${analysis.title} [${thumbnail.label}].${thumbnail.ext}`,
+      headers: thumbnail.httpHeaders,
     };
   }
   inspect(details) {

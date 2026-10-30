@@ -2,9 +2,11 @@
 
 **Reliable downloads. Clear control.** A Windows-first Electron download manager with a React workspace, persistent SQLite history, verified HTTP range transfers, yt-dlp media downloads, and authenticated browser integration.
 
-> **2.0.0-rc.1 is a release candidate.** It is not a claim that all seven browser brands or a pristine consumer Windows installation have been certified. Read [testing evidence and remaining gates](docs/TESTING.md). A public release candidate may be published with incomplete verification clearly stated; this does not certify it. The separate full verification/promotion workflow still requires actual EXE/MSI installation and installed-app tests. Unsigned installers and unsigned browser packages are clearly identified.
+> **Current source: 2.0.0-rc.2.** Initial upgrade run [41059193083](https://github.com/77worldd/GetANNY/actions/runs/41059193083) passed backend/packaging gates but exposed an omitted packaged shared-theme catalog through an NSIS timeout. The rc.2 candidate fixes that packaging regression and requires a fresh verified Windows run. This is not a claim that all browser brands or a pristine consumer Windows installation have been certified. Read [testing evidence and remaining gates](docs/TESTING.md). Unsigned installers and unsigned browser packages are clearly identified.
 
 ## Get the Windows app
+
+### Previous public release candidate
 
 The public [**GetANNY 2.0.0-rc.1 release**](https://github.com/77worldd/GetANNY/releases/tag/v2.0.0-rc.1) contains both real Windows installers, eight browser packages, guides, source provenance, verification status and SHA-256 checksums.
 
@@ -14,7 +16,7 @@ These are the same unsigned binaries built from `048d137`, now hosted as a real 
 
 - EXE: interactive per-user installer, installation-folder selection, Start Menu and optional desktop shortcut.
 - MSI: Windows Installer package for interactive or scripted deployment; optional desktop shortcut.
-- Both include the renderer, SQLite native module, HTTP workers, yt-dlp, FFmpeg/ffprobe, a compiled native-host executable, and Chromium / Firefox extension resources. No separately installed Node or Python is required.
+- Both include the renderer, SQLite native module, asynchronous HTTP range engine, yt-dlp, FFmpeg/ffprobe, a compiled native-host executable, and Chromium / Firefox extension resources. No separately installed Node or Python is required.
 - Installer setup prepares detected browsers and registers native hosts for the installing user. **It does not silently install an extension.** Follow the in-app setup guide and approve installation in your browser.
 - No signing certificate was supplied to this development session. Check release test evidence for the actual Authenticode status. Do not assume a binary is signed because it has an installer icon.
 
@@ -25,10 +27,11 @@ These are the same unsigned binaries built from `048d137`, now hosted as a real 
 ### Files and history
 
 - HTTP/HTTPS, redirect handling, streamed large-file downloads, real bytes/s and ETA when size and speed are known.
-- Actual one-byte range capability probing; worker-thread segmentation only when supported. Exact response range, segment length and final byte count checks.
+- Actual one-byte range capability probing; bounded asynchronous segmentation only when supported, with adaptive range counts and reusable keep-alive connections. Exact response range, segment length and final byte count checks.
 - ID-isolated partials, persisted entity validators, safe continuation, restart when an entity changes, and atomic no-overwrite completion. Same-name files are numbered.
-- Pause waits for writers/workers to stop. HTTP/media cancellation removes only that job's owned partials. Torrent cancellation stops peers while retaining verified pieces in its isolated folder. Retry, bounded transient HTTP retries, a shared per-transfer bandwidth limiter, and one concurrent-job queue for files/media/torrents.
+- Pause waits for writers/streams to stop. HTTP/media cancellation removes only that job's owned partials. Torrent cancellation stops peers while retaining verified pieces in its isolated folder. Retry, bounded transient HTTP retries, a shared per-transfer bandwidth limiter, and one concurrent-job queue for files/media/torrents.
 - All / Active / Completed / Paused / Failed views, search, file-type filters, sorting, context menus, details, confirmed history removal / deletion, and OS file/folder opening.
+- Completed rows show format, size, completion time and location, with lazy cached OS/FFmpeg previews, plus open/reveal actions. Preview generation never loads the full media file into renderer memory.
 - SQLite migration preserves v1 history. Interrupted transfers restore paused unless startup resumption is enabled. URLs without an entity validator restart safely instead of mixing old and new bytes. Downloaded files are never automatically executed.
 
 ### Media studio
@@ -37,6 +40,7 @@ These are the same unsigned binaries built from `048d137`, now hosted as a real 
 - Video and audio-only categories, resolution / frame rate / codecs / language where reported, and honest unknown or approximate sizes.
 - Video-only selections add audio through bundled FFmpeg. Unknown audio tracks are **not** labeled included.
 - Queued media jobs, JSON progress, cancellable child process trees, continuation where yt-dlp supports it, processing state during merge, history, and verification of the actual final output file.
+- Separate Video & Audio, Thumbnails, Description, Tags and Subtitles tabs use metadata legitimately returned by yt-dlp. Download accessible thumbnails, save manual/automatic captions independently as VTT or SRT, or include a separate subtitle job alongside video. Conversion uses FFmpeg when required.
 - No DRM bypass, playlist downloader, cookie import, or promise that every website works. Authentication / regional restrictions / site changes can prevent extraction; errors are shown.
 
 ### Browsers
@@ -45,15 +49,16 @@ Helium, Google Chrome, Chromium, Brave, Firefox, Vivaldi, Opera, plus Microsoft 
 
 - Shared real Chromium codebase and separate Firefox manifest. Browser-targeted ZIPs carry the correct configuration and installation guide—not placeholder implementations.
 - Executable-path detection, portable-browser locator, guided first-run setup, stable unpacked folders, real native-host launcher, and current-user native-host registration.
-- Explicit context-menu actions, HTML5 media actions, network-media detection and a usable popup.
+- Ordinary HTTP(S) interception for documents, archives, images, media and unknown/large files. Native downloads pause before handoff; URL, available filename, URL-specific cookies, referer and user agent are forwarded. Accepted transfers cancel/erase only the matching native history entry, while transfer-ID reconciliation prevents duplicates after timeout/reconnection. Short/unpausable and private downloads remain native. Browser APIs do not expose every original request header.
+- Explicit context-menu actions, HTML5 media actions, bounded network-media detection, a compact per-video dismissible overlay and a usable popup.
 - Native-first communication; explicitly paired WebSocket fallback. Per-user secret, restricted origins, bounded messages, request IDs, timeouts and live handshake-based health.
 - **Prepared** and **registered** are not **installed / enabled**. Without a live handshake, extension installation and enablement are unknown. Firefox permanent installation requires Mozilla signing; this repository does not contain a signed XPI or store credentials.
 
 ### Preferences and workspace
 
-Persisted defaults, simultaneous jobs, connections, per-download speed limit, timeout, retries, auto-start, restart resumption, file categories, browser request confirmation, integration enablement, OS notifications, tray behavior, Windows/macOS login startup, start-minimized, two dark palettes / system theme, density and reduced motion. Each displayed setting has a behavioral consumer; transfer connection/rate preferences apply on new/resumed jobs.
+Persisted defaults, simultaneous jobs, connections, per-download speed limit, timeout, retries, auto-start, restart resumption, file categories, browser request confirmation, integration enablement, OS notifications, tray behavior, Windows/macOS login startup, start-minimized, twelve dark/light/alternative palettes plus system appearance, density and reduced motion. Each displayed setting has a behavioral consumer; transfer connection/rate preferences apply on new/resumed jobs.
 
-Single desktop titlebar, cohesive dark controls, keyboard-friendly dialogs, explicit loading/error states, responsive layouts and restrained animations. Small-label theme tokens are tested for 4.5:1 contrast on normal, raised and selected surfaces. Native frame/menu are no longer duplicated on Windows.
+Single desktop titlebar, cohesive theme-aware controls, a dedicated Themes gallery and compact top-left quick switcher, keyboard-friendly dialogs, explicit loading/error states, responsive layouts and restrained animations. Every catalog palette and both system modes are tested for 4.5:1 text-token contrast on normal, raised and selected surfaces. Native frame/menu are no longer duplicated on Windows.
 
 ## Development
 
