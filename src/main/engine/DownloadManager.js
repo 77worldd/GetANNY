@@ -322,7 +322,7 @@ class DownloadManager extends EventEmitter {
           (name) =>
             name.startsWith(`${prefix}.`) ||
             (item.kind === "media" &&
-              name.includes(`[${item.id.slice(0, 8)}]`) &&
+              name.includes(`[${item.id}]`) &&
               name !== item.filename),
         )
         .map((name) => fs.rm(path.join(item.savePath, name), { force: true })),

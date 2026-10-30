@@ -36,19 +36,23 @@ async function report(root) {
       failures: (xml.match(/<failure\b/g) || []).length,
       skipped: (xml.match(/<skipped\b/g) || []).length,
     });
+  // GitHub retains only a small number of annotations per step. Aggregate
+  // reports instead of silently losing later browsers to that limit.
+  const groups = { installed: [], browsers: [], installer: [], matrix: [] };
   for (const relative of files) {
     if (!relative.endsWith(".json")) continue;
     const file = path.join(root, relative);
     if (!(await fs.stat(file)).isFile()) continue;
     const data = JSON.parse(await fs.readFile(file, "utf8"));
     if (path.basename(file) === "matrix.json" && Array.isArray(data)) {
-      for (const item of data)
-        annotation(`Browser ${item.browser}`, {
+      groups.matrix.push(
+        ...data.map((item) => ({
           browser: item.browser,
           status: item.status,
           reason: item.reason,
           report: item.report,
-        });
+        })),
+      );
       continue;
     }
     if (typeof data.passed !== "boolean") continue;
@@ -67,6 +71,12 @@ async function report(root) {
       "exe",
       "msi",
       "limitations",
+      "defaultProfileRetention",
+      "shortcuts",
+      "installation",
+      "headless",
+      "transport",
+      "extensionId",
     ])
       if (data[key] !== undefined) summary[key] = data[key];
     if (data.checks)
@@ -85,7 +95,23 @@ async function report(root) {
                 : {}),
             },
       );
-    annotation(relative.replaceAll("\\", "/"), summary);
+    summary.report = relative.replaceAll("\\", "/");
+    if (path.basename(file) === "installer-report.json")
+      groups.installer.push(summary);
+    else if (
+      summary.report.startsWith("browser/") ||
+      summary.report.startsWith("browser-matrix/")
+    )
+      groups.browsers.push(summary);
+    else groups.installed.push(summary);
+  }
+  for (const [key, title] of [
+    ["installed", "Installed Windows app reports"],
+    ["matrix", "Individual browser matrix"],
+    ["browsers", "Actual browser reports"],
+    ["installer", "Installer lifecycle, retention, shortcuts and signatures"],
+  ]) {
+    if (groups[key].length) annotation(title, groups[key]);
   }
 }
 if (require.main === module)

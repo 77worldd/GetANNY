@@ -22,6 +22,14 @@ jobs:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v5
+      - name: Validate Windows PowerShell harness syntax
+        shell: pwsh
+        run: |
+          Get-ChildItem scripts/windows -Filter '*.ps1' | ForEach-Object {
+            $tokens=$null; $errors=$null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$errors) | Out-Null
+            if ($errors.Count) { throw ($errors | Out-String) }
+          }
       - uses: actions/setup-node@v5
         with:
           node-version: 22

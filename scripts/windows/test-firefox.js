@@ -94,10 +94,13 @@ const exec = promisify(execFile);
     driver = await new Builder()
       .forBrowser("firefox")
       .setFirefoxOptions(
-        new firefox.Options().setBinary(firefoxExe).addArguments("-headless"),
+        new firefox.Options()
+          .setBinary(firefoxExe)
+          .addArguments("-headless", "--allow-system-access"),
       )
       .setFirefoxService(new firefox.ServiceBuilder(geckoExe))
       .build();
+    await driver.manage().setTimeouts({ pageLoad: 30000, script: 15000 });
     const addonId = await driver.installAddon(addon, true);
     if (addonId !== "getanny@getanny.app")
       throw new Error(`Wrong Firefox add-on ID ${addonId}`);
@@ -110,41 +113,23 @@ const exec = promisify(execFile);
       30000,
       "actual Firefox native connection",
     );
-    // Read the UUID from Firefox's actual about:debugging UI. If that UI changes,
-    // reading our own freshly created test profile's generated preference is a
-    // fallback for DISCOVERY only. Never edit a profile or change signing prefs.
-    await driver.get("about:debugging#/runtime/this-firefox");
-    let base;
-    const profile = (await driver.getCapabilities()).get("moz:profile");
-    await waitFor(
-      async () => {
-        base = await driver.executeScript(() => {
-          const row = [...document.querySelectorAll(".debug-target-item")].find(
-            (el) => el.textContent.includes("getanny@getanny.app"),
-          );
-          return (
-            row?.innerHTML.match(/moz-extension:\/\/[a-f0-9-]+/i)?.[0] || null
-          );
-        });
-        if (!base) {
-          try {
-            const prefs = await fs.readFile(
-                path.join(profile, "prefs.js"),
-                "utf8",
-              ),
-              match = prefs.match(
-                /user_pref\("extensions.webextensions.uuids", (.+)\);/,
-              );
-            const id =
-              match && JSON.parse(JSON.parse(match[1]))["getanny@getanny.app"];
-            if (id) base = `moz-extension://${id}`;
-          } catch {}
-        }
-        return !!base;
-      },
-      20000,
-      "actual temporary Firefox extension UUID",
-    );
+    // Modern Firefox requires explicit WebDriver system access to inspect an
+    // extension page. This flag applies ONLY to our new automation profile; it
+    // does not disable add-on signing or grant a production extension permission.
+    // Read the UUID Firefox actually assigned, without modifying prefs/files.
+    await driver.setContext(firefox.Context.CHROME);
+    const uuid = await driver.executeScript(function (id) {
+      const prefs = Components.classes[
+        "@mozilla.org/preferences-service;1"
+      ].getService(Components.interfaces.nsIPrefBranch);
+      return JSON.parse(prefs.getStringPref("extensions.webextensions.uuids"))[
+        id
+      ];
+    }, addonId);
+    await driver.setContext(firefox.Context.CONTENT);
+    if (!/^[0-9a-f-]{36}$/i.test(uuid))
+      throw new Error("Firefox did not assign a valid extension UUID");
+    const base = `moz-extension://${uuid}`;
     await driver.get(base + "/popup.html");
     const popupHandle = await driver.getWindowHandle();
     await driver.wait(
@@ -244,7 +229,7 @@ const exec = promisify(execFile);
         {
           passed: true,
           browser: "Mozilla Firefox",
-          version: capabilities.get("browserVersion"),
+          browserVersion: capabilities.get("browserVersion"),
           temporary: true,
           transport: "native",
           checks: [

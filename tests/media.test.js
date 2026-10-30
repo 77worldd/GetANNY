@@ -7,7 +7,8 @@ const { normalizeFormats } = require("../src/main/media/formats");
 const { MediaDetector } = require("../src/main/media/MediaDetector");
 const { YtDlpWrapper } = require("../src/main/media/YtDlpWrapper");
 const { MediaEngine } = require("../src/main/media/MediaEngine");
-const { temporary, fixtureServer } = require("./helpers");
+const { temporary, fixtureServer, waitFor, checksum } = require("./helpers");
+const { createServices } = require("../src/main/services");
 const binPath = path.resolve(__dirname, "../bin");
 const ffmpeg = path.join(
   binPath,
@@ -273,4 +274,144 @@ test("an explicitly silent video remains downloadable without requiring a nonexi
   assert.equal(format.hasAudio, false);
   assert.equal(format.audioUnknown, false);
   assert.equal(format.mergeAudio, false);
+});
+
+test(
+  "REAL managed media: pause, process/database restart, ranged continuation, cancel and retry verify physical bytes",
+  { timeout: 65000 },
+  async (t) => {
+    const fixture = await mediaFixture(t);
+    if (!fixture) return;
+    const folder = await temporary(t, "getanny-media-lifecycle-");
+    const options = {
+      userDataPath: path.join(folder, "data"),
+      downloadPath: path.join(folder, "downloads"),
+      binPath,
+      extensionPath: path.resolve("dist-extension"),
+      port: 0,
+    };
+    let services = await createServices(options);
+    try {
+      await services.settings.set("speedLimit", 16 * 1024);
+      await services.settings.set("retryAttempts", 0);
+      const analysis = await services.mediaDetector.getFormats(
+        fixture.server.url + "/watch.html",
+      );
+      const format = analysis.formats.find((item) => item.group === "video");
+      assert.ok(format);
+      const selection = services.mediaDetector.selection({
+        analysisId: analysis.analysisId,
+        formatId: format.formatId,
+      });
+      const id = await services.manager.addMedia(selection);
+      await waitFor(
+        async () => {
+          if (services.manager.requireItem(id).downloadedSize <= 0)
+            return false;
+          const names = await fs.readdir(options.downloadPath);
+          for (const name of names.filter(
+            (name) => name.includes(`[${id}]`) && name.endsWith(".part"),
+          ))
+            if ((await fs.stat(path.join(options.downloadPath, name))).size > 0)
+              return true;
+          return false;
+        },
+        20000,
+        "actual media partial bytes flushed before pause",
+      );
+      await services.manager.pause(id);
+      await waitFor(() => !services.manager.running.has(id));
+      assert.equal(services.manager.requireItem(id).status, "paused");
+      const partials = (await fs.readdir(options.downloadPath)).filter((name) =>
+        name.includes(`[${id}]`),
+      );
+      assert.ok(
+        partials.some((name) => name.endsWith(".part")),
+        "actual continuation partial must exist",
+      );
+      assert.ok(
+        (
+          await fs.stat(
+            path.join(
+              options.downloadPath,
+              partials.find((name) => name.endsWith(".part")),
+            ),
+          )
+        ).size > 0,
+        "partial must physically contain bytes before restart",
+      );
+      await services.close();
+      services = await createServices(options);
+      assert.equal(services.manager.requireItem(id).status, "paused");
+      services.manager.resume(id);
+      await waitFor(
+        () =>
+          ["completed", "failed"].includes(
+            services.manager.requireItem(id).status,
+          ),
+        30000,
+        "media after real restart",
+      );
+      const resumed = services.manager.requireItem(id);
+      assert.equal(resumed.status, "completed", resumed.error);
+      assert.equal(
+        checksum(await fs.readFile(resumed.filePath)),
+        checksum(await fs.readFile(path.join(fixture.dir, "video.mp4"))),
+      );
+      assert.ok(
+        fixture.server.state.requests.some((request) =>
+          /^bytes=[1-9]\d*-/.test(request.range || ""),
+        ),
+        `yt-dlp actually requested remaining bytes: ${JSON.stringify(fixture.server.state.requests)}`,
+      );
+      const cancelled = await services.manager.addMedia(selection);
+      await waitFor(
+        () => services.manager.requireItem(cancelled).downloadedSize > 0,
+        20000,
+        "real media before cancellation",
+      );
+      await services.manager.cancel(cancelled);
+      await waitFor(() => !services.manager.running.has(cancelled));
+      assert.equal(services.manager.requireItem(cancelled).status, "cancelled");
+      assert.ok(
+        !(await fs.readdir(options.downloadPath)).some((name) =>
+          name.includes(`[${cancelled}]`),
+        ),
+        "owned cancelled media and partials must be removed",
+      );
+      services.manager.retry(cancelled);
+      await waitFor(
+        () =>
+          ["completed", "failed"].includes(
+            services.manager.requireItem(cancelled).status,
+          ),
+        30000,
+        "real media retry",
+      );
+      const retried = services.manager.requireItem(cancelled);
+      assert.equal(retried.status, "completed", retried.error);
+      assert.equal(
+        checksum(await fs.readFile(retried.filePath)),
+        checksum(await fs.readFile(path.join(fixture.dir, "video.mp4"))),
+      );
+    } finally {
+      await services.close();
+    }
+  },
+);
+
+test("media partial cleanup cannot delete a different file sharing only the old eight-character prefix", async (t) => {
+  const folder = await temporary(t),
+    id = "12345678-1111-2222-3333-444444444444";
+  const unrelated = path.join(folder, "Keep [12345678].txt"),
+    owned = path.join(folder, `Media [${id}].mp4.part`);
+  await fs.writeFile(unrelated, "preserve this separate file");
+  await fs.writeFile(owned, "partial");
+  const engine = new MediaEngine({ id, savePath: folder }, undefined);
+  await engine.cleanup();
+  assert.equal(
+    await fs.readFile(unrelated, "utf8"),
+    "preserve this separate file",
+  );
+  await assert.rejects(fs.access(owned), { code: "ENOENT" });
 });

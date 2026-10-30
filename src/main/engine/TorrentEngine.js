@@ -24,8 +24,7 @@ class TorrentEngine extends EventEmitter {
       // Never let WebTorrent overwrite an unrelated same-name user file.
       // Keep the same isolated folder on pause/resume and process restart.
       this.torrentPath =
-        this.torrentPath ||
-        path.join(this.savePath, `Torrent [${this.id.slice(0, 8)}]`);
+        this.torrentPath || path.join(this.savePath, `Torrent [${this.id}]`);
       this.savePath = this.torrentPath;
       this.setStatus("connecting", {
         phase: "Finding torrent metadata",

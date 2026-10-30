@@ -13,8 +13,8 @@
 
 - HTTP: capability probe uses an actual range response. Entity ETag / Last-Modified / total size and segment layout are persisted next to ID-scoped partials. Exact Content-Range, length and final stat are verified. Unknown total remains unknown until end of stream. Atomic same-directory hard link fails if an existing target appears; no overwrite.
 - Segments use bounded-memory worker streams. Throttle requests go to one per-transfer limiter, so parallel connections do not multiply the configured speed limit. On sibling failure workers are stopped and awaited. Assembly streams parts, then validates final byte count.
-- Media: a recent analyzed selection generates the yt-dlp format selector. Machine-readable progress is streamed, audio merging requires FFmpeg, and final completion requires successful process exit plus an actual nonempty reported file inside the expected destination. Pause uses continuation files; some websites cannot resume and may restart.
-- Torrents: per-job WebTorrent clients use an ID-isolated destination folder, verify pieces and persist data on pause; resume reopens/rechecks files. Completion stops seeding. A local TCP transfer is an installed-app CI gate; no public-tracker speed claims are made.
+- Media: full job IDs isolate output and partial cleanup (never a shared eight-character prefix). A recent analyzed selection generates the yt-dlp format selector. Machine-readable progress is streamed, audio merging requires FFmpeg, and final completion requires successful process exit plus an actual nonempty reported file inside the expected destination. Pause uses continuation files; some websites cannot resume and may restart.
+- Torrents: per-job WebTorrent clients use an ID-isolated destination folder, verify pieces and persist data on pause; resume reopens/rechecks files. Completion stops seeding. Cancellation stops the client but retains verified pieces; torrent directories are never recursively deleted by a generic file/history action. A local TCP transfer is an installed-app CI gate; no public-tracker speed claims are made.
 
 ## SQLite / preferences
 

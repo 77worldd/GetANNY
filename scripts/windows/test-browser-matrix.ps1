@@ -34,13 +34,16 @@ function Fetch-Browser([string]$id) {
  }
  throw "$id installed, but its executable was not found"
 }
-foreach($id in @('helium','brave','vivaldi','opera','firefox')) {
+foreach($id in @('helium','brave','vivaldi','opera','firefox','chrome')) {
  $folder=Join-Path $Results $id;New-Item $folder -ItemType Directory -Force | Out-Null
  try {
   if($id -eq 'firefox') {
    $browser="$env:PROGRAMFILES\Mozilla Firefox\firefox.exe"
    if(-not(Test-Path $browser)){throw 'Firefox is not installed on this runner.'}
    $gecko=Fetch-Browser 'geckodriver'
+  }elseif($id -eq 'chrome') {
+   $browser=@("$env:PROGRAMFILES\Google\Chrome\Application\chrome.exe","${env:PROGRAMFILES(X86)}\Google\Chrome\Application\chrome.exe","$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe") | Where-Object {Test-Path $_} | Select-Object -First 1
+   if(-not $browser){throw 'Google Chrome is not installed on this runner.'}
   }else{$browser=Fetch-Browser $id}
  }catch{
   $matrix.Add(@{browser=$id;status='unverified';reason=$_.Exception.Message})
@@ -56,7 +59,6 @@ foreach($id in @('helium','brave','vivaldi','opera','firefox')) {
   $matrix.Add(@{browser=$id;status=($code -eq 0 -and $report.passed ? 'passed' : 'failed');report="$id/browser-report.json"})
  }else{$matrix.Add(@{browser=$id;status='failed';reason="Test exited $code before producing a report."})}
 }
-$matrix.Add(@{browser='chrome';status='unverified';reason='Branded Chrome disables automated --load-extension. Ordinary developer-mode/store installation requires manual browser-UI approval; no policy/signing bypass is used.'})
 $matrix.Add(@{browser='edge';status='unverified';reason='Additional browser; ordinary developer-mode/store installation needs individual manual verification.'})
 $chromium=Join-Path (Split-Path $Results -Parent) 'browser\browser-report.json'
 if(Test-Path $chromium){$r=Get-Content $chromium -Raw|ConvertFrom-Json;$matrix.Add(@{browser='chromium';status=($r.passed ? 'passed' : 'failed');report='../browser/browser-report.json'})}

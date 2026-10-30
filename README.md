@@ -23,7 +23,7 @@ Download **GetANNY Setup.exe** or **GetANNY Setup.msi**, browser ZIPs, and `SHA2
 - HTTP/HTTPS, redirect handling, streamed large-file downloads, real bytes/s and ETA when size and speed are known.
 - Actual one-byte range capability probing; worker-thread segmentation only when supported. Exact response range, segment length and final byte count checks.
 - ID-isolated partials, persisted entity validators, safe continuation, restart when an entity changes, and atomic no-overwrite completion. Same-name files are numbered.
-- Pause waits for writers/workers to stop. Cancel removes this transfer's partials. Retry, bounded transient HTTP retries, a shared per-transfer bandwidth limiter, and one concurrent-job queue for files/media/torrents.
+- Pause waits for writers/workers to stop. HTTP/media cancellation removes only that job's owned partials. Torrent cancellation stops peers while retaining verified pieces in its isolated folder. Retry, bounded transient HTTP retries, a shared per-transfer bandwidth limiter, and one concurrent-job queue for files/media/torrents.
 - All / Active / Completed / Paused / Failed views, search, file-type filters, sorting, context menus, details, confirmed history removal / deletion, and OS file/folder opening.
 - SQLite migration preserves v1 history. Interrupted transfers restore paused unless startup resumption is enabled. URLs without an entity validator restart safely instead of mixing old and new bytes. Downloaded files are never automatically executed.
 
@@ -98,7 +98,7 @@ The Windows workflow builds installers, **installs both**, launches their actual
 
 ## Data and troubleshooting
 
-Data lives under Electron's per-user application-data directory (`getanny` by default). Open **Settings → Storage → Open data folder** to see SQLite history, preferences, extension resources, native manifests and setup diagnostics. Incomplete HTTP files are `.getanny-<id>.*` beside their destination. Media continuation files contain the job's eight-character ID. Do not rename these during a paused transfer.
+Data lives under Electron's per-user application-data directory (`getanny` by default). Open **Settings → Storage → Open data folder** to see SQLite history, preferences, extension resources, native manifests and setup diagnostics. Incomplete HTTP files are `.getanny-<id>.*` beside their destination. Media continuation files contain the job's full ID, avoiding prefix collisions. Do not rename these during a paused transfer.
 
 - `HTTP 401/403`: the server requires authorization, denied automated access, or the link expired. Obtain a new direct link; use Media studio for supported media pages.
 - `HTTP 404`: the resource is unavailable. Retrying an unchanged link does not repair it.

@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { PassThrough } = require("node:stream");
 const path = require("node:path");
+const fs = require("node:fs/promises");
 const { Database } = require("../src/main/database/database");
 const { DownloadsRepo } = require("../src/main/database/downloads-repo");
 const { createServices } = require("../src/main/services");
@@ -163,4 +164,44 @@ test("registration-only startup never restores, pauses, starts or rewrites persi
   } finally {
     reopened.close();
   }
+});
+
+test("read-only default-profile snapshots detect actual history/settings loss without printing private records", async (t) => {
+  const folder = await temporary(t),
+    db = new Database(folder);
+  await db.initialize();
+  const repo = new DownloadsRepo(db);
+  const output = path.join(folder, "retained.bin");
+  await fs.writeFile(output, "retained bytes");
+  repo.save({
+    id: "retained",
+    url: "https://private.example.test/file",
+    filename: "retained.bin",
+    savePath: folder,
+    status: "completed",
+  });
+  db.close();
+  const { snapshot } = require("../scripts/windows/snapshot-profile");
+  const before = snapshot(path.join(folder, "getanny.db"));
+  assert.equal(before.history, 1);
+  assert.equal(before.missingCompletedFiles, 0);
+  assert.match(before.sha256, /^[a-f0-9]{64}$/);
+  assert.ok(!JSON.stringify(before).includes("private.example"));
+  assert.deepEqual(snapshot(path.join(folder, "getanny.db")), before);
+  await fs.rm(output);
+  assert.equal(
+    snapshot(path.join(folder, "getanny.db")).missingCompletedFiles,
+    1,
+  );
+  const reopened = new Database(folder);
+  await reopened.initialize();
+  try {
+    new DownloadsRepo(reopened).remove("retained");
+  } finally {
+    reopened.close();
+  }
+  assert.notEqual(
+    snapshot(path.join(folder, "getanny.db")).sha256,
+    before.sha256,
+  );
 });

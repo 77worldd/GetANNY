@@ -29,7 +29,7 @@ class MediaEngine extends EventEmitter {
         );
       this.setStatus("connecting");
       await fs.mkdir(this.savePath, { recursive: true });
-      const stem = `${sanitizeFilename(media.title).slice(0, 140)} [${this.id.slice(0, 8)}]`;
+      const stem = `${sanitizeFilename(media.title).slice(0, 140)} [${this.id}]`;
       const outputTemplate =
         path.join(this.savePath, stem).replaceAll("%", "%%") + ".%(ext)s";
       let filePath;
@@ -123,7 +123,7 @@ class MediaEngine extends EventEmitter {
     const names = await fs.readdir(this.savePath).catch(() => []);
     await Promise.all(
       names
-        .filter((name) => name.includes(`[${this.id.slice(0, 8)}]`))
+        .filter((name) => name.includes(`[${this.id}]`))
         .map((name) => fs.rm(path.join(this.savePath, name), { force: true })),
     );
   }

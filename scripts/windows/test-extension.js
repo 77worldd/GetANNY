@@ -92,17 +92,75 @@ const exec = promisify(execFile);
         ...(browserExecutable
           ? { executablePath: browserExecutable }
           : { channel: "chromium" }),
-        headless: true,
-        ignoreDefaultArgs: ["--disable-extensions"],
-        args: [
-          `--disable-extensions-except=${prepared.path}`,
-          `--load-extension=${prepared.path}`,
+        // Vivaldi's Windows headless process crashed before extension loading.
+        // Exercise its real headed UI; Chrome also needs its normal approval UI.
+        headless: !["vivaldi", "chrome"].includes(browserId),
+        timeout: 60000,
+        ignoreDefaultArgs: [
+          "--disable-extensions",
+          ...(browserId === "vivaldi"
+            ? ["--disable-component-extensions-with-background-pages"]
+            : []),
         ],
+        args:
+          browserId === "chrome"
+            ? []
+            : [
+                `--disable-extensions-except=${prepared.path}`,
+                `--load-extension=${prepared.path}`,
+              ],
       },
     );
-    const worker =
-      browser.serviceWorkers()[0] ||
-      (await browser.waitForEvent("serviceworker", { timeout: 30000 }));
+    if (browserId === "chrome") {
+      // Deliberately use Chrome's supported visible developer-mode controls and
+      // native folder picker in a throwaway profile, not removed load flags,
+      // policies, signing bypasses or writes to the user's browser profile.
+      const manager = await browser.newPage();
+      await manager.goto("chrome://extensions/");
+      await manager.locator("#devMode").click();
+      const session = await browser.browser().newBrowserCDPSession();
+      const { processInfo } = await session.send("SystemInfo.getProcessInfo");
+      await session.detach();
+      const pid = processInfo.find((info) => info.type === "browser")?.id;
+      if (!pid)
+        throw new Error(
+          "Chrome browser process ID unavailable for the normal folder picker",
+        );
+      await Promise.all([
+        exec(
+          "powershell.exe",
+          [
+            "-NoProfile",
+            "-STA",
+            "-File",
+            path.join(__dirname, "select-extension-folder.ps1"),
+            "-BrowserPid",
+            String(pid),
+            "-Directory",
+            prepared.path,
+          ],
+          { timeout: 30000 },
+        ),
+        manager
+          .getByRole("button", { name: "Load unpacked", exact: true })
+          .click({ timeout: 10000 }),
+      ]);
+      await manager.screenshot({
+        path: path.join(root, "chrome-developer-consent.png"),
+      });
+      await manager.close();
+    }
+    let worker;
+    await waitFor(
+      () => {
+        worker = browser
+          .serviceWorkers()
+          .find((candidate) => new URL(candidate.url()).host === CHROMIUM_ID);
+        return !!worker;
+      },
+      30000,
+      `GetANNY service worker in ${browserId} (not a browser's built-in extension)`,
+    );
     const assertId = new URL(worker.url()).host;
     if (assertId !== CHROMIUM_ID)
       throw new Error(`Unexpected extension ID ${assertId}`);
@@ -200,6 +258,11 @@ const exec = promisify(execFile);
           browserExecutable: browserExecutable || "Playwright bundled Chromium",
           browserVersion: await browser.browser().version(),
           extensionId: CHROMIUM_ID,
+          installation:
+            browserId === "chrome"
+              ? "Normal developer-mode UI and native folder picker in a disposable test profile"
+              : "Unpacked developer test in a disposable profile",
+          headless: !["vivaldi", "chrome"].includes(browserId),
           transport:
             "Native Messaging → C# executable → Electron Node → authenticated WebSocket → installed Electron → SQLite/download engine",
           checks: [
