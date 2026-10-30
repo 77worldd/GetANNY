@@ -62,16 +62,21 @@ function qualification(run) {
     return `Windows verification did NOT pass (workflow conclusion: ${run.conclusion}). This is NOT a stable or fully verified release.`;
   return "The linked Windows workflow completed successfully. Consumer-machine, signing and permanent extension-installation limitations still apply.";
 }
-function assertAbsent(route, description) {
-  const result = spawnSync("gh", ["api", route], { encoding: "utf8" });
-  if (result.status === 0)
-    throw new Error(
-      `${description} already exists; nothing will be overwritten.`,
-    );
-  if (!/HTTP 404/.test(result.stderr || ""))
-    throw new Error(
-      `Cannot establish absence of ${description}: ${result.stderr}`,
-    );
+function assertPreparedRelease(release, expected, tag) {
+  assert.equal(
+    release.id,
+    expected.releaseId,
+    "Only the release prepared for this request may be updated",
+  );
+  assert.equal(release.tag_name, tag);
+  assert.equal(release.prerelease, true);
+  assert.equal(release.draft, false);
+  assert.ok(
+    release.body.includes(
+      `GetANNY-RC-Existing: ${expected.source} / artifact ${expected.artifactId}`,
+    ),
+    "Publication identity missing; unrelated releases must not be changed",
+  );
 }
 async function downloadArtifact(repo, id, target, digest) {
   const fd = fs.openSync(target, "w");
@@ -101,6 +106,7 @@ async function main() {
     runId: Number(process.env.GETANNY_SOURCE_RUN),
     artifactId: Number(process.env.GETANNY_ARTIFACT_ID),
     archiveSha256: process.env.GETANNY_ARTIFACT_SHA256,
+    releaseId: Number(process.env.GETANNY_RELEASE_ID),
   };
   assert.match(expected.source || "", /^[0-9a-f]{40}$/);
   assert.match(expected.archiveSha256 || "", /^[0-9a-f]{64}$/);
@@ -111,9 +117,10 @@ async function main() {
     "This path may publish RCs only",
   );
   const tag = `v${version}`;
-  assertAbsent(`repos/${repo}/releases/tags/${tag}`, `Release ${tag}`);
-  // The connected account prepares the immutable source tag. The runner may
-  // publish assets, but must not create/move tags at an older workflow commit.
+  const prepared = api(`repos/${repo}/releases/tags/${tag}`);
+  assertPreparedRelease(prepared, expected, tag);
+  // The connected account prepares the immutable source tag and marked RC.
+  // The runner uploads verified bytes without creating or moving any tag.
   const sourceTag = api(`repos/${repo}/git/ref/tags/${tag}`);
   assert.equal(sourceTag.object.type, "commit");
   assert.equal(
@@ -306,26 +313,33 @@ async function main() {
   const notes = path.join(work, "notes.md");
   await fsp.writeFile(
     notes,
-    `> **Release candidate — verification incomplete.** ${warning}\n> Public release hosting is not certification. These are the **same binaries** previously shared as an Actions artifact, not a new app build.\n\n${await fsp.readFile("docs/RELEASE_NOTES.md", "utf8")}\n\n${measured}\n## Build identity\n\nBuilt from: \`${expected.source}\`\n\nOriginal immutable artifact: https://github.com/${repo}/actions/runs/${expected.runId}/artifacts/${expected.artifactId}\n\n## SHA-256\n\n\`\`\`text\n${checksumText}\`\`\`\n`,
+    `> **Release candidate — verification incomplete.** ${warning}\n> Public release hosting is not certification. These are the **same binaries** previously shared as an Actions artifact, not a new app build.\n\n${await fsp.readFile("docs/RELEASE_NOTES.md", "utf8")}\n\n${measured}\n## Build identity\n\nBuilt from: \`${expected.source}\`\n\nOriginal immutable artifact: https://github.com/${repo}/actions/runs/${expected.runId}/artifacts/${expected.artifactId}\n\nPublication identity: \`GetANNY-RC-Existing: ${expected.source} / artifact ${expected.artifactId}\`\n\n## SHA-256\n\n\`\`\`text\n${checksumText}\`\`\`\n`,
   );
   const files = (await fsp.readdir(out)).sort();
-  command("gh", [
-    "release",
-    "create",
-    tag,
-    ...files.map((name) => `${path.join(out, name)}#${name}`),
-    "--repo",
-    repo,
-    "--target",
-    expected.source,
-    "--verify-tag",
-    "--prerelease",
-    "--latest=false",
-    "--title",
-    `GetANNY ${version} · Windows release candidate`,
-    "--notes-file",
-    notes,
-  ]);
+  for (const asset of prepared.assets) {
+    const name = asset.label || asset.name;
+    assert.ok(files.includes(name), `Unexpected pre-existing asset: ${name}`);
+    assert.equal(
+      asset.digest,
+      `sha256:${await sha256(path.join(out, name))}`,
+      `Existing asset differs; refusing overwrite: ${name}`,
+    );
+  }
+  const missing = files.filter(
+    (name) =>
+      !prepared.assets.some(
+        (item) => item.label === name || item.name === name,
+      ),
+  );
+  if (missing.length)
+    command("gh", [
+      "release",
+      "upload",
+      tag,
+      ...missing.map((name) => `${path.join(out, name)}#${name}`),
+      "--repo",
+      repo,
+    ]);
   const release = api(`repos/${repo}/releases/tags/${tag}`);
   assert.equal(release.prerelease, true);
   assert.equal(release.draft, false);
@@ -347,6 +361,17 @@ async function main() {
       `Published digest mismatch: ${name}`,
     );
   }
+  command("gh", [
+    "release",
+    "edit",
+    tag,
+    "--repo",
+    repo,
+    "--prerelease",
+    "--latest=false",
+    "--notes-file",
+    notes,
+  ]);
   console.log(
     JSON.stringify(
       {
@@ -381,4 +406,9 @@ if (require.main === module)
     console.log(`::error title=RC publication blocked::${message}`);
     process.exitCode = 1;
   });
-module.exports = { assertProvenance, parseChecksums, qualification };
+module.exports = {
+  assertProvenance,
+  parseChecksums,
+  qualification,
+  assertPreparedRelease,
+};

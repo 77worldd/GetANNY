@@ -70,3 +70,31 @@ test("pending, failed and cancelled workflows can never be described as passed",
     /completed successfully/,
   );
 });
+
+// This fixture is publication authorization logic, never operational evidence.
+test("only the specifically prepared marked prerelease may receive assets", () => {
+  const {
+    assertPreparedRelease,
+  } = require("../scripts/publish-existing-candidate");
+  const expected = { releaseId: 21, source: "a".repeat(40), artifactId: 34 };
+  const release = {
+    id: 21,
+    tag_name: "v2.0.0-rc.1",
+    prerelease: true,
+    draft: false,
+    body: `GetANNY-RC-Existing: ${expected.source} / artifact 34`,
+  };
+  assert.doesNotThrow(() =>
+    assertPreparedRelease(release, expected, "v2.0.0-rc.1"),
+  );
+  for (const change of [
+    { id: 22 },
+    { prerelease: false },
+    { draft: true },
+    { body: "unrelated release" },
+    { tag_name: "v1.0.0" },
+  ])
+    assert.throws(() =>
+      assertPreparedRelease({ ...release, ...change }, expected, "v2.0.0-rc.1"),
+    );
+});
