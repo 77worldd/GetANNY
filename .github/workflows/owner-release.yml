@@ -25,6 +25,7 @@ jobs:
       - name: Obtain the specifically identified build artifact
         shell: pwsh
         run: |
+          trap { $msg = ($_ | Out-String).Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A'); Write-Output "::error title=Build artifact acquisition::$msg"; exit 1 }
           $run = gh run view $env:BUILD_RUN --json headSha,headBranch | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or $run.headSha -ne $env:BUILD_SHA -or $run.headBranch -ne 'arena/42d3216b-getanny') { throw 'Build source does not match the authorized commit and branch.' }
           $deadline = (Get-Date).AddMinutes(15)
@@ -41,4 +42,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Could not download the identified build artifact.' }
       - name: Assemble and publish the owner-requested release
         shell: pwsh
-        run: ./scripts/windows/publish-owner-build.ps1
+        run: |
+          trap { $msg = ($_ | Out-String).Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A'); Write-Output "::error title=Official release publication::$msg"; exit 1 }
+          ./scripts/windows/publish-owner-build.ps1
