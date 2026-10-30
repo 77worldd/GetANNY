@@ -10,7 +10,6 @@ const {
 } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
-const { createServices } = require("./services");
 const { setupIpcHandlers } = require("./ipc-handlers");
 const { createTray } = require("./tray");
 const { createMenu } = require("./menu");
@@ -145,6 +144,8 @@ async function recordOperationStage(stage, detail = {}) {
 }
 async function init() {
   await recordOperationStage("init");
+  const { createServices } = require("./services");
+  await recordOperationStage("services-module-loaded");
   const userDataPath = app.getPath("userData");
   const binPath = app.isPackaged
     ? path.join(process.resourcesPath, "bin")

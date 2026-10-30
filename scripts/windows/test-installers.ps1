@@ -13,10 +13,16 @@ New-Item $results -ItemType Directory -Force | Out-Null
 New-Item $installRoot -ItemType Directory -Force | Out-Null
 $exePackage = Join-Path $root 'dist\GetANNY Setup.exe'
 $msiPackage = Join-Path $root 'dist\GetANNY Setup.msi'
-function Run-Checked([string] $File, [string[]] $Arguments, [int] $Timeout = 420000) {
+function Run-Checked([string] $File, [string[]] $Arguments, [int] $Timeout = 420000, [switch] $CaptureOutput) {
   $started = Get-Date
   "START $($started.ToString('o')) PID-pending $File $($Arguments -join ' ')" | Add-Content (Join-Path $results 'processes.log')
-  $p = Start-Process -FilePath $File -ArgumentList $Arguments -PassThru
+  $start = @{FilePath=$File;ArgumentList=$Arguments;PassThru=$true}
+  if ($CaptureOutput) {
+    $prefix = 'process-' + [guid]::NewGuid().ToString('N')
+    $start.RedirectStandardOutput = Join-Path $results "$prefix.stdout.log"
+    $start.RedirectStandardError = Join-Path $results "$prefix.stderr.log"
+  }
+  $p = Start-Process @start
   "STARTED $($started.ToString('o')) PID=$($p.Id) $File" | Add-Content (Join-Path $results 'processes.log')
   if (-not $p.WaitForExit($Timeout)) {
     $processInfo = @(Get-CimInstance Win32_Process | Where-Object {
@@ -110,7 +116,7 @@ $exeDir = Join-Path $installRoot 'exe-app'
 $exeData = Join-Path $installRoot 'exe-data'
 Write-Host 'Checking the unpacked browser-setup helper before NSIS installation...'
 $setupReport = Join-Path $results 'setup-helper.json'
-Run-Checked (Join-Path $root 'dist\win-unpacked\GetANNY.exe') @('--setup-browser-hosts','--quiet','--report',"`"$setupReport`"") 90000
+Run-Checked (Join-Path $root 'dist\win-unpacked\GetANNY.exe') @('--setup-browser-hosts','--quiet','--enable-logging','--report',"`"$setupReport`"") 90000 -CaptureOutput
 Write-Host 'Installing the actual NSIS EXE package...'
 Run-Checked $exePackage @('/S','/currentuser',"/D=$exeDir")
 $installedExe = Join-Path $exeDir 'GetANNY.exe'
