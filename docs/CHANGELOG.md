@@ -3,6 +3,7 @@
 ## 2.0.0-rc.3 — candidate source
 
 - Added a daily local-time start window for queued downloads, including overnight schedules and clean-restart persistence.
+- Browser review locks the intercepted file link and verifies the matching desktop transfer before cancelling the browser copy.
 - Reconciled Chromium handoffs after service-worker suspension using browser-session storage, and avoided browser download-ID reuse collisions and a disconnect race.
 - Added browser cookie-store selection when the download exposes a store ID, foreground attention for automatically accepted handoffs, and an Open source action.
 - Added standard, reduced and disabled motion modes; compacted page headings and moved Themes beside Settings.

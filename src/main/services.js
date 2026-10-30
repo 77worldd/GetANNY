@@ -129,8 +129,18 @@ async function createServices({
           createdAt: Date.now(),
         };
         pendingBrowserRequests.push(review);
-        events.emit("event", "browser:request", review);
-        onBrowserRequest(review);
+        // A UI delivery/focus failure must not turn an already-recorded
+        // review into a rejection that resumes the browser copy.
+        try {
+          events.emit("event", "browser:request", review);
+        } catch {
+          // The pending request remains available through bootstrap.
+        }
+        try {
+          onBrowserRequest(review);
+        } catch {
+          // Window focus is best effort, not an ownership decision.
+        }
         return {
           action: request.kind === "media" ? "analyze" : "review",
           pendingId: review.id,
@@ -234,7 +244,22 @@ async function createServices({
   async function commitBrowserRequest(id, downloadId) {
     const request = pendingBrowserRequests.find((request) => request.id === id);
     if (!request) return { found: false };
-    if (downloadId) manager.requireItem(downloadId);
+    if (request.intercepted && request.transferId) {
+      if (!downloadId)
+        throw new Error(
+          "A matching desktop download is required before browser handoff.",
+        );
+      const item = manager.requireItem(downloadId);
+      if (
+        item.kind !== "file" ||
+        item.browserTransferId !== request.transferId ||
+        item.browserSource !== request.source ||
+        item.url !== request.url
+      )
+        throw new Error(
+          "The desktop download does not match this browser request.",
+        );
+    } else if (downloadId) manager.requireItem(downloadId);
     takeBrowserRequest(id);
     if (request.intercepted && request.transferId) {
       const result = await wsServer.downloadCommand(

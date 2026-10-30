@@ -491,3 +491,74 @@ test("portable builds refuse persistent native host registration and retain WebS
   });
   assert.equal(hello.connected, true);
 });
+
+test("reviewed handoff cancels the browser only for the matching desktop file", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "getanny-review-match-"));
+  const services = await createServices({
+    userDataPath: dir,
+    downloadPath: path.join(dir, "downloads"),
+    binPath: path.resolve("bin"),
+    extensionPath: path.resolve("dist-extension"),
+    port: 0,
+    startTransfers: false,
+    onBrowserRequest: () => {
+      throw new Error("window unavailable");
+    },
+  });
+  t.after(async () => {
+    await services.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  const client = await connect(t, services.wsServer);
+  await message(client, {
+    type: "authenticate",
+    token: services.identity.token,
+  });
+  await message(client, {
+    type: "hello",
+    browserId: "chrome",
+    extensionId: CHROMIUM_ID,
+  });
+  const response = await message(client, {
+    type: "download",
+    url: "https://example.test/file.zip",
+    kind: "file",
+    intercepted: true,
+    transferId: "review-transfer",
+  });
+  assert.equal(response.action, "review");
+  assert.equal(services.pendingBrowserRequests.length, 1);
+  const commands = [];
+  services.wsServer.downloadCommand = async (...args) => {
+    commands.push(args);
+    return { success: true };
+  };
+  const unrelated = await services.manager.addDownload({
+    url: "https://example.test/other.zip",
+    browserSource: "chrome",
+    browserTransferId: "review-transfer",
+  });
+  await assert.rejects(
+    services.commitBrowserRequest(response.pendingId),
+    /matching desktop download/,
+  );
+  await assert.rejects(
+    services.commitBrowserRequest(response.pendingId, unrelated),
+    /does not match/,
+  );
+  assert.equal(commands.length, 0);
+  assert.equal(services.pendingBrowserRequests.length, 1);
+  const matching = await services.manager.addDownload({
+    url: "https://example.test/file.zip",
+    browserSource: "chrome",
+    browserTransferId: "review-transfer",
+  });
+  const committed = await services.commitBrowserRequest(
+    response.pendingId,
+    matching,
+  );
+  assert.equal(committed.cancelled, true);
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0][1], "cancel");
+  assert.equal(commands[0][2], "review-transfer");
+});

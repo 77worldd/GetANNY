@@ -12,6 +12,7 @@ import useSettingsStore from "../stores/useSettingsStore";
 import useUIStore from "../stores/useUIStore";
 export default function AddDownloadDialog({ initial = {}, onClose }) {
   const settings = useSettingsStore((state) => state.settings);
+  const intercepted = Boolean(initial.browserRequestId);
   const [kind, setKind] = useState(initial.torrent ? "torrent" : "file");
   const [url, setUrl] = useState(initial.url || "");
   const [filename, setFilename] = useState(initial.filename || "");
@@ -23,6 +24,8 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
     setBusy(true);
     setError("");
     try {
+      if (intercepted && (kind !== "file" || url.trim() !== initial.url))
+        throw new Error("A browser handoff must keep its original file link.");
       if (kind === "file" && !/^https?:\/\//i.test(url.trim()))
         throw new Error(
           "Enter an HTTP or HTTPS file URL. Use Media studio for a video page.",
@@ -110,6 +113,12 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
             <button
               type="button"
               className={kind === "torrent" ? "selected" : ""}
+              disabled={intercepted}
+              title={
+                intercepted
+                  ? "Browser handoffs must keep their original file link"
+                  : undefined
+              }
               onClick={() => {
                 setKind("torrent");
                 setError("");
@@ -126,9 +135,11 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
             }
             id="download-url"
             hint={
-              kind === "file"
-                ? "Paste the direct HTTP(S) link to a file, not a website’s download page."
-                : "Transfers depend on available peers. Pausing disconnects the torrent; resuming rechecks saved pieces."
+              intercepted
+                ? "The original browser link is locked to keep this handoff safe."
+                : kind === "file"
+                  ? "Paste the direct HTTP(S) link to a file, not a website’s download page."
+                  : "Transfers depend on available peers. Pausing disconnects the torrent; resuming rechecks saved pieces."
             }
           >
             <div className="input-group">
@@ -137,6 +148,7 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
                 autoFocus
                 id="download-url"
                 required
+                readOnly={intercepted}
                 type={kind === "file" ? "url" : "text"}
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}

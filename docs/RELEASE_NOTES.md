@@ -4,6 +4,7 @@ A reliability, browser-handoff, scheduling, workspace and distribution update. E
 
 ## Changes since rc.2
 
+- Browser review locks the intercepted file link and verifies the matching desktop transfer before cancelling the browser copy.
 - Browser handoffs use unique IDs and retain in-flight Chromium handoff state across service-worker suspension. A browser restart may still require manually resuming a paused browser download.
 - An optional daily local-time window gates queued transfer starts; running transfers are not stopped when the window ends. Scheduled queue entries persist across clean restarts.
 - Added an Open source action, compact headings, Themes beside Settings, and standard, reduced and disabled animation modes.
