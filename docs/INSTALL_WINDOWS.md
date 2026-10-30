@@ -15,7 +15,7 @@ Unless release evidence says Authenticode **Valid**, these packages are unsigned
 
 ## Development test-build downloads
 
-Each successful packaging step now retains a **`GetANNY-unsigned-test-build` artifact** on its Actions run, containing EXE, MSI, extension ZIPs, SHA-256 sums and `BUILD_STATUS.txt`. A later installed/uninstall/browser check may still be running or may fail. These artifacts are **not verified final releases**. Downloading Actions artifacts may require GitHub sign-in. The GitHub Release is only published if the separate full verification gate succeeds.
+Each successful packaging step now retains a **`GetANNY-unsigned-test-build` artifact** on its Actions run, containing EXE, MSI, extension ZIPs, SHA-256 sums and `BUILD_STATUS.txt`. A later installed/uninstall/browser check may still be running or may fail. These artifacts are **not verified final releases**. Downloading Actions artifacts may require GitHub sign-in. The fully verified publication route requires the separate full verification gate. A specifically authorized public RC can instead publish the same immutable build with pending/failed verification prominently disclosed; its `MEASURED_RESULTS.md` and release-page warning are authoritative. Public hosting alone is not certification.
 
 ## What has actually been measured
 

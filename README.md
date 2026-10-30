@@ -2,7 +2,7 @@
 
 **Reliable downloads. Clear control.** A Windows-first Electron download manager with a React workspace, persistent SQLite history, verified HTTP range transfers, yt-dlp media downloads, and authenticated browser integration.
 
-> **2.0.0-rc.1 is a release candidate.** It is not a claim that all seven browser brands or a pristine consumer Windows installation have been certified. Read [testing evidence and remaining gates](docs/TESTING.md). Release automation publishes only after actual EXE/MSI installation and installed-app tests pass. Unsigned installers and unsigned browser packages are clearly identified.
+> **2.0.0-rc.1 is a release candidate.** It is not a claim that all seven browser brands or a pristine consumer Windows installation have been certified. Read [testing evidence and remaining gates](docs/TESTING.md). A public release candidate may be published with incomplete verification clearly stated; this does not certify it. The separate full verification/promotion workflow still requires actual EXE/MSI installation and installed-app tests. Unsigned installers and unsigned browser packages are clearly identified.
 
 ## Get the Windows app
 
@@ -94,7 +94,7 @@ This is an explicitly labeled development preview backed by the **real** SQLite 
 - [Release notes](docs/RELEASE_NOTES.md)
 - [Third-party tool licenses and source information](docs/THIRD_PARTY.md)
 
-The Windows workflow builds installers, **installs both**, launches their actual executables, verifies downloads and media, tests restart/reinstall preservation, runs an actual Chromium-extension/native-host download, uninstalls, and retains reports. Built installers are retained immediately as `GetANNY-unsigned-test-build` artifacts even when later verification fails. These are clearly labelled development builds, **not** a passing release. Publishing requires explicit `publish=true` workflow dispatch or the opt-in commit trailer `GetANNY-Publish: prerelease` on this session branch, and every automated gate must succeed. Releases remain prereleases until the manual gates are resolved.
+The Windows workflow builds installers, **installs both**, launches their actual executables, verifies downloads and media, tests restart/reinstall preservation, runs an actual Chromium-extension/native-host download, uninstalls, and retains reports. Built installers are retained immediately as `GetANNY-unsigned-test-build` artifacts even when later verification fails. These are clearly labelled development builds, **not** a passing release. Publishing requires explicit `publish=true` workflow dispatch or the opt-in commit trailer `GetANNY-Publish: prerelease` on this session branch, and every automated gate must succeed for the fully verified route. An explicit `GetANNY-Publish-Existing` request can instead publish the exact immutable existing RC with pending/failed verification prominently disclosed; provenance, binary checksums and uploaded asset digests are mandatory. It never promotes to stable. Releases remain prereleases until the manual gates are resolved.
 
 ## Data and troubleshooting
 
