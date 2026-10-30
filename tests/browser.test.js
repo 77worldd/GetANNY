@@ -462,6 +462,7 @@ test("automatic browser handoff foregrounds the application without jeopardizing
 
 test("portable builds refuse persistent native host registration and retain WebSocket pairing", async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "getanny-portable-"));
+  const fixture = await fixtureServer(t, { size: 256 * 1024 });
   const services = await createServices({
     userDataPath: dir,
     downloadPath: path.join(dir, "downloads"),
@@ -480,18 +481,39 @@ test("portable builds refuse persistent native host registration and retain WebS
   );
   const { checkBrowserPreparation } = require("../src/main/self-test");
   assert.equal((await checkBrowserPreparation(services, true)).length, 8);
-  const client = await connect(t, services.wsServer);
+  await services.settings.set("confirmBrowserDownloads", false);
+  const client = await connect(
+    t,
+    services.wsServer,
+    `chrome-extension://${CHROMIUM_ID}`,
+  );
   const auth = await message(client, {
     type: "authenticate",
     token: services.identity.token,
+    transport: "websocket",
   });
   assert.equal(auth.success, true);
   const hello = await message(client, {
     type: "hello",
-    browserId: "chrome",
+    browserId: "chromium",
     extensionId: CHROMIUM_ID,
   });
   assert.equal(hello.connected, true);
+  assert.equal(hello.transport, "websocket");
+  const response = await message(client, {
+    type: "download",
+    url: fixture.url + "/portable-bridge.bin",
+    filename: "portable-bridge.bin",
+  });
+  assert.equal(response.action, "queued");
+  await waitFor(
+    () => services.manager.requireItem(response.id).status === "completed",
+  );
+  const item = services.downloadsRepo.get(response.id);
+  assert.equal(
+    checksum(await fs.readFile(item.filePath)),
+    checksum(fixture.state.data),
+  );
 });
 
 test("reviewed handoff cancels the browser only for the matching desktop file", async (t) => {
