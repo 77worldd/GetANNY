@@ -111,10 +111,10 @@ test("draft release must contain every byte-verified asset before publication", 
   const bytes = Buffer.from("test only");
   await fs.writeFile(path.join(dir, "GetANNY Setup.exe"), bytes);
   const release = {
-    tag_name: "v2.0.0-rc.3",
+    tag_name: "v2.0.0",
     target_commitish: "commit",
     draft: true,
-    prerelease: true,
+    prerelease: false,
     assets: [
       {
         label: "GetANNY Setup.exe",
@@ -124,11 +124,11 @@ test("draft release must contain every byte-verified asset before publication", 
       },
     ],
   };
-  const expected = { tag: "v2.0.0-rc.3", source: "commit" };
+  const expected = { tag: "v2.0.0", source: "commit" };
   assert.equal(await verifyReleaseAssets(release, dir, expected), 1);
   for (const change of [
     { draft: false },
-    { prerelease: false },
+    { prerelease: true },
     { target_commitish: "other" },
     { assets: [] },
     { assets: [{ ...release.assets[0], digest: "sha256:wrong" }] },

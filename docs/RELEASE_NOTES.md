@@ -1,4 +1,4 @@
-# GetANNY 2.0.0-rc.3 — Windows release candidate
+# GetANNY 2.0.0 — official Windows release
 
 A reliability, browser-handoff, scheduling, workspace and distribution update. Existing HTTP, media, torrent, history and settings systems remain in place.
 
@@ -9,7 +9,7 @@ A reliability, browser-handoff, scheduling, workspace and distribution update. E
 - An optional daily local-time window gates queued transfer starts; running transfers are not stopped when the window ends. Scheduled queue entries persist across clean restarts.
 - Added an Open source action, compact headings, Themes beside Settings, and standard, reduced and disabled animation modes.
 - Added a portable target and a single Windows distribution bundle. The portable app requires the paired WebSocket fallback for browser integration while it is running; persistent native host setup requires the installer. See `PORTABLE_WINDOWS.md`.
-- Complete application localization and Arabic RTL are not included in this candidate.
+- Complete application localization and Arabic RTL are not included in this release.
 
 ## Downloads and performance
 
@@ -52,4 +52,4 @@ A reliability, browser-handoff, scheduling, workspace and distribution update. E
 - Public-network performance, installed whole-desktop RAM/idle CPU, disk-full/power-loss, proxies, antivirus and real-world tracker behavior require broader field evidence.
 - Per-download connection/rate changes apply to new/resumed jobs. The optional limit is per transfer, not a hidden global limit.
 
-See [test evidence](https://github.com/p4yy/GetANNY/blob/arena/42d3216b-getanny/docs/TESTING.md), [Windows instructions](https://github.com/p4yy/GetANNY/blob/arena/42d3216b-getanny/docs/INSTALL_WINDOWS.md), and [browser guides](https://github.com/p4yy/GetANNY/blob/arena/42d3216b-getanny/docs/BROWSERS.md). This remains a **prerelease** until the attached verification gates and disclosed manual requirements are resolved.
+See [test evidence](https://github.com/p4yy/GetANNY/blob/arena/42d3216b-getanny/docs/TESTING.md), [Windows instructions](https://github.com/p4yy/GetANNY/blob/arena/42d3216b-getanny/docs/INSTALL_WINDOWS.md), and [browser guides](https://github.com/p4yy/GetANNY/blob/arena/42d3216b-getanny/docs/BROWSERS.md). This is an official release, not an assurance that the limitations above or the remaining manual verification requirements have been resolved.

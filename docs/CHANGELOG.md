@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0-rc.3 — candidate source
+## 2.0.0 — Windows release source
 
 - Added a daily local-time start window for queued downloads, including overnight schedules and clean-restart persistence.
 - Browser review locks the intercepted file link and verifies the matching desktop transfer before cancelling the browser copy.

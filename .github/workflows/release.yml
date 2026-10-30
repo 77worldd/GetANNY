@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish a prerelease ONLY after all automated gates pass
+        description: Publish the official release ONLY after all automated gates pass
         type: boolean
         default: false
 permissions:
@@ -172,12 +172,12 @@ jobs:
           name: GetANNY-tested-windows-release
           path: release-assets/
           retention-days: 30
-      - name: Publish explicitly requested release candidate (not a claim of manual certification)
+      - name: Publish explicitly requested official release (not a claim of manual certification)
         # A trusted push can explicitly opt in when the repository integration
         # lacks Actions dispatch permission. Neither route skips a single gate.
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.publish) ||
-          (github.event_name == 'push' && contains(github.event.head_commit.message, 'GetANNY-Publish: prerelease'))
+          (github.event_name == 'push' && contains(github.event.head_commit.message, 'GetANNY-Publish: stable'))
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -203,7 +203,7 @@ jobs:
           ) -join "`n" | Set-Content $notesFile
           # Never expose a partially uploaded release if GitHub or the network
           # fails mid-transfer. Leave a draft for investigation instead.
-          gh release create $tag --draft --target '${{ github.sha }}' --prerelease --title "GetANNY $version · Windows release candidate" --notes-file $notesFile
+          gh release create $tag --draft --target '${{ github.sha }}' --title "GetANNY $version · Official Windows release" --notes-file $notesFile
           if ($LASTEXITCODE -ne 0) { throw 'GitHub draft creation failed.' }
           $labeledAssets = Get-ChildItem release-assets -File | ForEach-Object { "$($_.FullName)#$($_.Name)" }
           gh release upload $tag @labeledAssets

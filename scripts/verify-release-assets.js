@@ -14,8 +14,8 @@ async function verifyReleaseAssets(release, directory, { tag, source }) {
   );
   assert.equal(
     release.prerelease,
-    true,
-    "Only release candidates may be published",
+    false,
+    "The official release must not be marked as a prerelease",
   );
   const entries = await fs.readdir(directory, { withFileTypes: true });
   const names = entries
