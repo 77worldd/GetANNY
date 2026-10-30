@@ -22,7 +22,7 @@ jobs:
     # Existing-build publication has its own narrow provenance/digest job.
     # Product changes and normal pushes still run every original verification gate.
     if: >-
-      ${{ !contains(github.event.head_commit.message, 'GetANNY-Publish-Existing:') }}
+      ${{ !contains(github.event.head_commit.message, 'GetANNY-Publish-Existing:') && !contains(github.event.head_commit.message, 'GetANNY-Publish-NoTests:') }}
     name: Build, install, exercise and uninstall EXE + MSI
     runs-on: windows-latest
     timeout-minutes: 90
