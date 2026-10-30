@@ -112,6 +112,15 @@ async function main() {
   );
   const tag = `v${version}`;
   assertAbsent(`repos/${repo}/releases/tags/${tag}`, `Release ${tag}`);
+  // The connected account prepares the immutable source tag. The runner may
+  // publish assets, but must not create/move tags at an older workflow commit.
+  const sourceTag = api(`repos/${repo}/git/ref/tags/${tag}`);
+  assert.equal(sourceTag.object.type, "commit");
+  assert.equal(
+    sourceTag.object.sha,
+    expected.source,
+    "Prepared release tag differs from the actual build",
+  );
   // Nothing shipped in the app may have changed since the recorded build.
   command("git", ["merge-base", "--is-ancestor", expected.source, "HEAD"]);
   command("git", [
@@ -309,6 +318,7 @@ async function main() {
     repo,
     "--target",
     expected.source,
+    "--verify-tag",
     "--prerelease",
     "--latest=false",
     "--title",
