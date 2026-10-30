@@ -1,8 +1,23 @@
 # Test evidence and release gates
 
-Development began 29 October 2026; measured UTC timestamps are recorded below. The baseline was `f74fea83`. This file distinguishes executed tests from intended CI gates and manual work. No simulated transfer results are used as download evidence.
+This file distinguishes executed tests from intended CI gates and manual work. No simulated transfer results are used as download evidence.
 
-## Executed in the Linux Arena workspace
+## Current 2.0.0-rc.2 evidence
+
+- Upgrade baseline: `98c4ae7891d20a05dd46e72fcc37c89d72eeb273`. Initial validated upgrade source: `c160fe87df658c4f74cddcf010cc78c82430d80b`.
+- Latest full Linux source suite at that source: **79/79 passed, 0 failed, 0 skipped, 50.23 seconds**. This includes real yt-dlp extraction, direct media, adaptive DASH merging, managed media restart/resume, independent VTT→SRT conversion and real FFmpeg preview extraction. The local development tools came from PyPI/npm registries because GitHub release storage is blocked here; Windows packaging still requires the separately pinned SHA-256-verified tools.
+- Production renderer and all eight extension packages built successfully. `npm audit --audit-level=high` reported **0 vulnerabilities** on 30 October 2026.
+- Full real-backend Chromium UI run passed **13 checks with 22 screenshots** at `2026-10-30T12:56:30.759Z`, with no uncaught renderer errors. It covers HTTP hash/pause/resume, real metadata tabs, thumbnail download, independent SRT plus alongside-video VTT, completed-video preview, all 12 palettes and both system modes at 4.5:1 token contrast, gallery/quick switching, responsive widths and keyboard dialogs. This is not full WCAG or installed-Electron certification.
+- New ordinary-handoff unit coverage includes PDF, archive, image, video, document and unknown/large files; cookie/referer/user-agent forwarding; definitive and ambiguous failures; native cleanup retry; private fallback and idempotent review commands. Real installed-browser assertions were added to the Windows Chromium and Firefox harnesses; their outcomes must be read from Windows evidence, not inferred from unit tests.
+- Repeatable backend comparison: `node scripts/benchmark-backend.js --compare=98c4ae7891d20a05dd46e72fcc37c89d72eeb273 --runs=3`. Each fresh-process run transferred a generated 128 MiB payload through four ranges and verified SHA-256. Median baseline → current: throughput **152.9 → 220.4 MiB/s** (1.44×), transfer CPU **1452.1 → 805.7 ms** (44.5% lower), peak RSS **210.8 → 103.9 MiB** (50.7% lower), post-GC idle RSS **150.0 → 97.3 MiB**, requests **6 → 5**, persistence saves **10 → 7**, ten full browser-status calls **46.8 → 12.1 ms**. The raw report is `.arena/backend-benchmark.json`.
+- Benchmark scope is deliberately narrow: local source backend with the HTTP server in the same process, not public-network speed or whole installed Electron RAM. Short idle CPU sampled **0.052% → 0.085%**; this near-zero difference did **not** demonstrate an idle-CPU reduction and is not presented as one. Installed desktop resource measurement remains a separate gate.
+- Initial Windows upgrade run: [41059193083](https://github.com/77worldd/GetANNY/actions/runs/41059193083). It uses the initial `c160fe8` test source; rc.2 removes obsolete worker packaging and corrects guides/versioning, so a subsequent rc.2 run is required before publication. Do not treat a running job or packaged artifact as a verified release.
+
+## Historical evidence before the rc.2 upgrade
+
+Development began 29 October 2026; historical UTC timestamps are recorded below. The earlier baseline was `f74fea83`.
+
+### Executed in the Linux Arena workspace (historical)
 
 - Latest executed full Linux suite: **62/62 passed, 0 skipped, 50.97 seconds**. Includes explicit Quit/cold-launch/EOF behavior, registration-only history preservation and the real SQLite N-API / torrent / worker packaging contract and read-only MSI resource updates. Process-launch intent tests use a documented spy; actual download evidence uses real processes and transfers.
 - **Latest measured Windows run [40980506581](https://github.com/77worldd/GetANNY/actions/runs/40980506581), source `a863dc2`: 61 backend / 9 compiled C# checks passed, 0 skipped.** Actual EXE default-profile checks passed **14/14**, followed by **4/4 actual desktop-lifecycle checks**: compiled-native cold launch and SHA-verified physical download; actual window close without native-host resurrection; actual Desktop and Start Menu shell-shortcut launches/closures. EXE reinstall, uninstall/retention and MSI first/reinstall gates were reached successfully. **The overall job failed at the browser matrix:** Vivaldi exited 0xC0000005 before CDP, Firefox rejected the harness's incorrect automation-access flag, and Chrome's folder-picker helper did not locate the dialog. Chromium, Helium, Brave and Opera passed the complete native/file/media chain. MSI default-profile/cold/shortcut/uninstall tests were **not reached** in that source. The old aggregated installed annotation was truncated near 4 KiB, so exact later retention counts cannot be recovered from it.

@@ -119,7 +119,7 @@ test("checked-in Chromium public key derives the allowlisted extension ID", asyn
   assert.ok(manifest.permissions.includes("nativeMessaging"));
 });
 
-test("afterPack verifies the real SQLite N-API layout, torrent binary and worker; missing payloads fail closed", async (t) => {
+test("afterPack verifies the real SQLite N-API layout and torrent binary; missing payloads fail closed", async (t) => {
   const afterPack = require("../scripts/verify-installed-resources");
   const root = await temporary(t),
     resources = path.join(root, "resources");
@@ -137,7 +137,6 @@ test("afterPack verifies the real SQLite N-API layout, torrent binary and worker
     "extension/firefox/manifest.json",
     "app.asar.unpacked/node_modules/better-sqlite3/prebuilds/win32-x64.node",
     "app.asar.unpacked/node_modules/node-datachannel/build/Release/node_datachannel.node",
-    "app.asar.unpacked/src/main/engine/chunk-worker.js",
   ];
   // Structural fixtures only. Real executable loading is a separate installed
   // Windows gate; a two-byte MZ fixture does not establish PE validity.
