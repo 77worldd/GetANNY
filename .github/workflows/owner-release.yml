@@ -7,7 +7,8 @@ permissions:
   contents: write
 jobs:
   publish:
-    if: contains(github.event.head_commit.message, 'GetANNY-Publish-NoTests: 41108662586')
+    if: >-
+      ${{ contains(github.event.head_commit.message, 'GetANNY-Publish-NoTests: 41108662586') }}
     runs-on: windows-latest
     timeout-minutes: 45
     env:
