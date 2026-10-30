@@ -478,6 +478,8 @@ test("portable builds refuse persistent native host registration and retain WebS
     services.prepareBrowser("chrome"),
     /portable launcher.*temporary files/i,
   );
+  const { checkBrowserPreparation } = require("../src/main/self-test");
+  assert.equal((await checkBrowserPreparation(services, true)).length, 8);
   const client = await connect(t, services.wsServer);
   const auth = await message(client, {
     type: "authenticate",
