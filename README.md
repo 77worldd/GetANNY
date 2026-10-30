@@ -2,7 +2,7 @@
 
 **Reliable downloads. Clear control.** A Windows-first Electron download manager with a React workspace, persistent SQLite history, verified HTTP range transfers, yt-dlp media downloads, and authenticated browser integration.
 
-> **Current source: 2.0.0-rc.2.** Initial upgrade validation is in [workflow 41059193083](https://github.com/77worldd/GetANNY/actions/runs/41059193083); the rc.2 candidate verification follows. This is not a claim that all browser brands or a pristine consumer Windows installation have been certified. Read [testing evidence and remaining gates](docs/TESTING.md). Unsigned installers and unsigned browser packages are clearly identified.
+> **Current source: 2.0.0-rc.2.** Initial upgrade run [41059193083](https://github.com/77worldd/GetANNY/actions/runs/41059193083) passed backend/packaging gates but failed at NSIS installation timeout; the rc.2 candidate verification follows with expanded diagnostics. This is not a claim that all browser brands or a pristine consumer Windows installation have been certified. Read [testing evidence and remaining gates](docs/TESTING.md). Unsigned installers and unsigned browser packages are clearly identified.
 
 ## Get the Windows app
 
