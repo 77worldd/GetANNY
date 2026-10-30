@@ -459,3 +459,35 @@ test("automatic browser handoff foregrounds the application without jeopardizing
   assert.equal(services.manager.getAll().length, 1);
   assert.equal(shown, 1);
 });
+
+test("portable builds refuse persistent native host registration and retain WebSocket pairing", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "getanny-portable-"));
+  const services = await createServices({
+    userDataPath: dir,
+    downloadPath: path.join(dir, "downloads"),
+    binPath: path.resolve("bin"),
+    extensionPath: path.resolve("dist-extension"),
+    port: 0,
+    isPortable: true,
+  });
+  t.after(async () => {
+    await services.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  await assert.rejects(
+    services.prepareBrowser("chrome"),
+    /portable launcher.*temporary files/i,
+  );
+  const client = await connect(t, services.wsServer);
+  const auth = await message(client, {
+    type: "authenticate",
+    token: services.identity.token,
+  });
+  assert.equal(auth.success, true);
+  const hello = await message(client, {
+    type: "hello",
+    browserId: "chrome",
+    extensionId: CHROMIUM_ID,
+  });
+  assert.equal(hello.connected, true);
+});

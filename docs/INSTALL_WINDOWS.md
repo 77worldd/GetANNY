@@ -2,6 +2,8 @@
 
 ## End-user installation
 
+For the portable executable and its browser-integration limitations, see [PORTABLE_WINDOWS.md](PORTABLE_WINDOWS.md).
+
 Requirements: Windows 10/11 x64, ordinary user account, writable destination/download folders, network access to your download sources. The standalone application includes its JavaScript runtime, native modules, yt-dlp, FFmpeg/ffprobe and native messaging launcher. Windows supplies .NET Framework 4.x for the small launcher; no separate Node.js or Python is needed.
 
 1. Download **GetANNY Setup.exe** OR **GetANNY Setup.msi** and `SHA256SUMS.txt` from the same GitHub Release.
@@ -15,7 +17,7 @@ Unless release evidence says Authenticode **Valid**, these packages are unsigned
 
 ## Development test-build downloads
 
-Each successful packaging step now retains a **`GetANNY-unsigned-test-build` artifact** on its Actions run, containing EXE, MSI, extension ZIPs, SHA-256 sums and `BUILD_STATUS.txt`. A later installed/uninstall/browser check may still be running or may fail. These artifacts are **not verified final releases**. Downloading Actions artifacts may require GitHub sign-in. The fully verified publication route requires the separate full verification gate. A specifically authorized public RC can instead publish the same immutable build with pending/failed verification prominently disclosed; its `MEASURED_RESULTS.md` and release-page warning are authoritative. Public hosting alone is not certification.
+Each successful packaging step now retains a **`GetANNY-unsigned-test-build` artifact** on its Actions run, containing EXE, MSI, portable EXE, extension ZIPs, SHA-256 sums and `BUILD_STATUS.txt`. A later installed/uninstall/browser check may still be running or may fail. These artifacts are **not verified final releases**. Downloading Actions artifacts may require GitHub sign-in. The fully verified publication route requires the separate full verification gate. A specifically authorized public RC can instead publish the same immutable build with pending/failed verification prominently disclosed; its `MEASURED_RESULTS.md` and release-page warning are authoritative. Public hosting alone is not certification.
 
 ## What has actually been measured
 

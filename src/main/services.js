@@ -29,6 +29,7 @@ async function createServices({
   extensionPath,
   appPath = process.execPath,
   isPackaged = false,
+  isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE),
   nativeImage = null,
   port = 29615,
   onSettingChange = async () => {},
@@ -275,6 +276,10 @@ async function createServices({
     return { websocket, browsers };
   }
   async function prepareBrowser(id, onProgress = async () => {}) {
+    if (isPortable)
+      throw new Error(
+        "The portable launcher uses temporary files and cannot register a persistent native host. Use the installed app, or load the extension and pair its WebSocket while GetANNY is running.",
+      );
     await onProgress("extension-prepare", { browserId: id });
     const extension = await extensionInstaller.install(id);
     await onProgress("native-register", { browserId: id });

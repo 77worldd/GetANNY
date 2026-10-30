@@ -182,3 +182,28 @@ test("release checksums stream file contents and exclude their own output", asyn
     lines[0] + "\n",
   );
 });
+
+test("portable packaging and the distribution bundle are gated by a packaged portable self-test", async () => {
+  const version = require("../package.json").version;
+  assert.equal(require("../package-lock.json").version, version);
+  for (const file of [
+    "src/extension/manifest.json",
+    "src/extension/manifest-firefox.json",
+  ]) {
+    const manifest = JSON.parse(await fs.readFile(file, "utf8"));
+    assert.equal(manifest.version, version.replace(/-rc\.(\d+)$/, ".$1"));
+  }
+  const config = await fs.readFile("electron-builder.yml", "utf8");
+  assert.match(config, /target: portable/);
+  const installTest = await fs.readFile(
+    "scripts/windows/test-installers.ps1",
+    "utf8",
+  );
+  assert.match(installTest, /Self-Test .*portable-first-launch/);
+  const assembly = await fs.readFile(
+    "scripts/windows/assemble-release.ps1",
+    "utf8",
+  );
+  assert.match(assembly, /portable-first-launch/);
+  assert.match(assembly, /GetANNY-v\$version-Windows/);
+});
