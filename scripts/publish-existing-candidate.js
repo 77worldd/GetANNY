@@ -361,6 +361,14 @@ async function main() {
 if (require.main === module)
   main().catch((error) => {
     console.error(error);
+    // Preserve the precise blocker through the Checks API even when the
+    // sandbox cannot reach the external Actions ZIP-log host.
+    const message = String(error.stack || error.message)
+      .slice(0, 3000)
+      .replaceAll("%", "%25")
+      .replaceAll("\r", "%0D")
+      .replaceAll("\n", "%0A");
+    console.log(`::error title=RC publication blocked::${message}`);
     process.exitCode = 1;
   });
 module.exports = { assertProvenance, parseChecksums, qualification };
