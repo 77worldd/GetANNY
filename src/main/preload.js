@@ -1,4 +1,68 @@
-const {contextBridge,ipcRenderer}=require('electron');
-const invokeChannels=['download:add','download:add-torrent','download:pause','download:resume','download:cancel','download:remove','download:retry','download:get-all','download:get-active','download:get-completed','download:get-failed','download:clear-completed','download:open-file','download:open-folder','torrent:pause','torrent:resume','torrent:remove','media:detect','media:get-formats','media:download','settings:get','settings:get-all','settings:set','settings:reset','browser:detect','browser:install-extension','browser:check-extension','browser:setup-native-messaging','browser:status','dialog:select-folder','dialog:select-file','app:get-version','app:get-platform','app:get-download-path','app:open-external','stats:get-overview'];
-const receiveChannels=['download:progress','download:status','download:complete','download:error','download:added','media:detected','media:formats','notification:show','menu:add-download','update:status','torrent:progress','torrent:complete'];
-contextBridge.exposeInMainWorld('getanny',{invoke(channel,...args){if(!invokeChannels.includes(channel))return Promise.reject(new Error(`Invalid IPC channel: ${channel}`));return ipcRenderer.invoke(channel,...args)},on(channel,callback){if(!receiveChannels.includes(channel))throw new Error(`Invalid IPC event: ${channel}`);const listener=(_event,...args)=>callback(...args);ipcRenderer.on(channel,listener);return()=>ipcRenderer.removeListener(channel,listener)},platform:process.platform,window:{minimize:()=>ipcRenderer.send('app:minimize'),maximize:()=>ipcRenderer.send('app:maximize'),close:()=>ipcRenderer.send('app:close')}});
+const { contextBridge, ipcRenderer } = require("electron");
+const channels = [
+  "app:bootstrap",
+  "download:add",
+  "download:add-torrent",
+  "download:pause",
+  "download:resume",
+  "download:cancel",
+  "download:remove",
+  "download:retry",
+  "download:clear-completed",
+  "download:get-all",
+  "download:open-file",
+  "download:open-folder",
+  "media:get-formats",
+  "media:download",
+  "settings:get-all",
+  "settings:set",
+  "settings:reset",
+  "browser:status",
+  "browser:detect",
+  "browser:prepare",
+  "browser:open-extensions",
+  "browser:open-package",
+  "browser:locate",
+  "browser:pairing-key",
+  "browser:ack-request",
+  "dialog:select-folder",
+  "dialog:select-torrent",
+  "app:open-external",
+  "app:open-data-folder",
+  "app:window-state",
+  "app:quit",
+];
+const events = [
+  "downloads:changed",
+  "download:progress",
+  "download:status",
+  "download:complete",
+  "download:error",
+  "download:added",
+  "settings:changed",
+  "browser:request",
+  "browser:changed",
+  "menu:add-download",
+  "menu:settings",
+  "window:state",
+];
+contextBridge.exposeInMainWorld("getanny", {
+  desktop: true,
+  invoke(channel, ...args) {
+    if (!channels.includes(channel))
+      return Promise.reject(new Error("Unsupported desktop action."));
+    return ipcRenderer.invoke(channel, ...args);
+  },
+  on(channel, callback) {
+    if (!events.includes(channel))
+      throw new Error("Unsupported desktop event.");
+    const listener = (_event, ...args) => callback(...args);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
+  window: {
+    minimize: () => ipcRenderer.send("window:minimize"),
+    maximize: () => ipcRenderer.send("window:maximize"),
+    close: () => ipcRenderer.send("window:close"),
+  },
+});

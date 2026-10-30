@@ -1,3 +1,51 @@
-const http=require('node:http');const https=require('node:https');async function httpGet(url,{headers={},timeout=15000,method='GET'}={}){for(let i=0;i<10;i++){const u=new URL(url),mod=u.protocol==='https:'?https:http;const result=await new Promise((resolve,reject)=>{const req=mod.request(u,{method,headers,timeout},res=>{if([301,302,303,307,308].includes(res.statusCode)&&res.headers.location){res.resume();resolve({redirect:new URL(res.headers.location,u).href});return}let body=[];if(method==='HEAD')res.resume();else res.on('data',b=>body.push(b));res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,body:Buffer.concat(body)}));});req.on('error',reject);req.setTimeout(timeout,()=>req.destroy(Error('Network timeout')));req.end()});if(result.redirect){url=result.redirect;continue}return result}throw Error('Too many redirects')}
-async function isReachable(url){try{const r=await httpGet(url,{method:'HEAD',timeout:3000});return r.status>=200&&r.status<400}catch{return false}}
-module.exports={httpGet,isReachable};
+const http = require("node:http");
+const https = require("node:https");
+async function httpGet(
+  url,
+  { headers = {}, timeout = 15000, method = "GET" } = {},
+) {
+  for (let i = 0; i < 10; i++) {
+    const u = new URL(url),
+      mod = u.protocol === "https:" ? https : http;
+    const result = await new Promise((resolve, reject) => {
+      const req = mod.request(u, { method, headers, timeout }, (res) => {
+        if (
+          [301, 302, 303, 307, 308].includes(res.statusCode) &&
+          res.headers.location
+        ) {
+          res.resume();
+          resolve({ redirect: new URL(res.headers.location, u).href });
+          return;
+        }
+        let body = [];
+        if (method === "HEAD") res.resume();
+        else res.on("data", (b) => body.push(b));
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode,
+            headers: res.headers,
+            body: Buffer.concat(body),
+          }),
+        );
+      });
+      req.on("error", reject);
+      req.setTimeout(timeout, () => req.destroy(Error("Network timeout")));
+      req.end();
+    });
+    if (result.redirect) {
+      url = result.redirect;
+      continue;
+    }
+    return result;
+  }
+  throw Error("Too many redirects");
+}
+async function isReachable(url) {
+  try {
+    const r = await httpGet(url, { method: "HEAD", timeout: 3000 });
+    return r.status >= 200 && r.status < 400;
+  } catch {
+    return false;
+  }
+}
+module.exports = { httpGet, isReachable };

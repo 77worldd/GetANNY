@@ -1,0 +1,48 @@
+{
+  "helium": {
+    "version": "0.20.2.1",
+    "url": "https://github.com/imputnet/helium-windows/releases/download/0.20.2.1/helium_0.20.2.1_x64-windows.zip",
+    "sha256": "8ea50096f734ac8ffe7f31e4bef4aa18be065b847bf4c34926183180d9e9f5e8",
+    "file": "chrome.exe",
+    "type": "zip"
+  },
+  "brave": {
+    "version": "1.98.62",
+    "url": "https://github.com/brave/brave-browser/releases/download/v1.98.62/brave-v1.98.62-win32-x64.zip",
+    "sha256": "1bd30af14e3026f986a374a4eb2dae7b1f36de01a411fb58ba41adde10032781",
+    "file": "brave.exe",
+    "type": "zip"
+  },
+  "vivaldi": {
+    "version": "8.2.4133.94",
+    "url": "https://downloads.vivaldi.com/stable/Vivaldi.8.2.4133.94.x64.exe",
+    "sha256": "6f2eee78fd43c9cb5d04150487aa786625c3361c96c43e6032f753909850a893",
+    "file": "vivaldi.exe",
+    "type": "installer",
+    "args": ["--vivaldi-silent", "--do-not-launch-chrome"]
+  },
+  "opera": {
+    "version": "137.0.6036.39",
+    "url": "https://get.geo.opera.com/pub/opera/desktop/137.0.6036.39/win/Opera_137.0.6036.39_Setup_x64.exe",
+    "sha256": "95bdd5acc7c5ba4a59d6baa32ef649d2cf4c30de35f86a29ab99c4ba1ab9daab",
+    "file": "opera.exe",
+    "type": "installer",
+    "args": [
+      "/install",
+      "/silent",
+      "/launchopera=0",
+      "/setdefaultbrowser=0",
+      "/allusers=0",
+      "/run-at-startup=0",
+      "/desktopshortcut=0",
+      "/pintotaskbar=0"
+    ]
+  },
+  "geckodriver": {
+    "version": "0.37.1",
+    "url": "https://github.com/mozilla/geckodriver/releases/download/v0.37.1/geckodriver-v0.37.1-win64.zip",
+    "sha256": "dfed9315abe8d2fbc1b6161a2ee8002452e79cf05ee92fdc653a4e26bc35edd8",
+    "file": "geckodriver.exe",
+    "type": "zip"
+  }
+}

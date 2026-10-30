@@ -1,11 +1,188 @@
-const fs=require('node:fs/promises');const path=require('node:path');
-function setupIpcHandlers(d){const {ipcMain,downloadManager,mediaDetector,downloadsRepo,settingsRepo,mainWindow,dialog,shell,app,wsServer,browserDetector,extensionInstaller,nativeMessagingHost,torrentEngine}=d;const handlers={
-'download:add':(_e,o)=>downloadManager.addDownload(o),'download:add-torrent':async(_e,o)=>{const result=await torrentEngine.add(o.torrent,o.savePath);downloadsRepo.save({id:result.id,url:o.torrent,filename:result.name,savePath:o.savePath,status:'downloading',kind:'torrent'});return result},'torrent:pause':(_e,id)=>torrentEngine.pause(id),'torrent:resume':(_e,id)=>torrentEngine.resume(id),'torrent:remove':async(_e,id)=>{await torrentEngine.remove(id);downloadsRepo.remove(id);return true},'download:pause':(_e,id)=>downloadManager.pause(id),'download:resume':(_e,id)=>downloadManager.resume(id),'download:cancel':(_e,id)=>downloadManager.cancel(id),'download:remove':(_e,o)=>downloadManager.remove(typeof o==='string'?o:o.id,!!o?.deleteFile),'download:retry':(_e,id)=>downloadManager.retry(id),'download:get-all':()=>downloadManager.getAll(),'download:get-active':()=>downloadManager.getAll().filter(x=>['downloading','queued'].includes(x.status)),'download:get-completed':()=>downloadsRepo.byStatus('completed'),'download:get-failed':()=>downloadsRepo.byStatus('failed'),'download:clear-completed':()=>downloadsRepo.clearCompleted(),'download:open-file':async(_e,p)=>{const err=await shell.openPath(p);return {success:!err,error:err||null}},'download:open-folder':async(_e,p)=>{const dir=path.extname(p)?path.dirname(p):p;const err=await shell.openPath(dir);return {success:!err,error:err||null}},
-'media:detect':(_e,url)=>mediaDetector.detect(url),'media:get-formats':(_e,url)=>mediaDetector.getFormats(url),'media:download':(_e,o)=>mediaDetector.download({...o,savePath:o.savePath||app.getPath('downloads')}),
-'settings:get':(_e,key)=>settingsRepo.get(key),'settings:get-all':()=>settingsRepo.getAll(),'settings:set':(_e,{key,value})=>{downloadManager.settings[key]=value;return settingsRepo.set(key,value)},'settings:reset':()=>settingsRepo.reset(),
-'browser:detect':()=>browserDetector.detect(),'browser:install-extension':(_e,id)=>extensionInstaller.install(id),'browser:check-extension':(_e,id)=>extensionInstaller.check(id),'browser:setup-native-messaging':(_e,id)=>nativeMessagingHost.register(id),'browser:status':()=>({websocket:wsServer.status()}),
-'dialog:select-folder':async()=>{const w=mainWindow();const r=await dialog.showOpenDialog(w,{properties:['openDirectory','createDirectory']});return r.canceled?null:r.filePaths[0]},'dialog:select-file':async(_e,o={})=>{const r=await dialog.showOpenDialog(mainWindow(),{properties:['openFile'],filters:o.filters||[]});return r.canceled?null:r.filePaths[0]},'app:get-version':()=>({version:app.getVersion()}),'app:get-platform':()=>({platform:process.platform}), 'app:get-download-path':()=>({path:app.getPath('downloads')}),'app:open-external':(_e,url)=>{const u=new URL(url);if(!['https:','http:'].includes(u.protocol))throw new Error('Only web URLs can be opened');return shell.openExternal(u.href)},'stats:get-overview':()=>downloadsRepo.stats()
-};for(const [channel,handler] of Object.entries(handlers))ipcMain.handle(channel,async(...args)=>handler(...args));
- for(const channel of ['app:minimize','app:maximize','app:close'])ipcMain.on(channel,()=>{const win=mainWindow();if(!win)return;if(channel==='app:minimize')win.minimize();else if(channel==='app:maximize')win.isMaximized()?win.unmaximize():win.maximize();else win.close();});
+const fs = require("node:fs/promises");
+const path = require("node:path");
+const { validateUrl } = require("./engine/utils");
+
+function createHandlers({ services: s, desktop }) {
+  const { manager, settings, mediaDetector } = s;
+  const desktopOnly = () => {
+    if (!desktop)
+      throw new Error(
+        "This action needs the installed GetANNY desktop application.",
+      );
+    return desktop;
+  };
+  const openKnown = async (id, folder) => {
+    const item = manager.requireItem(id);
+    if (folder) {
+      if (item.filePath && item.status === "completed") {
+        await fs.access(item.filePath);
+        desktopOnly().shell.showItemInFolder(item.filePath);
+      } else {
+        const error = await desktopOnly().shell.openPath(item.savePath);
+        if (error) throw new Error(error);
+      }
+    } else {
+      if (item.status !== "completed" || !item.filePath)
+        throw new Error("Only completed downloads can be opened.");
+      await fs.access(item.filePath).catch(() => {
+        throw new Error("This file was moved or deleted outside GetANNY.");
+      });
+      if (/\.(exe|msi|bat|cmd|ps1|com|scr|js|vbs)$/i.test(item.filePath)) {
+        const answer = await desktopOnly().dialog.showMessageBox(
+          desktop.mainWindow(),
+          {
+            type: "warning",
+            title: "Open downloaded program?",
+            message: "Only run downloaded programs you trust.",
+            detail: item.filePath,
+            buttons: ["Cancel", "Open program"],
+            defaultId: 0,
+            cancelId: 0,
+          },
+        );
+        if (answer.response !== 1) return { opened: false };
+      }
+      const error = await desktopOnly().shell.openPath(item.filePath);
+      if (error) throw new Error(error);
+    }
+    return { opened: true };
+  };
+  return {
+    "app:bootstrap": async () => ({
+      version: require("../../package.json").version,
+      platform: process.platform,
+      desktop: !!desktop,
+      settings: settings.getAll(),
+      downloads: manager.getAll(),
+      bridge: s.wsServer.status(),
+      pendingRequests: [...s.pendingBrowserRequests],
+      tools: await mediaDetector.ytdlp.availability(),
+      capabilities: {
+        login: !!desktop && ["win32", "darwin"].includes(process.platform),
+        dialogs: !!desktop,
+      },
+    }),
+    "download:add": (options) => manager.addDownload(options),
+    "download:add-torrent": (options) => manager.addTorrent(options),
+    "download:pause": (id) => manager.pause(id),
+    "download:resume": (id) => manager.resume(id),
+    "download:cancel": (id) => manager.cancel(id),
+    "download:retry": (id) => manager.retry(id),
+    "download:remove": (options) =>
+      manager.remove(options.id, options.deleteFile === true),
+    "download:clear-completed": () => manager.clearCompleted(),
+    "download:get-all": () => manager.getAll(),
+    "download:open-file": (id) => openKnown(id, false),
+    "download:open-folder": (id) => openKnown(id, true),
+    "media:get-formats": (url) => mediaDetector.getFormats(url),
+    "media:download": (options) =>
+      manager.addMedia({
+        ...mediaDetector.selection(options),
+        savePath: options.savePath,
+      }),
+    "settings:get-all": () => settings.getAll(),
+    "settings:set": async ({ key, value }) => {
+      await settings.set(key, value);
+      return settings.getAll();
+    },
+    "settings:reset": () => settings.reset(),
+    "browser:status": () => s.browserStatus(),
+    "browser:detect": () => s.browserDetector.detect(),
+    "browser:prepare": (id) => {
+      desktopOnly();
+      return s.prepareBrowser(id);
+    },
+    "browser:open-extensions": (id) => {
+      desktopOnly();
+      return s.browserDetector.openExtensions(id);
+    },
+    "browser:open-package": async (id) => {
+      const result = await s.extensionInstaller.check(id);
+      if (!result.prepared) throw new Error("Prepare this extension first.");
+      const error = await desktopOnly().shell.openPath(result.path);
+      if (error) throw new Error(error);
+      return true;
+    },
+    "browser:locate": async (id) => {
+      const d = desktopOnly();
+      const result = await d.dialog.showOpenDialog(d.mainWindow(), {
+        title: "Locate browser executable",
+        properties: ["openFile"],
+        ...(process.platform === "win32"
+          ? { filters: [{ name: "Browser executable", extensions: ["exe"] }] }
+          : {}),
+      });
+      if (!result.canceled)
+        return s.browserDetector.locate(id, result.filePaths[0]);
+      return null;
+    },
+    "browser:pairing-key": () => s.identity.token,
+    "browser:ack-request": (id) => {
+      const index = s.pendingBrowserRequests.findIndex(
+        (request) => request.id === id,
+      );
+      if (index >= 0) s.pendingBrowserRequests.splice(index, 1);
+      return true;
+    },
+    "dialog:select-folder": async () => {
+      const d = desktopOnly();
+      const result = await d.dialog.showOpenDialog(d.mainWindow(), {
+        defaultPath: settings.get("defaultDownloadPath"),
+        properties: ["openDirectory", "createDirectory"],
+      });
+      return result.canceled ? null : result.filePaths[0];
+    },
+    "dialog:select-torrent": async () => {
+      const d = desktopOnly();
+      const result = await d.dialog.showOpenDialog(d.mainWindow(), {
+        properties: ["openFile"],
+        filters: [{ name: "BitTorrent files", extensions: ["torrent"] }],
+      });
+      return result.canceled ? null : result.filePaths[0];
+    },
+    "app:open-external": async (url) => {
+      const d = desktopOnly();
+      await d.shell.openExternal(validateUrl(url));
+      return true;
+    },
+    "app:open-data-folder": async () => {
+      const error = await desktopOnly().shell.openPath(path.dirname(s.db.file));
+      if (error) throw new Error(error);
+      return true;
+    },
+    "app:window-state": () => ({
+      maximized: desktop?.mainWindow()?.isMaximized() || false,
+    }),
+    "app:quit": () => {
+      desktopOnly().app.quit();
+      return true;
+    },
+  };
 }
-module.exports={setupIpcHandlers};
+function setupIpcHandlers({ ipcMain, services, desktop }) {
+  const handlers = createHandlers({ services, desktop });
+  const validateSender = (event) => {
+    const win = desktop.mainWindow();
+    if (
+      !win ||
+      event.sender !== win.webContents ||
+      event.senderFrame !== win.webContents.mainFrame
+    )
+      throw new Error("Untrusted IPC sender.");
+  };
+  for (const [channel, handler] of Object.entries(handlers))
+    ipcMain.handle(channel, (event, ...args) => {
+      validateSender(event);
+      return handler(...args);
+    });
+  for (const action of ["minimize", "maximize", "close"])
+    ipcMain.on(`window:${action}`, (event) => {
+      validateSender(event);
+      const win = desktop.mainWindow();
+      if (action === "minimize") win.minimize();
+      else if (action === "maximize")
+        win.isMaximized() ? win.unmaximize() : win.maximize();
+      else win.close();
+    });
+}
+module.exports = { createHandlers, setupIpcHandlers };

@@ -1,10 +1,168 @@
-const {EventEmitter}=require('node:events');const {Worker}=require('node:worker_threads');const fs=require('node:fs/promises');const path=require('node:path');const {createWriteStream,createReadStream}=require('node:fs');const {v4:uuid}=require('uuid');const {DownloadEngine}=require('./DownloadEngine');
-class ChunkDownloader extends EventEmitter{
- constructor(o={}){super();Object.assign(this,{id:o.id||uuid(),url:o.url,savePath:o.savePath,filename:o.filename,totalSize:o.totalSize||0,headers:o.headers||{},connections:Math.min(16,Math.max(2,o.connections||8)),speedLimit:Number(o.speedLimit)||0,status:'queued',downloadedSize:0,speed:0});this.workers=new Set();this.cancelled=false;this.paused=false;this.last=Date.now();this.tick=0;}
- async start(){let timer;try{const probe=new DownloadEngine({url:this.url,savePath:this.savePath,filename:this.filenameExplicit?this.filename:null,headers:this.headers,speedLimit:this.speedLimit});const info=await probe.probe();Object.assign(this,info);if(!info.resumable||info.totalSize<2*1024*1024){probe.id=this.id;this.fallback=probe;for(const event of ['progress','status','complete','error'])probe.on(event,(...args)=>this.emit(event,...args));return probe.start();}await fs.mkdir(this.savePath,{recursive:true});this.status='downloading';this.emit('status',this.id,'downloading');const count=Math.min(this.connections,Math.max(2,Math.ceil(this.totalSize/(2*1024*1024))));this.activeWorkers=count;const size=Math.ceil(this.totalSize/count);const parts=Array.from({length:count},(_,i)=>({start:i*size,end:Math.min(this.totalSize-1,(i+1)*size-1),file:path.join(this.savePath,`.${this.filename}.${this.id}.part${i}`)}));const current=await Promise.all(parts.map(async p=>{try{return(await fs.stat(p.file)).size}catch{return 0}}));this.downloadedSize=current.reduce((a,b)=>a+b,0);timer=setInterval(()=>{this.speed=this.tick*1000/Math.max(1,Date.now()-this.last);this.tick=0;this.last=Date.now();this.emit('progress',this.id,this.progress())},500);await Promise.all(parts.map((p,i)=>current[i]>=p.end-p.start+1?Promise.resolve():this.runWorker({...p,existing:current[i]})));clearInterval(timer);if(this.cancelled||this.paused)return;const temp=path.join(this.savePath,`${this.filename}.getanny-part`);const out=createWriteStream(temp);for(const part of parts)await new Promise((resolve,reject)=>{const input=createReadStream(part.file);input.on('error',reject);input.on('end',resolve);input.pipe(out,{end:false})});await new Promise((resolve,reject)=>{out.once('finish',resolve);out.once('error',reject);out.end()});const target=path.join(this.savePath,this.filename);await fs.rename(temp,target);await Promise.all(parts.map(p=>fs.rm(p.file,{force:true})));this.status='completed';this.downloadedSize=this.totalSize;this.speed=0;this.emit('complete',this.id,{filePath:target,filename:this.filename,totalSize:this.totalSize});}catch(e){clearInterval(timer);if(!this.paused&&!this.cancelled){this.status='failed';this.emit('error',this.id,e);this.emit('status',this.id,'failed',{error:e.message})}}}
- runWorker(data){return new Promise((resolve,reject)=>{const workerFile=path.join(__dirname,'chunk-worker.js').replace(`app.asar${path.sep}`,`app.asar.unpacked${path.sep}`);const worker=new Worker(workerFile,{workerData:{...data,url:this.url,headers:this.headers,speedLimit:this.speedLimit?Math.max(1,this.speedLimit/(this.activeWorkers||this.connections)):0}});this.workers.add(worker);worker.on('message',m=>{if(m.type==='progress'){this.downloadedSize+=m.bytes;this.tick+=m.bytes}else if(m.type==='done'){this.workers.delete(worker);resolve(m.bytes)}else if(m.type==='error'){this.workers.delete(worker);reject(new Error(m.error))}});worker.on('error',reject);worker.on('exit',code=>{this.workers.delete(worker);if(this.cancelled||this.paused)resolve(0);else if(code!==0)reject(new Error(`Chunk worker exited (${code})`))})})}
- progress(){return{downloadedSize:this.downloadedSize,totalSize:this.totalSize,progress:this.totalSize?this.downloadedSize/this.totalSize*100:0,speed:this.speed,filename:this.filename,savePath:this.savePath}}
- pause(){this.paused=true;this.status='paused';if(this.fallback)return this.fallback.pause();for(const w of this.workers)w.postMessage('cancel');this.emit('status',this.id,'paused');return true}
- cancel(){this.cancelled=true;for(const w of this.workers)w.terminate();this.status='cancelled';if(this.fallback)return this.fallback.cancel();this.emit('status',this.id,'cancelled');return true}
+const { Worker } = require("node:worker_threads");
+const path = require("node:path");
+const fs = require("node:fs");
+const fsp = require("node:fs/promises");
+const { Readable } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
+const { DownloadEngine } = require("./DownloadEngine");
+
+class ChunkDownloader extends DownloadEngine {
+  constructor(options = {}) {
+    super(options);
+    this.connections = Math.min(16, Math.max(1, options.connections || 8));
+    this.workers = new Set();
+  }
+  desiredSegments() {
+    return this.resumable && this.totalSize >= 2 * 1024 * 1024
+      ? Math.min(
+          this.connections,
+          Math.max(1, Math.floor(this.totalSize / (1024 * 1024))),
+        )
+      : 1;
+  }
+  async transfer() {
+    if (this.segmentCount === 1) return super.transfer();
+    const chunkSize = Math.ceil(this.totalSize / this.segmentCount);
+    const parts = Array.from({ length: this.segmentCount }, (_, index) => ({
+      start: index * chunkSize,
+      end: Math.min(this.totalSize - 1, (index + 1) * chunkSize - 1),
+      file: `${this.partialPath}-${index}`,
+    }));
+    this.downloadedSize = 0;
+    for (const part of parts) {
+      part.existing = await fsp.stat(part.file).then(
+        (s) => s.size,
+        () => 0,
+      );
+      if (part.existing > part.end - part.start + 1) {
+        await fsp.rm(part.file, { force: true });
+        part.existing = 0;
+      }
+      this.downloadedSize += part.existing;
+    }
+    const stopAll = () => {
+      for (const worker of this.workers) worker.postMessage({ type: "cancel" });
+    };
+    this.controller.signal.addEventListener("abort", stopAll, { once: true });
+    let failure;
+    const pending = parts.filter((p) => p.existing < p.end - p.start + 1);
+    let cursor = 0;
+    const pool = Array.from(
+      { length: Math.min(this.connections, pending.length) },
+      async () => {
+        while (
+          cursor < pending.length &&
+          !failure &&
+          !this.controller.signal.aborted
+        ) {
+          const part = pending[cursor++];
+          try {
+            await this.runWorker(part);
+          } catch (error) {
+            if (!failure) {
+              failure = error;
+              stopAll();
+            }
+          }
+        }
+      },
+    );
+    await Promise.allSettled(pool);
+    this.controller.signal.removeEventListener("abort", stopAll);
+    this.controller.signal.throwIfAborted();
+    if (failure) throw failure;
+    for (const part of parts) {
+      if ((await fsp.stat(part.file)).size !== part.end - part.start + 1)
+        throw new Error("A downloaded segment is incomplete.");
+    }
+    const inputs = async function* () {
+      for (const part of parts) {
+        for await (const buffer of fs.createReadStream(part.file)) yield buffer;
+      }
+    };
+    // Every segment is now physically size-verified. Publish the exact network
+    // bytes at this boundary, not the last (possibly stale) 400ms ticker sample.
+    // This is still processing; completion requires the assembled file/link.
+    this.speed = 0;
+    this.tickBytes = 0;
+    this.setStatus("processing", {
+      ...this.progress(),
+      phase: "Assembling verified segments",
+    });
+    await pipeline(
+      Readable.from(inputs()),
+      fs.createWriteStream(this.partialPath),
+      { signal: this.controller.signal },
+    );
+  }
+  async partialBytes() {
+    if (this.segmentCount > 1 && this.partialPath) {
+      const sizes = await Promise.all(
+        Array.from({ length: this.segmentCount }, (_, index) =>
+          super.partialBytes(`${this.partialPath}-${index}`),
+        ),
+      );
+      return sizes.reduce((sum, size) => sum + size, 0);
+    }
+    return super.partialBytes();
+  }
+  runWorker(part) {
+    return new Promise((resolve, reject) => {
+      const workerPath = path
+        .join(__dirname, "chunk-worker.js")
+        .replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+      const worker = new Worker(workerPath, {
+        workerData: {
+          ...part,
+          url: this.url,
+          headers: this.headers,
+          etag: this.etag,
+          lastModified: this.lastModified,
+          totalSize: this.totalSize,
+          timeout: this.timeout,
+          requestOptions: this.requestOptions,
+        },
+      });
+      this.workers.add(worker);
+      let result;
+      let failure;
+      worker.on("message", (message) => {
+        if (message.type === "throttle") {
+          this.limiter.consume(message.bytes, this.controller.signal).then(
+            () => {
+              if (this.workers.has(worker))
+                worker.postMessage({
+                  type: "grant",
+                  requestId: message.requestId,
+                });
+            },
+            () => {
+              if (this.workers.has(worker))
+                worker.postMessage({ type: "cancel" });
+            },
+          );
+        } else if (message.type === "progress" && !this.wantedState) {
+          this.downloadedSize += message.bytes;
+          this.tickBytes += message.bytes;
+        } else if (message.type === "done") result = true;
+        else if (message.type === "error") {
+          failure = new Error(message.error);
+          failure.retryable = message.retryable;
+        }
+      });
+      worker.once("error", (error) => {
+        failure = error;
+      });
+      worker.once("exit", (code) => {
+        this.workers.delete(worker);
+        if (result) resolve();
+        else
+          reject(
+            failure ||
+              new Error(`Segment stopped before completion (exit ${code}).`),
+          );
+      });
+    });
+  }
 }
-module.exports={ChunkDownloader};
+module.exports = { ChunkDownloader };

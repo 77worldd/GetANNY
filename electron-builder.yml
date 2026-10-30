@@ -1,48 +1,84 @@
 appId: com.getanny.app
 productName: GetANNY
-copyright: Copyright © 2025 GetANNY
+copyright: Copyright © 2026 GetANNY contributors
 directories:
   output: dist
   buildResources: assets
 files:
   - src/main/**/*
+  - "!src/main/**/*.test.js"
   - package.json
-  - node_modules/**/*
   - dist-renderer/**/*
-  - assets/**/*
-  - '!src/renderer/**/*'
+  - assets/icon.png
+  - assets/tray-icon.png
+  - LICENSE
+  - docs/THIRD_PARTY.md
 extraResources:
+  # Native CLI entrypoint must be a real file, not an ASAR virtual path.
+  - from: src/main/browser-integration/native-host.js
+    to: native-host/native-host.js
+  - from: node_modules/ws/
+    to: native-host/node_modules/ws/
+    filter: ["package.json", "index.js", "lib/**/*.js"]
   - from: bin/
     to: bin/
-    filter: ['**/*']
+    filter:
+      [
+        "yt-dlp.exe",
+        "yt-dlp",
+        "yt-dlp_macos",
+        "ffmpeg*",
+        "ffprobe*",
+        "GetANNY.NativeHost.exe",
+        "FFmpeg-*.txt",
+      ]
   - from: dist-extension/
     to: extension/
-    filter: ['**/*']
+    filter: ["**/*"]
 win:
-  target: [{ target: nsis, arch: [x64] }]
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: msi
+      arch: [x64]
   icon: assets/icon.ico
-mac:
-  target: [{ target: dmg, arch: [x64, arm64] }]
-  icon: assets/icon.icns
-  category: public.app-category.utilities
+  executableName: GetANNY
+  requestedExecutionLevel: asInvoker
+nsis:
+  artifactName: "GetANNY Setup.${ext}"
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+  include: scripts/windows/installer.nsh
+msi:
+  artifactName: "GetANNY Setup.${ext}"
+  oneClick: false
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  runAfterFinish: false
+  warningsAsErrors: true
+msiProjectCreated: scripts/windows/customize-msi.js
+beforePack: scripts/verify-package.js
+afterPack: scripts/verify-installed-resources.js
 linux:
   target: [{ target: AppImage, arch: [x64] }]
   icon: assets/icon.png
   category: Network
-nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
-  createDesktopShortcut: true
-  createStartMenuShortcut: true
-  installerIcon: assets/icon.ico
-  uninstallerIcon: assets/icon.ico
+mac:
+  target: [{ target: dmg, arch: [x64, arm64] }]
+  icon: assets/icon.icns
+  category: public.app-category.utilities
 asar: true
 npmRebuild: false
-publish:
-  provider: github
-  owner: 77worldd
-  repo: GetANNY
 asarUnpack:
-  - '**/better-sqlite3/**'
-  - '**/webtorrent/**'
-  - 'src/main/engine/chunk-worker.js'
+  - "node_modules/better-sqlite3/**/*"
+  - "node_modules/node-datachannel/**/*"
+  - "src/main/engine/**/*"
+publish: null

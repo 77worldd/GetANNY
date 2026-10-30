@@ -1,13 +1,361 @@
-const {EventEmitter}=require('node:events'); const fs=require('node:fs'); const fsp=fs.promises; const path=require('node:path'); const http=require('node:http'); const https=require('node:https'); const {Transform}=require('node:stream'); const {v4:uuid}=require('uuid'); const {getFilenameFromHeaders,getFilenameFromURL,sanitizeFilename}=require('./utils');
-const REDIRECTS=new Set([301,302,303,307,308]);
+const { EventEmitter } = require("node:events");
+const fs = require("node:fs");
+const fsp = require("node:fs/promises");
+const path = require("node:path");
+const { randomUUID } = require("node:crypto");
+const { Transform } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
+const { request, httpError, parseRange, validateRange } = require("./http");
+const { RateLimiter } = require("./RateLimiter");
+const {
+  sanitizeFilename,
+  getFilenameFromURL,
+  getFilenameFromHeaders,
+  validateHeaders,
+  validateUrl,
+} = require("./utils");
+
 class DownloadEngine extends EventEmitter {
- constructor(o={}){super();Object.assign(this,{id:o.id||uuid(),url:o.url,savePath:o.savePath,filename:o.filename||null,headers:o.headers||{},totalSize:o.totalSize||0,downloadedSize:o.downloadedSize||0,status:o.status||'queued',speedLimit:Number(o.speedLimit)||0,maxRedirects:10,timeout:o.timeout||30000});this.request=null;this.stream=null;this.paused=false;this.cancelled=false;this.lastTick=Date.now();this.tickBytes=0;this.speed=0;this.partialPath=null;}
- async probe(){let url=this.url;for(let n=0;n<=this.maxRedirects;n++){let result=await this.requestOnce(url,'HEAD');if(result.status===405||result.status===501)result=await this.requestOnce(url,'GET',{Range:'bytes=0-0'});if(REDIRECTS.has(result.status)&&result.headers.location){url=new URL(result.headers.location,url).href;continue;}if(result.status<200||result.status>=400)throw new Error(`HTTP ${result.status} while checking URL`);this.url=url;const rangeTotal=result.headers['content-range']?.split('/')[1];this.totalSize=Number(rangeTotal)||Number(result.headers['content-length'])||0;this.resumable=(/bytes/i.test(result.headers['accept-ranges']||'')||result.status===206)&&this.totalSize>0;this.mimeType=result.headers['content-type']?.split(';')[0]||null;this.filename=this.filename||getFilenameFromHeaders(result.headers['content-disposition'])||getFilenameFromURL(url)||'download';this.filename=sanitizeFilename(this.filename);return {url,totalSize:this.totalSize,resumable:this.resumable,filename:this.filename,mimeType:this.mimeType};}throw new Error('Too many redirects');}
- requestOnce(url,method='GET',headers={}){return new Promise((resolve,reject)=>{const u=new URL(url);if(!['http:','https:'].includes(u.protocol))return reject(new Error('Only HTTP and HTTPS URLs are supported'));const mod=u.protocol==='https:'?https:http;const req=mod.request(u,{method,headers:{'User-Agent':'GetANNY/1.0',...this.headers,...headers},timeout:this.timeout},res=>{res.resume();resolve({status:res.statusCode,headers:res.headers});});this.request=req;req.once('error',reject);req.once('timeout',()=>req.destroy(new Error('Request timed out')));req.end();});}
- async start(){if(this.status==='downloading')return;this.cancelled=false;this.paused=false;try{if(!this.filename||!this.totalSize)await this.probe();await fsp.mkdir(this.savePath,{recursive:true});const finalPath=path.join(this.savePath,this.filename);this.partialPath=finalPath+'.getanny-part';let existing=0;try{existing=(await fsp.stat(this.partialPath)).size}catch{};if(existing>0&&this.resumable&&existing<this.totalSize)this.downloadedSize=existing;else if(existing&&(!this.resumable||existing>=this.totalSize)){await fsp.truncate(this.partialPath,0);this.downloadedSize=0;}this.status='downloading';this.emit('status',this.id,'downloading');await this.transfer(this.partialPath);if(this.cancelled||this.paused)return;await fsp.rename(this.partialPath,finalPath);this.status='completed';this.downloadedSize=this.totalSize||this.downloadedSize;this.speed=0;this.emit('progress',this.id,this.progress());this.emit('complete',this.id,{filePath:finalPath,filename:this.filename,totalSize:this.downloadedSize});}catch(e){if(this.cancelled||this.paused)return;this.status='failed';this.speed=0;this.emit('error',this.id,e);this.emit('status',this.id,'failed',{error:e.message});}}
- transfer(file){return new Promise((resolve,reject)=>{let url=this.url,redirects=0;const open=()=>{const u=new URL(url),mod=u.protocol==='https:'?https:http,headers={'User-Agent':'GetANNY/1.0',...this.headers};if(this.downloadedSize&&this.resumable)headers.Range=`bytes=${this.downloadedSize}-`;const req=mod.get(u,{headers,timeout:this.timeout},res=>{if(REDIRECTS.has(res.statusCode)&&res.headers.location){res.resume();if(++redirects>this.maxRedirects)return reject(new Error('Too many redirects'));url=new URL(res.headers.location,url).href;this.url=url;return open();}if(this.downloadedSize&&res.statusCode!==206){res.resume();return reject(new Error(`Server refused resume (HTTP ${res.statusCode}); retry the download`));}if(!this.downloadedSize&&res.statusCode!==200&&res.statusCode!==206){res.resume();return reject(new Error(`HTTP ${res.statusCode}`));}const disposition=getFilenameFromHeaders(res.headers['content-disposition']);if(disposition&&!this.downloadedSize)this.filename=sanitizeFilename(disposition);if(!this.totalSize){const range=res.headers['content-range'];this.totalSize=range?Number(range.split('/')[1])||0:Number(res.headers['content-length'])||0;}const out=fs.createWriteStream(file,{flags:this.downloadedSize?'a':'w'});this.stream=out;let last=Date.now(),bytes=0;const report=setInterval(()=>{const now=Date.now();this.speed=bytes*1000/Math.max(1,now-last);bytes=0;last=now;this.emit('progress',this.id,this.progress());},500);report.unref?.();res.on('data',chunk=>{this.downloadedSize+=chunk.length;bytes+=chunk.length;});res.on('error',err=>{clearInterval(report);out.destroy(err)});out.on('error',err=>{clearInterval(report);reject(err)});out.on('finish',()=>{clearInterval(report);this.speed=0;resolve()});if(this.speedLimit>0){const limit=this.speedLimit;let delivered=0,started=Date.now();const limiter=new Transform({transform(chunk,_enc,cb){delivered+=chunk.length;const wait=Math.max(0,started+delivered*1000/limit-Date.now());setTimeout(()=>cb(null,chunk),wait)}});res.pipe(limiter).pipe(out)}else res.pipe(out);});this.request=req;req.setTimeout(this.timeout,()=>req.destroy(new Error('Download timed out')));req.once('error',reject);};open();});}
- progress(){return {downloadedSize:this.downloadedSize,totalSize:this.totalSize,progress:this.totalSize?Math.min(100,this.downloadedSize/this.totalSize*100):0,speed:this.speed,filename:this.filename,savePath:this.savePath};}
- pause(){if(this.status!=='downloading')return false;this.paused=true;this.status='paused';this.request?.destroy();this.stream?.destroy();this.emit('status',this.id,'paused');return true;}
- cancel(){this.cancelled=true;this.request?.destroy();this.stream?.destroy();this.status='cancelled';this.emit('status',this.id,'cancelled');return true;}
+  constructor(options = {}) {
+    super();
+    this.id = options.id || randomUUID();
+    this.url = validateUrl(options.url);
+    this.savePath = options.savePath;
+    this.filename = options.filename || null;
+    this.filenameExplicit = options.filenameExplicit ?? !!options.filename;
+    this.headers = validateHeaders(options.headers);
+    this.timeout = options.timeout || 30000;
+    this.requestOptions = options.requestOptions || {};
+    this.reserveTarget = options.reserveTarget;
+    this.connections = options.connections || 1;
+    this.limiter = new RateLimiter(options.speedLimit);
+    this.status = "queued";
+    this.downloadedSize = 0;
+    this.totalSize = 0;
+    this.speed = 0;
+    this.controller = new AbortController();
+    this.wantedState = null;
+  }
+
+  async probe() {
+    const options = {
+      headers: this.headers,
+      timeout: this.timeout,
+      signal: this.controller.signal,
+      requestOptions: this.requestOptions,
+    };
+    const head = await request(this.url, { ...options, method: "HEAD" });
+    let response = head.response;
+    let finalUrl = head.url;
+    let headers = response.headers;
+    const headStatus = response.statusCode;
+    response.destroy();
+    if (![200, 204, 206, 400, 403, 405, 501].includes(headStatus))
+      throw httpError(headStatus, "Unable to inspect the download.");
+    // A successful one-byte range, not Accept-Ranges alone, is the capability test.
+    const rangeProbe = await request(finalUrl, {
+      ...options,
+      headers: { ...head.headers, Range: "bytes=0-0" },
+    });
+    response = rangeProbe.response;
+    finalUrl = rangeProbe.url;
+    this.headers = rangeProbe.headers;
+    delete this.headers.Range;
+    const range = parseRange(response.headers["content-range"]);
+    const status = response.statusCode;
+    headers = { ...headers, ...response.headers };
+    response.destroy();
+    if (![200, 204, 206, 416].includes(status))
+      throw httpError(
+        status,
+        "Unable to access this file. A page URL may need the media extractor instead.",
+      );
+    if (status === 206 && (!range || range.start !== 0 || range.end !== 0))
+      throw new Error(
+        "The server returned an invalid range capability response.",
+      );
+    if (status === 416 && !/^bytes \*\/0$/.test(headers["content-range"] || ""))
+      throw httpError(status, "The file range could not be determined.");
+    const totalSize =
+      range?.total ??
+      (status === 416 ? 0 : Number(headers["content-length"]) || 0);
+    if (!Number.isSafeInteger(totalSize) || totalSize < 0)
+      throw new Error("The server reported an unsupported file size.");
+    const filename =
+      this.filenameExplicit && this.filename
+        ? this.filename
+        : getFilenameFromHeaders(headers["content-disposition"]) ||
+          getFilenameFromURL(finalUrl) ||
+          "download";
+    const etag =
+      headers.etag && !headers.etag.startsWith("W/") ? headers.etag : null;
+    const info = {
+      url: finalUrl,
+      totalSize,
+      resumable: status === 206 && totalSize > 0,
+      filename: sanitizeFilename(filename),
+      mimeType: headers["content-type"]?.split(";")[0] || null,
+      etag,
+      lastModified: headers["last-modified"] || null,
+    };
+    Object.assign(this, info);
+    return info;
+  }
+
+  start() {
+    if (!this.task) this.task = this.run();
+    return this.task;
+  }
+  desiredSegments() {
+    return 1;
+  }
+  async prepare(info) {
+    await fsp.mkdir(this.savePath, { recursive: true });
+    if (this.reserveTarget) Object.assign(this, await this.reserveTarget(info));
+    this.partialPath = path.join(this.savePath, `.getanny-${this.id}.part`);
+    this.stateFile = path.join(this.savePath, `.getanny-${this.id}.json`);
+    let state;
+    try {
+      state = JSON.parse(await fsp.readFile(this.stateFile, "utf8"));
+    } catch {
+      /* first attempt */
+    }
+    const valid =
+      (info.etag || info.lastModified) &&
+      info.resumable &&
+      state?.url === info.url &&
+      state.totalSize === info.totalSize &&
+      state.etag === info.etag &&
+      state.lastModified === info.lastModified &&
+      Number.isInteger(state.segments) &&
+      state.segments >= 1 &&
+      state.segments <= 16;
+    if (!valid) await this.cleanupPartials();
+    this.segmentCount = valid ? state.segments : this.desiredSegments();
+    await fsp.writeFile(
+      `${this.stateFile}.tmp`,
+      JSON.stringify({
+        version: 1,
+        url: info.url,
+        totalSize: info.totalSize,
+        etag: info.etag,
+        lastModified: info.lastModified,
+        segments: this.segmentCount,
+      }),
+    );
+    await fsp.rename(`${this.stateFile}.tmp`, this.stateFile);
+  }
+  async run() {
+    let ticker;
+    try {
+      this.setStatus("connecting");
+      const info = await this.probe();
+      this.controller.signal.throwIfAborted();
+      await this.prepare(info);
+      this.controller.signal.throwIfAborted();
+      this.setStatus("downloading", {
+        filename: this.filename,
+        savePath: this.savePath,
+        totalSize: this.totalSize,
+        resumable: this.resumable,
+        mimeType: this.mimeType,
+        connections: this.segmentCount,
+      });
+      this.tickBytes = 0;
+      this.lastTick = performance.now();
+      ticker = setInterval(() => {
+        const now = performance.now();
+        this.speed = (this.tickBytes * 1000) / Math.max(1, now - this.lastTick);
+        this.tickBytes = 0;
+        this.lastTick = now;
+        this.emit("progress", this.id, this.progress());
+      }, 400);
+      await this.transfer();
+      this.controller.signal.throwIfAborted();
+      const size = (await fsp.stat(this.partialPath)).size;
+      if (this.totalSize && size !== this.totalSize)
+        throw new Error(
+          `Incomplete file: received ${size} of ${this.totalSize} bytes.`,
+        );
+      const target = path.join(this.savePath, this.filename);
+      // Same-directory hard link is atomic and fails rather than overwriting a user's file.
+      await fsp.link(this.partialPath, target);
+      await this.cleanupPartials();
+      this.downloadedSize = size;
+      this.totalSize = size;
+      this.speed = 0;
+      this.setStatus("completed", { filePath: target });
+      this.emit("progress", this.id, this.progress());
+      this.emit("complete", this.id, {
+        filePath: target,
+        filename: this.filename,
+        totalSize: size,
+        downloadedSize: size,
+      });
+    } catch (error) {
+      if (this.wantedState) {
+        if (this.wantedState === "cancelled")
+          await this.cleanupPartials().catch(() => {});
+        if (this.wantedState === "paused") {
+          // Abort/pause has settled every writer and worker. The 400 ms UI
+          // sample and in-flight meter can both differ from durable partials.
+          try {
+            this.downloadedSize = await this.partialBytes();
+          } catch (error) {
+            this.speed = 0;
+            this.setStatus("failed", { error: error.message });
+            this.emit("error", this.id, error);
+            return;
+          }
+        }
+        this.speed = 0;
+        this.tickBytes = 0;
+        this.setStatus(this.wantedState, this.progress());
+      } else {
+        if (
+          ["ECONNRESET", "ETIMEDOUT", "ERR_STREAM_PREMATURE_CLOSE"].includes(
+            error.code,
+          )
+        )
+          error.retryable = true;
+        this.speed = 0;
+        this.setStatus("failed", { error: error.message });
+        this.emit("error", this.id, error);
+      }
+    } finally {
+      clearInterval(ticker);
+    }
+  }
+  async transfer() {
+    let existing = await fsp.stat(this.partialPath).then(
+      (s) => s.size,
+      () => 0,
+    );
+    if (!this.resumable || existing > this.totalSize) {
+      await fsp.rm(this.partialPath, { force: true });
+      existing = 0;
+    }
+    this.downloadedSize = existing;
+    if (this.totalSize && existing === this.totalSize) return;
+    const headers = { ...this.headers };
+    if (existing) {
+      headers.Range = `bytes=${existing}-`;
+      if (this.etag || this.lastModified)
+        headers["If-Range"] = this.etag || this.lastModified;
+    }
+    const { response } = await request(this.url, {
+      headers,
+      timeout: this.timeout,
+      signal: this.controller.signal,
+      requestOptions: this.requestOptions,
+    });
+    if (existing && response.statusCode === 200) {
+      // The entity changed or the server ignored Range. Restart safely, never append a full response.
+      existing = 0;
+      this.downloadedSize = 0;
+      this.totalSize = Number(response.headers["content-length"]) || 0;
+    } else if (existing || response.statusCode === 206) {
+      validateRange(response, existing, this.totalSize - 1, this.totalSize);
+    } else if (![200, 204].includes(response.statusCode)) {
+      response.destroy();
+      throw httpError(
+        response.statusCode,
+        "The download request was rejected.",
+      );
+    }
+    if (
+      response.headers["content-encoding"] &&
+      response.headers["content-encoding"] !== "identity"
+    ) {
+      response.destroy();
+      throw new Error(
+        "The server returned compressed transfer bytes despite requesting identity encoding.",
+      );
+    }
+    if (!this.totalSize)
+      this.totalSize = Number(response.headers["content-length"]) || 0;
+    const meter = new Transform({
+      transform: (chunk, _encoding, callback) => {
+        this.limiter.consume(chunk.length, this.controller.signal).then(() => {
+          this.downloadedSize += chunk.length;
+          this.tickBytes += chunk.length;
+          if (this.totalSize && this.downloadedSize > this.totalSize)
+            return callback(
+              new Error(
+                "The server sent more bytes than the declared file size.",
+              ),
+            );
+          callback(null, chunk);
+        }, callback);
+      },
+    });
+    await pipeline(
+      response,
+      meter,
+      fs.createWriteStream(this.partialPath, { flags: existing ? "a" : "w" }),
+      { signal: this.controller.signal },
+    );
+  }
+  progress() {
+    return {
+      filename: this.filename,
+      savePath: this.savePath,
+      downloadedSize: this.downloadedSize,
+      totalSize: this.totalSize,
+      speed: this.speed,
+      eta:
+        this.speed > 0 && this.totalSize >= this.downloadedSize
+          ? (this.totalSize - this.downloadedSize) / this.speed
+          : null,
+      resumable: this.resumable,
+      connections: this.segmentCount || 1,
+    };
+  }
+  setStatus(status, data = {}) {
+    this.status = status;
+    this.emit("status", this.id, status, { speed: 0, ...data });
+  }
+  async pause() {
+    return this.stop("paused");
+  }
+  async cancel() {
+    return this.stop("cancelled");
+  }
+  async stop(status) {
+    if (["completed", "failed", "cancelled"].includes(this.status))
+      return false;
+    this.wantedState = status;
+    this.controller.abort(
+      new Error(
+        status === "paused" ? "Download paused." : "Download cancelled.",
+      ),
+    );
+    await this.task;
+    return true;
+  }
+  async partialBytes(file = this.partialPath) {
+    if (!file) return 0;
+    try {
+      return (await fsp.stat(file)).size;
+    } catch (error) {
+      if (error.code === "ENOENT") return 0;
+      throw error;
+    }
+  }
+  async cleanupPartials() {
+    if (!this.savePath) return;
+    const files = await fsp.readdir(this.savePath).catch(() => []);
+    await Promise.all(
+      files
+        .filter(
+          (name) =>
+            name === `.getanny-${this.id}.part` ||
+            name === `.getanny-${this.id}.json` ||
+            name === `.getanny-${this.id}.json.tmp` ||
+            name.startsWith(`.getanny-${this.id}.part-`),
+        )
+        .map((name) => fsp.rm(path.join(this.savePath, name), { force: true })),
+    );
+  }
 }
-module.exports={DownloadEngine};
+module.exports = { DownloadEngine };
