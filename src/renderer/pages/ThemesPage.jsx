@@ -107,7 +107,7 @@ export default function ThemesPage() {
           </span>
           <span>
             <strong>Follow system appearance</strong>
-            <small>Graphite in dark mode · Porcelain in light mode</small>
+            <small>Obsidian in dark mode · Porcelain in light mode</small>
           </span>
           <span className="theme-selected-label">
             {selected === "system" ? (

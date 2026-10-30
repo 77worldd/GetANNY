@@ -274,8 +274,12 @@ export default function App() {
       <header className="titlebar">
         <div className="titlebar-left">
           <div className="app-brand">
-            <img src="./icon.png" alt="" />
-            <strong>GetANNY</strong>
+            <span className="brand-mark" aria-hidden="true" />
+            <span
+              className="brand-wordmark"
+              role="img"
+              aria-label="GetANNY"
+            />
             <span className="brand-divider" />
             <span className="app-caption">Download manager</span>
           </div>
@@ -396,8 +400,15 @@ export default function App() {
         </>
       ) : (
         <div className="startup-screen">
-          <img src="./icon.png" alt="GetANNY" />
-          <h1>GetANNY</h1>
+          <div className="startup-brand">
+            <span className="brand-mark" aria-hidden="true" />
+            <span
+              className="brand-wordmark"
+              role="img"
+              aria-label="GetANNY"
+            />
+          </div>
+          <h1 className="visually-hidden">GetANNY</h1>
           {error ? (
             <>
               <p className="error-text">{error}</p>

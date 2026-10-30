@@ -4,8 +4,8 @@
     13px/1.5 "Segoe UI",
     system-ui,
     sans-serif;
-  background: #101418;
-  color: #e8edf0;
+  background: #0b0c0e;
+  color: #f2f4f6;
 }
 * {
   box-sizing: border-box;
@@ -19,20 +19,21 @@ header {
   align-items: center;
   gap: 12px;
   padding: 20px;
-  border-bottom: 1px solid #293037;
+  border-bottom: 1px solid #21252a;
 }
-header img {
+header .app-icon {
   width: 34px;
   height: 34px;
 }
-header strong {
+header .wordmark {
   display: block;
-  font-size: 17px;
-  letter-spacing: -0.5px;
+  width: 92px;
+  height: 15px;
+  margin: 1px 0 4px;
 }
 header span {
   display: block;
-  color: #8a98a4;
+  color: #98a1a9;
   font-size: 11px;
 }
 button {
@@ -53,14 +54,14 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 summary:focus-visible {
-  outline: 2px solid #8ad7b6;
+  outline: 2px solid #ffffff;
   outline-offset: 3px;
 }
 .icon {
   margin-left: auto;
   background: none;
-  color: #a5b1ba;
-  border: 1px solid #333e47;
+  color: #b3bac1;
+  border: 1px solid #2a2f36;
   border-radius: 6px;
   width: 30px;
   height: 30px;
@@ -71,21 +72,21 @@ main {
 }
 .connection {
   padding: 10px 12px;
-  background: #1b242a;
-  color: #a5b5c1;
-  border: 1px solid #303c45;
+  background: #1a1d21;
+  color: #b3bac1;
+  border: 1px solid #2a2f36;
   border-radius: 6px;
   font-size: 11px;
   margin-bottom: 23px;
   overflow-wrap: anywhere;
 }
 .connection.online {
-  border-color: #365446;
-  color: #91d3b5;
-  background: #18271f;
+  border-color: #3a4048;
+  color: #f2f4f6;
+  background: #22262b;
 }
 .connection.offline {
-  color: #dfb98b;
+  color: #dcc493;
 }
 h1 {
   font-size: 14px;
@@ -101,13 +102,13 @@ h1 {
 .text-button {
   background: none;
   border: 0;
-  color: #8ad7b6;
+  color: #ffffff;
   font-size: 11px;
   padding: 2px;
 }
 label {
   display: block;
-  color: #93a0aa;
+  color: #98a1a9;
   font-size: 11px;
   margin: 12px 0 6px;
 }
@@ -116,13 +117,13 @@ select {
   font: inherit;
   width: 100%;
   padding: 10px 11px;
-  border: 1px solid #35404a;
+  border: 1px solid #2a2f36;
   border-radius: 6px;
-  background: #151b20;
-  color: #e8edf0;
+  background: #0d0f12;
+  color: #f2f4f6;
 }
 input::placeholder {
-  color: #667580;
+  color: #6f7881;
 }
 .primary,
 .secondary {
@@ -130,53 +131,53 @@ input::placeholder {
   justify-content: space-between;
   width: 100%;
   padding: 11px 13px;
-  border: 1px solid #91d5b5;
+  border: 1px solid #ffffff;
   border-radius: 6px;
-  background: #9addbb;
-  color: #11231a;
+  background: #ffffff;
+  color: #08090a;
   font-weight: 650;
   margin-top: 15px;
 }
 .primary:hover {
-  background: #b0e7cd;
+  background: #e9edf0;
 }
 .secondary {
-  background: #222d35;
-  color: #d2dde5;
-  border-color: #394651;
+  background: #1a1d21;
+  color: #d6dce1;
+  border-color: #2f353c;
   justify-content: center;
 }
 .secondary:hover,
 .detected-item:hover {
-  background: #2a3943;
+  background: #262a30;
 }
 #message {
   font-size: 11px;
-  color: #9ed7b9;
+  color: #d6dce1;
   min-height: 18px;
   overflow-wrap: anywhere;
   margin: 13px 0;
 }
 .error {
-  color: #ecaa9e !important;
+  color: #f0a6a0 !important;
 }
 details {
-  border-top: 1px solid #2b343c;
+  border-top: 1px solid #21252a;
   margin-top: 18px;
   padding-top: 15px;
 }
 summary {
   cursor: pointer;
-  color: #95a4af;
+  color: #b3bac1;
   font-size: 12px;
 }
 details p {
   font-size: 11px;
-  color: #8a98a4;
+  color: #98a1a9;
 }
 h2 {
   font-size: 11px;
-  color: #98a6b0;
+  color: #b3bac1;
   font-weight: 500;
 }
 #detected {
@@ -190,9 +191,9 @@ h2 {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
-  background: #1c242a;
-  color: #ccd6dd;
-  border: 1px solid #303c44;
+  background: #1a1d21;
+  color: #d6dce1;
+  border: 1px solid #2a2f36;
   border-radius: 5px;
   padding: 8px;
   margin: 5px 0;
@@ -200,14 +201,14 @@ h2 {
 }
 footer {
   padding: 13px 20px;
-  border-top: 1px solid #293037;
+  border-top: 1px solid #21252a;
   font-size: 10px;
-  color: #667682;
+  color: #6f7881;
 }
 ::-webkit-scrollbar {
   width: 5px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #3a4955;
+  background: #4a525c;
   border-radius: 5px;
 }

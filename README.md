@@ -1,26 +1,40 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/lockup-horizontal-white.png">
+    <img src="assets/brand/lockup-horizontal-black.png" alt="GetANNY" width="440">
+  </picture>
+</p>
+
 # GetANNY
 
 **Reliable downloads. Clear control.** A Windows-first Electron download manager with a React workspace, persistent SQLite history, verified HTTP range transfers, yt-dlp media downloads, and authenticated browser integration.
 
-> **Current source: 2.0.0.** This source includes scheduling, handoff-recovery and packaging work. A new Windows build is not a verified release until its installer, portable, browser and uninstall gates have actually passed. The existing rc.2 release predates these changes. See [testing evidence and remaining gates](docs/TESTING.md).
+> **Current source: 2.1.0 (Obsidian).** This release introduces the official GetANNY identity: the supplied eagle/shield mark and wordmark are used unchanged across the application, Windows icons, installers and browser extensions, and the entire palette has been rebuilt around that monochrome artwork. A Windows build is not a certified release until its installer, portable and browser gates have passed; see [testing evidence and remaining gates](docs/TESTING.md).
 
 ## Get the Windows app
 
-### Previous public release candidate
+### Official GetANNY 2.1.0 release
 
-The public [**GetANNY 2.0.0-rc.1 release**](https://github.com/77worldd/GetANNY/releases/tag/v2.0.0-rc.1) contains both real Windows installers, eight browser packages, guides, source provenance, verification status and SHA-256 checksums.
+The [**GetANNY 2.1.0 GitHub Release**](https://github.com/p4yy/GetANNY/releases/tag/v2.1.0) contains the real Windows installers, the portable build, eight browser packages, the complete distribution bundle, guides, source provenance and SHA-256 checksums.
 
-**Direct downloads:** [GetANNY Setup.exe](https://github.com/77worldd/GetANNY/releases/download/v2.0.0-rc.1/GetANNY.Setup.exe) · [GetANNY Setup.msi](https://github.com/77worldd/GetANNY/releases/download/v2.0.0-rc.1/GetANNY.Setup.msi) · [SHA256SUMS.txt](https://github.com/77worldd/GetANNY/releases/download/v2.0.0-rc.1/SHA256SUMS.txt).
+**Direct downloads:** [GetANNY Setup.exe](https://github.com/p4yy/GetANNY/releases/download/v2.1.0/GetANNY-2.1.0-Setup.exe) · [GetANNY Setup.msi](https://github.com/p4yy/GetANNY/releases/download/v2.1.0/GetANNY-2.1.0-Setup.msi) · [GetANNY Portable.exe](https://github.com/p4yy/GetANNY/releases/download/v2.1.0/GetANNY-2.1.0-Portable.exe) · [Windows bundle ZIP](https://github.com/p4yy/GetANNY/releases/download/v2.1.0/GetANNY-2.1.0-Windows-Bundle.zip) · [SHA256SUMS.txt](https://github.com/p4yy/GetANNY/releases/download/v2.1.0/SHA256SUMS.txt).
 
-These are the same unsigned binaries built from `048d137`, now hosted as a real public prerelease—not a new build or a certification. At publication, installed-app/browser verification was still incomplete. Use **one installer format**, not both simultaneously. Windows 10/11 x64 is required.
+Use **one installer format**, not both simultaneously. Windows 10/11 x64 is required.
 
 - EXE: interactive per-user installer, installation-folder selection, Start Menu and optional desktop shortcut.
 - MSI: Windows Installer package for interactive or scripted deployment; optional desktop shortcut.
-- Both include the renderer, SQLite native module, asynchronous HTTP range engine, yt-dlp, FFmpeg/ffprobe, a compiled native-host executable, and Chromium / Firefox extension resources. No separately installed Node or Python is required.
+- Portable: single executable for use from a writable folder; browser integration uses the paired WebSocket fallback while it runs (see `docs/PORTABLE_WINDOWS.md`).
+- All Windows packages include the renderer, SQLite native module, asynchronous HTTP range engine, yt-dlp, FFmpeg/ffprobe, a compiled native-host executable, and Chromium / Firefox extension resources. No separately installed Node or Python is required.
 - Installer setup prepares detected browsers and registers native hosts for the installing user. **It does not silently install an extension.** Follow the in-app setup guide and approve installation in your browser.
-- No signing certificate was supplied to this development session. Check release test evidence for the actual Authenticode status. Do not assume a binary is signed because it has an installer icon.
+- No signing certificate was supplied to this build session. The binaries are **unsigned**; check the release evidence for the actual Authenticode status. An installer icon is not a signature.
 
 [Detailed Windows installation and upgrade instructions](docs/INSTALL_WINDOWS.md) · [Browser installation and troubleshooting](docs/BROWSERS.md)
+
+### Brand and appearance
+
+- `assets/brand/source/` holds the untouched supplied PNGs. `scripts/brand/generate-brand-assets.py` derives every icon by rebuilding transparency and recolouring only — the eagle, shield, lettering, proportions and arrangement are never redrawn.
+- The app, tray, installer, uninstaller, MSI, shortcuts, notifications, favicon and browser extensions all use the same mark. The wordmark is used where space allows; the eagle/shield alone is used for icon-sized surfaces.
+- Twelve palettes share the identity. **Obsidian** (dark) and **Porcelain** (light) are the logo-native defaults; the alternative palettes keep their own character with restrained, logo-compatible accents. Brand marks are drawn as CSS masks, so the original artwork always renders in the theme's ink colour.
 
 ## Implemented functionality
 

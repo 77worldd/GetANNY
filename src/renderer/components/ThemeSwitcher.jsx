@@ -45,13 +45,13 @@ export default function ThemeSwitcher() {
       <button
         type="button"
         className="theme-quick-button"
-        aria-label={`Theme: ${selected === "system" ? "System" : current?.name || "Graphite"}. Change theme`}
+        aria-label={`Theme: ${selected === "system" ? "System" : current?.name || "Obsidian"}. Change theme`}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
         <LuPalette />
         <span className="theme-quick-name">
-          {selected === "system" ? "System" : current?.name || "Graphite"}
+          {selected === "system" ? "System" : current?.name || "Obsidian"}
         </span>
         <LuChevronDown className="theme-chevron" />
       </button>

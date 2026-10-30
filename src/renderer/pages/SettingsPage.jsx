@@ -520,13 +520,16 @@ export default function SettingsPage({ capabilities, version }) {
       )}
       <div className="settings-bottom">
         <div className="about-app">
-          <img src="./icon.png" alt="" />
-          <div>
-            <strong>
-              GetANNY <span>{version}</span>
-            </strong>
-            <small>Reliable downloads. Clear control.</small>
+          <div className="about-brand">
+            <span className="brand-mark" aria-hidden="true" />
+            <span
+              className="brand-wordmark"
+              role="img"
+              aria-label="GetANNY"
+            />
+            <span className="about-version">{version}</span>
           </div>
+          <small>Reliable downloads. Clear control.</small>
         </div>
         <Button
           variant="ghost"

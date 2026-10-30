@@ -8,24 +8,28 @@
     system-ui,
     sans-serif;
   color-scheme: dark;
-  --bg: #101419;
-  --sidebar: #14191f;
-  --panel: #171d24;
-  --raised: #1c242c;
-  --input: #11171c;
-  --line: #29323c;
-  --line-soft: #232b34;
-  --text: #e5ebef;
-  --secondary: #a2afba;
-  --muted: #93a1ac;
-  --accent: #a2dfc2;
-  --accent-hover: #b9ead4;
-  --accent-text: #102b20;
-  --accent-soft: #21392f;
-  --red: #eda69d;
-  --red-soft: #3d2728;
-  --amber: #d7bd87;
-  --shadow: 0 20px 80px #0007;
+  --bg: #0b0c0e;
+  --sidebar: #0f1114;
+  --panel: #121417;
+  --raised: #1a1d21;
+  --input: #0d0f12;
+  --line: #2a2f36;
+  --line-soft: #21252a;
+  --text: #f2f4f6;
+  --secondary: #b3bac1;
+  --muted: #98a1a9;
+  --accent: #ffffff;
+  --accent-hover: #e9edf0;
+  --accent-text: #08090a;
+  --accent-soft: #22262b;
+  --red: #f0a6a0;
+  --red-soft: #3a2526;
+  --amber: #dcc493;
+  --shadow: 0 20px 80px #0008;
+  /* Brand marks are drawn with the exact supplied artwork via CSS masks,
+     so every theme renders the original eagle and lettering in its ink. */
+  --brand-mark: url("../../assets/brand/symbol-black.png");
+  --brand-wordmark: url("../../assets/brand/wordmark-black.png");
   font-size: 13px;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -165,22 +169,22 @@ small {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #43515e80;
+  background: #4a525c80;
   border: 2px solid transparent;
   background-clip: padding-box;
   border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #6a7a88aa;
+  background: #7b848faa;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 * {
   scrollbar-width: thin;
-  scrollbar-color: #43515e80 transparent;
+  scrollbar-color: #4a525c80 transparent;
 }
 ::selection {
-  background: #739e8a65;
+  background: #8a929c66;
 }
 .muted {
   color: var(--muted);
@@ -217,7 +221,7 @@ small {
 }
 .button:hover:not(:disabled) {
   background: var(--line);
-  border-color: #596b77;
+  border-color: color-mix(in srgb, var(--muted) 55%, transparent);
 }
 .button.primary {
   background: var(--accent);
@@ -297,7 +301,7 @@ small {
 }
 .live-dot.live {
   background: var(--accent);
-  box-shadow: 0 0 0 3px #9dd9ba10;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .status-dot {
   background: currentColor;
@@ -336,15 +340,45 @@ small {
   gap: 9px;
   margin-left: 19px;
 }
-.app-brand img {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
+.brand-mark,
+.brand-wordmark,
+.brand-lockup {
+  display: block;
+  flex-shrink: 0;
+  background-color: currentColor;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
-.app-brand strong {
-  font-size: 13px;
-  letter-spacing: -0.2px;
-  font-weight: 650;
+.brand-mark {
+  -webkit-mask-image: var(--brand-mark);
+  mask-image: var(--brand-mark);
+  width: 24px;
+  height: 22px;
+}
+.brand-wordmark {
+  -webkit-mask-image: var(--brand-wordmark);
+  mask-image: var(--brand-wordmark);
+  width: 80px;
+  height: 13px;
+}
+.brand-lockup {
+  -webkit-mask-image: var(--brand-wordmark);
+  mask-image: var(--brand-wordmark);
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 .brand-divider {
   height: 14px;
@@ -443,8 +477,8 @@ small {
 .sidebar-add kbd {
   margin-left: auto;
   font-size: 8px;
-  background: #16352515;
-  border-color: #254a3320;
+  background: #ffffff12;
+  border-color: #ffffff1f;
   color: inherit;
   letter-spacing: -0.3px;
 }
@@ -697,9 +731,19 @@ small {
   text-align: center;
   padding: 30px;
 }
-.startup-screen img {
-  width: 48px;
-  height: 48px;
+.startup-brand {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  color: var(--text);
+}
+.startup-brand .brand-mark {
+  width: 68px;
+  height: 62px;
+}
+.startup-brand .brand-wordmark {
+  width: 216px;
+  height: 35px;
 }
 .startup-screen p {
   color: var(--muted);
@@ -1544,7 +1588,7 @@ html.theme-transition *::after {
   align-items: center;
   justify-content: center;
   margin-bottom: 22px;
-  box-shadow: 0 0 0 8px #6d8b7910;
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 .empty-icon svg {
   width: 26px;
@@ -1661,7 +1705,7 @@ html.theme-transition *::after {
 }
 .input-group:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px #9edcba13;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .input-group > svg {
   width: 15px;
@@ -1882,7 +1926,7 @@ html.theme-transition *::after {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  border: 1px solid #526d5d70;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
   background: var(--raised);
   padding: 13px 12px 13px 15px;
   color: var(--text);
@@ -2675,7 +2719,7 @@ html.theme-transition *::after {
   align-items: center;
   gap: 19px;
   padding: 25px;
-  border: 1px solid #6d9a8550;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
   border-radius: 8px;
   background: var(--panel);
   margin-bottom: 24px;
@@ -2963,7 +3007,7 @@ html.theme-transition *::after {
 }
 .setup-step.done > .step-number {
   color: var(--accent);
-  border-color: #7aa98d70;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
   background: var(--accent-soft);
 }
 .step-number svg {
@@ -3077,7 +3121,7 @@ html.theme-transition *::after {
   margin-top: 5px;
 }
 .verification.verified {
-  border: 1px solid #75a38d50;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
   background: var(--accent-soft);
 }
 .verification.verified > svg,
@@ -3384,30 +3428,36 @@ html.theme-transition *::after {
 }
 .about-app {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.about-brand {
+  display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 9px;
+  color: var(--text);
 }
-.about-app img {
-  width: 27px;
-  height: 27px;
-  opacity: 0.8;
+.about-brand .brand-mark {
+  width: 28px;
+  height: 26px;
 }
-.about-app strong {
-  font-size: 11px;
-  font-weight: 600;
-  display: block;
+.about-brand .brand-wordmark {
+  width: 92px;
+  height: 15px;
 }
-.about-app strong span {
+.about-version {
   font-size: 9px;
   color: var(--muted);
-  font-weight: 400;
-  margin-left: 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 2px;
 }
 .about-app small {
   display: block;
   font-size: 9px;
   color: var(--muted);
-  margin-top: 5px;
 }
 .settings-bottom > .button {
   font-size: 10px;

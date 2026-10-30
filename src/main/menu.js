@@ -7,7 +7,7 @@ function createMenu({ mainWindow }) {
         {
           label: "About GetANNY",
           click: () =>
-            shell.openExternal("https://github.com/77worldd/GetANNY"),
+            shell.openExternal("https://github.com/p4yy/GetANNY"),
         },
         { type: "separator" },
         { role: "quit" },
@@ -53,7 +53,7 @@ function createMenu({ mainWindow }) {
         {
           label: "Project website",
           click: () =>
-            shell.openExternal("https://github.com/77worldd/GetANNY"),
+            shell.openExternal("https://github.com/p4yy/GetANNY"),
         },
       ],
     },

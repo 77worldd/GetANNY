@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.0 — Obsidian identity release
+
+- Adopted the official supplied eagle/shield mark and GetANNY wordmark unchanged. A reproducible generator rebuilds transparency, recolours and resamples the original artwork into a multi-resolution Windows ICO, ICNS, application/tray/notification PNGs, installer header and sidebar bitmaps, favicon and browser-extension icons.
+- Branded the application shell, startup screen, About panel and browser-assistant popup; both the mark and lettering render as theme-aware masks so the original artwork is never redrawn or replaced.
+- Rebuilt the palette catalogue around the monochrome identity: **Obsidian** and **Porcelain** are the logo-native dark/light defaults, High Contrast is pure monochrome, and the nine other palettes keep their character with restrained accents. Removed leftover mint-specific glows in favour of theme tokens.
+- Added installer artwork for NSIS/MSI and updated the in-app repository link to the official `p4yy/GetANNY` repository.
+- Bumped the application and all browser packages to 2.1.0. Distribution remains unsigned; Firefox packages remain unsigned development ZIPs.
+
 ## 2.0.0 — Windows release source
 
 - Added a daily local-time start window for queued downloads, including overnight schedules and clean-restart persistence.

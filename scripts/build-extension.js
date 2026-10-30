@@ -19,6 +19,7 @@ const files = [
   "icons/icon16.png",
   "icons/icon48.png",
   "icons/icon128.png",
+  "icons/wordmark.png",
 ];
 async function build(family) {
   const dest = path.join(output, family);

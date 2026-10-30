@@ -1,3 +1,62 @@
+# GetANNY 2.1.0 — Obsidian identity release
+
+A branding and appearance release. All download, media, torrent, history, browser-integration and packaging behaviour from 2.0.0 is preserved.
+
+## The official identity
+
+- The supplied eagle/shield artwork and GetANNY wordmark are used **unchanged**. No element was redrawn, retraced, regenerated or substituted; only colour, transparency, proportional scaling and canvas padding were adjusted.
+- One source set in `assets/brand/source/` feeds a reproducible generator that produces the 16–256 px Windows ICO, macOS ICNS, 512 px application icon, monochrome tray icon, installer/uninstaller artwork, notification icon, favicon, documentation banner and every browser-extension icon.
+- Icon surfaces use the eagle/shield inside an obsidian tile; the wordmark is used in the titlebar, startup screen, About panel, browser popup, installer header/sidebar and documentation.
+
+## Appearance
+
+- **Obsidian** (dark) is the default: near-black surfaces, silver type and the eagle's white as the accent. **Porcelain** is its light counterpart, with ink-black controls.
+- High Contrast is now pure monochrome. Midnight, Nord, Evergreen, Ocean, Violet, Ember, Rosewood, Solarized and Sandstone keep their individual character with restrained, logo-compatible accents and neutral surfaces.
+- Brand marks are CSS masks, so the exact artwork renders in each theme's ink colour with correct antialiasing on light and dark surfaces.
+
+## Packages
+
+- Windows EXE (NSIS), MSI and portable builds, eight browser packages (Helium, Chrome, Chromium, Brave, Firefox, Vivaldi, Opera, Edge), one complete Windows bundle ZIP, documentation and SHA-256 checksums.
+- **Unsigned:** no code-signing certificate was available. Verify checksums before running. Firefox packages are unsigned development ZIPs and cannot be installed permanently without Mozilla signing.
+
+A branding and appearance release. All download, media, torrent, history, browser-integration and packaging behaviour from 2.0.0 is preserved.
+
+
+
+## The official identity
+
+
+
+- The supplied eagle/shield artwork and GetANNY wordmark are used **unchanged**. No element was redrawn, retraced, regenerated or substituted; only colour, transparency, proportional scaling and canvas padding were adjusted.
+
+- One source set in `assets/brand/source/` feeds a reproducible generator that produces the 16–256 px Windows ICO, macOS ICNS, 512 px application icon, monochrome tray icon, installer/uninstaller artwork, notification icon, favicon, documentation banner and every browser-extension icon.
+
+- Icon surfaces use the eagle/shield inside an obsidian tile; the wordmark is used in the titlebar, startup screen, About panel, browser popup, installer header/sidebar and documentation.
+
+
+
+## Appearance
+
+
+
+- **Obsidian** (dark) is the default: near-black surfaces, silver type and the eagle's white as the accent. **Porcelain** is its light counterpart, with ink-black controls.
+
+- High Contrast is now pure monochrome. Midnight, Nord, Evergreen, Ocean, Violet, Ember, Rosewood, Solarized and Sandstone keep their individual character with restrained, logo-compatible accents and neutral surfaces.
+
+- Brand marks are CSS masks, so the exact artwork renders in each theme's ink colour with correct antialiasing on light and dark surfaces.
+
+
+
+## Packages
+
+
+
+- Windows EXE (NSIS), MSI and portable builds, eight browser packages (Helium, Chrome, Chromium, Brave, Firefox, Vivaldi, Opera, Edge), one complete Windows bundle ZIP, documentation and SHA-256 checksums.
+
+- **Unsigned:** no code-signing certificate was available. Verify checksums before running. Firefox packages are unsigned development ZIPs and cannot be installed permanently without Mozilla signing.
+
+
+
 # GetANNY 2.0.0 — official Windows release
 
 A reliability, browser-handoff, scheduling, workspace and distribution update. Existing HTTP, media, torrent, history and settings systems remain in place.
