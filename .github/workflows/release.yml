@@ -68,6 +68,7 @@ jobs:
       - name: Build all browser packages
         run: npm run build-extension
       - name: Exercise actual compiled C# launcher before packaging
+        timeout-minutes: 5
         shell: pwsh
         run: |
           New-Item test-results/windows -ItemType Directory -Force | Out-Null

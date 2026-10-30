@@ -416,7 +416,7 @@ test("per-user native launcher copies lose MSI read-only flags and can be replac
 });
 
 test("automatic browser handoff foregrounds the application without jeopardizing ownership", async (t) => {
-  const dir = await temporary(t);
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "getanny-handoff-"));
   let shown = 0;
   const services = await createServices({
     userDataPath: dir,
@@ -430,7 +430,10 @@ test("automatic browser handoff foregrounds the application without jeopardizing
       throw new Error("window unavailable");
     },
   });
-  t.after(() => services.close());
+  t.after(async () => {
+    await services.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
   await services.settings.set("confirmBrowserDownloads", false);
   const client = await connect(t, services.wsServer);
   await message(client, {
