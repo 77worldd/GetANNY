@@ -15,22 +15,39 @@ public static class GetANNYTestForeground {
 }
 '@
 $automation=[System.Windows.Automation.AutomationElement]
-$condition=[System.Windows.Automation.PropertyCondition]::new($automation::ProcessIdProperty,$BrowserPid)
+# Current Chrome can host its folder dialog below the browser UI tree or in a
+# browser-owned utility process. Never target an unrelated process/window.
+$allowed=[System.Collections.Generic.HashSet[int]]::new()
+$allowed.Add($BrowserPid) | Out-Null
+$windowCondition=[System.Windows.Automation.PropertyCondition]::new($automation::ControlTypeProperty,[System.Windows.Automation.ControlType]::Window)
 $deadline=(Get-Date).AddSeconds(25)
 $dialog=$null
+$seen=@()
 while((Get-Date) -lt $deadline) {
-  $windows=$automation::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children,$condition)
-  foreach($window in $windows) {if($window.Current.ClassName -eq '#32770'){$dialog=$window;break}}
+  $processes=Get-CimInstance Win32_Process
+  do {
+    $changed=$false
+    foreach($process in $processes) {
+      if($allowed.Contains([int]$process.ParentProcessId) -and $allowed.Add([int]$process.ProcessId)){$changed=$true}
+    }
+  }while($changed)
+  $windows=$automation::RootElement.FindAll([System.Windows.Automation.TreeScope]::Descendants,$windowCondition)
+  $seen=@()
+  foreach($window in $windows) {
+    if(-not $allowed.Contains($window.Current.ProcessId)){continue}
+    $seen+=@{pid=$window.Current.ProcessId;name=$window.Current.Name;class=$window.Current.ClassName}
+    if($window.Current.ClassName -eq '#32770' -or $window.Current.Name -match 'Select.*extension.*directory'){$dialog=$window;break}
+  }
   if($dialog){break}
-  Start-Sleep -Milliseconds 100
+  Start-Sleep -Milliseconds 150
 }
-if(-not $dialog){throw 'Chrome did not expose its normal extension folder-selection dialog.'}
+if(-not $dialog){throw ('Chrome folder dialog unavailable. Actual browser-owned windows: '+($seen | ConvertTo-Json -Compress))}
 [GetANNYTestForeground]::SetForegroundWindow([IntPtr]$dialog.Current.NativeWindowHandle) | Out-Null
 $dialog.SetFocus()
 [System.Windows.Forms.SendKeys]::SendWait('%d')
 Start-Sleep -Milliseconds 150
 $address=$automation::FocusedElement
-if($address.Current.ProcessId -ne $BrowserPid -or $address.Current.ControlType -ne [System.Windows.Automation.ControlType]::Edit){throw 'Folder-dialog address field is not focused; refusing to send a path to another window.'}
+if(-not $allowed.Contains($address.Current.ProcessId) -or $address.Current.ControlType -ne [System.Windows.Automation.ControlType]::Edit){throw 'Folder-dialog address field is not focused; refusing to send a path to another window.'}
 $value=$address.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
 $value.SetValue($Directory)
 [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')

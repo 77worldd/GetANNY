@@ -80,7 +80,15 @@ class ChunkDownloader extends DownloadEngine {
         for await (const buffer of fs.createReadStream(part.file)) yield buffer;
       }
     };
-    this.setStatus("processing", { phase: "Assembling verified segments" });
+    // Every segment is now physically size-verified. Publish the exact network
+    // bytes at this boundary, not the last (possibly stale) 400ms ticker sample.
+    // This is still processing; completion requires the assembled file/link.
+    this.speed = 0;
+    this.tickBytes = 0;
+    this.setStatus("processing", {
+      ...this.progress(),
+      phase: "Assembling verified segments",
+    });
     await pipeline(
       Readable.from(inputs()),
       fs.createWriteStream(this.partialPath),

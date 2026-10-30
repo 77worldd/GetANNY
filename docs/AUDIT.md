@@ -27,3 +27,10 @@ Audit baseline: `f74fea83`, 29 October 2026. Screenshots supplied by the owner w
 Never silently install browser extensions, modify browser profiles, or use enterprise policies. Browsers do not expose a trustworthy external installed/enabled query: **no connection means unknown**, not “not installed”. Firefox production installation requires Mozilla signing. Unsigned unpacked Chromium packages require explicit developer-mode consent. Local tests and mocked external process tests are not evidence that a live media website, browser or Windows installation works.
 
 See `TESTING.md` and the generated CI test artifacts for measured results and remaining validation gates.
+
+## Additional defects established during regression testing
+
+- Segmented finalization emitted an intermediate progress event without the exact verified byte count and with stale network speed. A regression failed before repair; processing now reports verified bytes / zero speed / unknown ETA, while completion still waits for assembly, output verification and atomic publication.
+- Small muted text failed a calculated 4.5:1 contrast threshold on raised/selected dark surfaces and system-light surfaces. Updated actual theme tokens and added live-renderer contrast assertions across all three palettes; this is not a full accessibility certification.
+- CI evidence duplicated verbose 14-check reports into annotations that GitHub truncated near 4 KiB. The reporter now emits compact counts, deduplicated definitions and bounded batches; a production-sized unit fixture verifies limits and excludes private fields. Raw reports remain in the evidence artifact.
+- Browser-test diagnostics now distinguish a clean-browser Vivaldi baseline from extension-loaded startup. Firefox uses the exact automation-only system-access flag required by the measured runtime. Chrome still uses normal consent UI and a native picker, with scoped process/window ownership checks, not profile/policy manipulation. These browser harness repairs require new Windows execution.

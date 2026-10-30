@@ -1,5 +1,6 @@
-// Machine-readable, secret-free summaries in GitHub check annotations. The full
-// real reports remain artifacts/release assets; never emit pairing/config data.
+// Secret-free, bounded GitHub annotations; complete reports stay in evidence ZIP.
+// GitHub truncates messages near 4 KiB and caps annotations per step. Emit compact
+// real counts and deduplicated check definitions, never repeated verbose reports.
 const fs = require("node:fs/promises");
 const path = require("node:path");
 function annotation(title, value) {
@@ -11,6 +12,92 @@ function annotation(title, value) {
   process.stdout.write(
     `::notice title=${escape(title)}::${escape(JSON.stringify(value))}\n`,
   );
+}
+function emitRecords(title, records) {
+  let batch = [];
+  for (const record of records) {
+    if (
+      batch.length &&
+      Buffer.byteLength(JSON.stringify([...batch, record])) > 3300
+    ) {
+      annotation(title, batch);
+      batch = [];
+    }
+    if (Buffer.byteLength(JSON.stringify(record)) > 3300)
+      throw new Error(
+        `Evidence record too large for a readable annotation: ${title}`,
+      );
+    batch.push(record);
+  }
+  if (batch.length) annotation(title, batch);
+}
+function compact(data, relative) {
+  const result = {
+    report: relative.replaceAll("\\", "/"),
+    passed: data.passed,
+  };
+  for (const key of [
+    "date",
+    "version",
+    "electron",
+    "platform",
+    "packaged",
+    "browser",
+    "browserVersion",
+    "temporary",
+    "headless",
+    "extensionId",
+    "exe",
+    "msi",
+    "signatures",
+    "defaultProfileRetention",
+  ]) {
+    if (data[key] !== undefined) result[key] = data[key];
+  }
+  if (data.baseline)
+    result.baseline = {
+      passed: data.baseline.passed,
+      version: data.baseline.version,
+      error: data.baseline.error,
+    };
+  if (data.transport)
+    result.transport =
+      data.transport === "native"
+        ? "native"
+        : data.transport.startsWith("Native Messaging")
+          ? "native-chain"
+          : data.transport;
+  if (data.installation?.startsWith("Normal developer-mode UI"))
+    result.normalDeveloperUIConsent = true;
+  if (data.shortcuts)
+    result.shortcuts = {
+      exe: (data.shortcuts.exe || []).length,
+      msi: (data.shortcuts.msi || []).length,
+      createdAndTargetsVerified: data.shortcuts.createdAndTargetsVerified,
+      removedOnUninstall: data.shortcuts.removedOnUninstall,
+      shellLaunch: data.shortcuts.shellLaunch,
+    };
+  if (Array.isArray(data.checks)) {
+    result.checks = {
+      total: data.checks.length,
+      passed: data.checks.filter((check) =>
+        typeof check === "string" ? data.passed : check.passed === true,
+      ).length,
+    };
+    const failed = data.checks
+      .filter((check) => typeof check === "object" && check.passed === false)
+      .map((check) => check.name);
+    if (failed.length) result.checks.failed = failed;
+    const marker = data.checks.find(
+      (check) => check.detail?.priorRunObserved !== undefined,
+    );
+    if (marker)
+      result.restart = {
+        priorRunObserved: marker.detail.priorRunObserved,
+        history: marker.detail.history,
+      };
+  }
+  return result;
 }
 async function report(root) {
   const files = await fs.readdir(root, { recursive: true }).catch((error) => {
@@ -36,9 +123,8 @@ async function report(root) {
       failures: (xml.match(/<failure\b/g) || []).length,
       skipped: (xml.match(/<skipped\b/g) || []).length,
     });
-  // GitHub retains only a small number of annotations per step. Aggregate
-  // reports instead of silently losing later browsers to that limit.
-  const groups = { installed: [], browsers: [], installer: [], matrix: [] };
+  const groups = { installed: [], browsers: [], installer: [], matrix: [] },
+    definitions = { installed: new Set(), browsers: new Set() };
   for (const relative of files) {
     if (!relative.endsWith(".json")) continue;
     const file = path.join(root, relative);
@@ -56,63 +142,29 @@ async function report(root) {
       continue;
     }
     if (typeof data.passed !== "boolean") continue;
-    const summary = {};
-    for (const key of [
-      "passed",
-      "date",
-      "version",
-      "electron",
-      "platform",
-      "packaged",
-      "browser",
-      "browserVersion",
-      "temporary",
-      "signatures",
-      "exe",
-      "msi",
-      "limitations",
-      "defaultProfileRetention",
-      "shortcuts",
-      "installation",
-      "headless",
-      "transport",
-      "extensionId",
-    ])
-      if (data[key] !== undefined) summary[key] = data[key];
-    if (data.checks)
-      summary.checks = data.checks.map((check) =>
-        typeof check === "string"
-          ? check
-          : {
-              name: check.name,
-              passed: check.passed,
-              ms: check.ms,
-              ...(check.detail?.priorRunObserved !== undefined
-                ? {
-                    priorRunObserved: check.detail.priorRunObserved,
-                    history: check.detail.history,
-                  }
-                : {}),
-            },
-      );
-    summary.report = relative.replaceAll("\\", "/");
-    if (path.basename(file) === "installer-report.json")
-      groups.installer.push(summary);
-    else if (
-      summary.report.startsWith("browser/") ||
-      summary.report.startsWith("browser-matrix/")
-    )
-      groups.browsers.push(summary);
-    else groups.installed.push(summary);
+    const summary = compact(data, relative);
+    const group =
+      path.basename(file) === "installer-report.json"
+        ? "installer"
+        : summary.report.startsWith("browser/") ||
+            summary.report.startsWith("browser-matrix/")
+          ? "browsers"
+          : "installed";
+    groups[group].push(summary);
+    for (const check of data.checks || []) {
+      const name = typeof check === "string" ? check : check.name;
+      if (name && definitions[group]) definitions[group].add(name);
+    }
   }
-  for (const [key, title] of [
-    ["installed", "Installed Windows app reports"],
-    ["matrix", "Individual browser matrix"],
-    ["browsers", "Actual browser reports"],
-    ["installer", "Installer lifecycle, retention, shortcuts and signatures"],
-  ]) {
-    if (groups[key].length) annotation(title, groups[key]);
-  }
+  emitRecords("Installed Windows app reports", groups.installed);
+  emitRecords("Installed check definitions", [...definitions.installed]);
+  emitRecords("Individual browser matrix", groups.matrix);
+  emitRecords("Actual browser reports", groups.browsers);
+  emitRecords("Browser check definitions", [...definitions.browsers]);
+  emitRecords(
+    "Installer lifecycle, retention, shortcuts and signatures",
+    groups.installer,
+  );
 }
 if (require.main === module)
   report(path.resolve(process.argv[2] || "test-results/windows")).catch(

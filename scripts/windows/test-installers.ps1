@@ -18,6 +18,7 @@ function Self-Test([string] $InstalledExe, [string] $Name, [string] $Data) {
   Run-Checked $InstalledExe @('--self-test','--test-user-data',"`"$Data`"",'--report',"`"$report`"")
   $result = Get-Content $report -Raw | ConvertFrom-Json
   if (-not $result.passed -or -not $result.packaged -or $result.platform -ne 'win32') { throw "Installed-app self-test failed: $report" }
+  Write-Host ("::notice title=Installed app {0}::{1} actual packaged Windows checks passed" -f $Name,$result.checks.Count)
   foreach ($check in $result.checks) {
     Write-Host "PASS $Name : $($check.name)"
     if ($check.name -eq 'Rendered layouts at 1320, 1024 and 760 pixel windows') {
@@ -52,6 +53,7 @@ function Desktop-Lifecycle([string] $InstalledExe, [string] $Name, [string] $Dat
   $startMenu=$Shortcuts | Where-Object kind -eq 'startMenu' | Select-Object -First 1
   & node "$PSScriptRoot\test-desktop-lifecycle.js" $InstalledExe $Data (Join-Path $results "$Name-desktop-lifecycle.json") $desktop.path $startMenu.path
   if($LASTEXITCODE -ne 0){throw 'Installed cold native / actual shell shortcut lifecycle test failed.'}
+  Write-Host ("::notice title=Desktop lifecycle {0}::Compiled-native cold launch, real output hash, no resurrection and both actual shell shortcut launches passed" -f $Name)
 }
 function Profile-Snapshot([string] $Data) {
   $json=& node "$PSScriptRoot\snapshot-profile.js" (Join-Path $Data 'getanny.db')
@@ -71,6 +73,7 @@ function Owned-NativeEntries([string] $Data) {
 function Assert-Uninstalled([string] $InstalledExe, $Shortcuts, [string] $Data, $Before, $NativeEntries) {
   if (Test-Path $InstalledExe) { throw 'Uninstallation left the application executable.' }
   foreach ($link in $Shortcuts) { if (Test-Path $link.path) { throw "Uninstallation left shortcut $($link.path)" } }
+  foreach($directory in @('native-messaging','extensions')) {if(Test-Path (Join-Path $Data $directory)){throw "Uninstall left owned prepared directory $directory"}}
   $after=Profile-Snapshot $Data
   foreach($entry in $NativeEntries) {
     if((Test-Path $entry.key) -and (Get-Item $entry.key).GetValue('') -ieq $entry.value) {throw "Owned native registry entry survived uninstall: $($entry.key)"}
@@ -104,6 +107,7 @@ Start-Sleep -Seconds 2
 if (Test-Path $installedExe) { throw 'EXE uninstallation left the application executable.' }
 if (-not (Test-Path (Join-Path $exeData 'getanny.db'))) { throw 'Uninstaller destroyed isolated test history.' }
 $exeDefaultRetained=Assert-Uninstalled $installedExe $exeShortcuts $defaultData $exeDefaultBefore $exeNativeEntries
+@{passed=$true;exe=@{installed=$true;reinstalled=$true;uninstalled=$true};defaultProfileRetention=@{exe=$exeDefaultRetained};shortcuts=@{exe=$exeShortcuts;createdAndTargetsVerified=$true;removedOnUninstall=$true;shellLaunch='passed-in-exe-desktop-lifecycle.json'}} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $results 'exe-uninstall.json')
 Write-Host 'Installing the actual MSI package...'
 $msiDir = Join-Path $installRoot 'msi-app'
 $msiData = Join-Path $installRoot 'msi-data'
@@ -119,7 +123,9 @@ Write-Host 'Testing an actual Chromium extension with the installed MSI applicat
 & node "$PSScriptRoot\test-extension.js" $installedMsiExe "$results\browser"
 if ($LASTEXITCODE -ne 0) { throw 'Installed-app Chromium extension test failed.' }
 Write-Host 'Testing other available real browser brands (never personal profiles)...'
-& "$PSScriptRoot\test-browser-matrix.ps1" -InstalledExe $installedMsiExe -Results "$results\browser-matrix"
+$matrixError=$null
+try { & "$PSScriptRoot\test-browser-matrix.ps1" -InstalledExe $installedMsiExe -Results "$results\browser-matrix" }
+catch { $matrixError=$_.Exception.Message;Write-Warning "Browser gate failed; continue independent MSI retention/uninstall checks, then fail overall: $matrixError" }
 Self-Test $installedMsiExe 'msi-actual-default-profile' $defaultData
 Run-Checked $installedMsiExe @('--setup-browser-hosts','--quiet')
 Desktop-Lifecycle $installedMsiExe 'msi' $defaultData $msiShortcuts
@@ -130,5 +136,6 @@ if (Test-Path $installedMsiExe) { throw 'MSI uninstallation left the application
 if (-not (Test-Path (Join-Path $msiData 'getanny.db'))) { throw 'MSI uninstall destroyed isolated test history.' }
 $msiDefaultRetained=Assert-Uninstalled $installedMsiExe $msiShortcuts $defaultData $msiDefaultBefore $msiNativeEntries
 $signatures = @($exePackage,$msiPackage) | ForEach-Object { $sig = Get-AuthenticodeSignature $_; @{file=(Split-Path $_ -Leaf);status=$sig.Status.ToString()} }
-@{passed=$true;date=(Get-Date -Format o);exe=@{installed=$true;reinstalled=$true;uninstalled=$true};msi=@{installed=$true;reinstalled=$true;uninstalled=$true};signatures=$signatures;defaultProfileRetention=@{exe=$exeDefaultRetained;msi=$msiDefaultRetained};shortcuts=@{exe=$exeShortcuts;msi=$msiShortcuts;createdAndTargetsVerified=$true;removedOnUninstall=$true;shellLaunch='passed-in-desktop-lifecycle-reports'};limitations=@('GitHub-hosted Windows runner is not a pristine consumer Windows installation.','Same-version reinstall tested; migration from the old v1 installer requires manual validation.','Shortcut files, targets, removal and actual shell launches checked; interactive options dialogs still require manual inspection.','See browser-matrix/matrix.json for actual per-brand results; Production browser-UI consent and permanent store/signed installation remain manual.')} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $results 'installer-report.json')
-Write-Host 'EXE, MSI, installed downloads, restart preservation, native chain and Chromium extension checks passed.'
+@{passed=($null -eq $matrixError);browserMatrixError=$matrixError;date=(Get-Date -Format o);exe=@{installed=$true;reinstalled=$true;uninstalled=$true};msi=@{installed=$true;reinstalled=$true;uninstalled=$true};signatures=$signatures;defaultProfileRetention=@{exe=$exeDefaultRetained;msi=$msiDefaultRetained};shortcuts=@{exe=$exeShortcuts;msi=$msiShortcuts;createdAndTargetsVerified=$true;removedOnUninstall=$true;shellLaunch='passed-in-desktop-lifecycle-reports'};limitations=@('GitHub-hosted Windows runner is not a pristine consumer Windows installation.','Same-version reinstall tested; migration from the old v1 installer requires manual validation.','Shortcut files, targets, removal and actual shell launches checked; interactive options dialogs still require manual inspection.','See browser-matrix/matrix.json for actual per-brand results; Production browser-UI consent and permanent store/signed installation remain manual.')} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $results 'installer-report.json')
+if($matrixError){throw "Available browser gate failed: $matrixError. Independent installer/retention results are preserved in installer-report.json."}
+Write-Host 'EXE, MSI, installed downloads, restart preservation, native chain and available-browser extension checks passed.'

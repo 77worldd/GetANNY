@@ -44,7 +44,46 @@ const exec = promisify(execFile);
   app.stderr.on("data", (chunk) => {
     logs += chunk;
   });
-  let electron, browser;
+  let electron,
+    browser,
+    externalBrowser,
+    externalProcess,
+    externalPid,
+    externalError,
+    baseline,
+    failureCategory;
+  const closeBrowser = async () => {
+    if (externalBrowser) {
+      if (externalBrowser.isConnected()) {
+        const session = await externalBrowser
+          .newBrowserCDPSession()
+          .catch(() => null);
+        if (session)
+          await Promise.race([
+            session.send("Browser.close").catch(() => {}),
+            new Promise((resolve) => setTimeout(resolve, 1000)),
+          ]);
+      }
+      if (
+        externalPid &&
+        (externalBrowser.isConnected() ||
+          (externalPid === externalProcess.pid &&
+            externalProcess.exitCode === null))
+      )
+        await exec("taskkill.exe", [
+          "/pid",
+          String(externalPid),
+          "/T",
+          "/F",
+        ]).catch(() => {});
+      await externalBrowser.close().catch(() => {});
+      externalBrowser = null;
+      browser = null;
+    } else if (browser) {
+      await browser.close();
+      browser = null;
+    }
+  };
   try {
     await waitFor(
       async () => {
@@ -86,37 +125,119 @@ const exec = promisify(execFile);
       value: path.join(work, "browser-downloads"),
     });
     const prepared = await invoke("browser:prepare", browserId);
-    browser = await chromium.launchPersistentContext(
-      path.join(work, "chromium-profile"),
-      {
-        ...(browserExecutable
-          ? { executablePath: browserExecutable }
-          : { channel: "chromium" }),
-        // Vivaldi's Windows headless process crashed before extension loading.
-        // Exercise its real headed UI; Chrome also needs its normal approval UI.
-        headless: !["vivaldi", "chrome"].includes(browserId),
-        timeout: 60000,
-        ignoreDefaultArgs: [
-          "--disable-extensions",
-          ...(browserId === "vivaldi"
-            ? ["--disable-component-extensions-with-background-pages"]
-            : []),
-        ],
-        args:
-          browserId === "chrome"
-            ? []
-            : [
-                `--disable-extensions-except=${prepared.path}`,
-                `--load-extension=${prepared.path}`,
-              ],
-      },
-    );
+    if (browserId === "vivaldi") {
+      // Vivaldi exited before CDP with the generic Playwright launch flags.
+      // Compare a normal baseline WITHOUT GetANNY before testing its extension;
+      // a clean-browser startup failure is unverified, not an invented app pass.
+      const openVivaldi = async (withExtension) => {
+        externalError = undefined;
+        externalProcess = spawn(
+          browserExecutable,
+          [
+            `--user-data-dir=${path.join(work, withExtension ? "chromium-profile" : "vivaldi-baseline-profile")}`,
+            "--remote-debugging-port=9224",
+            ...(withExtension ? [`--load-extension=${prepared.path}`] : []),
+            "about:blank",
+          ],
+          { stdio: ["ignore", "pipe", "pipe"] },
+        );
+        externalProcess.on("error", (error) => {
+          externalError = error;
+        });
+        for (const stream of [externalProcess.stdout, externalProcess.stderr])
+          stream.on("data", (chunk) => {
+            logs += "Vivaldi: " + chunk.toString();
+          });
+        await waitFor(
+          async () => {
+            if (externalError) throw externalError;
+            if (
+              externalProcess.exitCode !== null &&
+              externalProcess.exitCode !== 0
+            )
+              throw new Error(
+                `Vivaldi exited ${externalProcess.exitCode} before CDP connection`,
+              );
+            try {
+              return (await fetch("http://127.0.0.1:9224/json/version")).ok;
+            } catch {
+              return false;
+            }
+          },
+          30000,
+          "normal headed Vivaldi debugging endpoint",
+        );
+        externalBrowser = await chromium.connectOverCDP(
+          "http://127.0.0.1:9224",
+          {
+            timeout: 30000,
+          },
+        );
+        const session = await externalBrowser.newBrowserCDPSession();
+        externalPid = (
+          await session.send("SystemInfo.getProcessInfo")
+        ).processInfo.find((info) => info.type === "browser")?.id;
+        await session.detach();
+        if (!externalPid)
+          throw new Error(
+            "Vivaldi did not expose a browser PID for safe test-only cleanup",
+          );
+        browser = externalBrowser.contexts()[0];
+      };
+      try {
+        await openVivaldi(false);
+      } catch (error) {
+        baseline = { passed: false, error: error.message };
+        failureCategory = "browser-baseline";
+        throw error;
+      }
+      baseline = { passed: true, version: externalBrowser.version() };
+      await closeBrowser();
+      await waitFor(
+        async () => {
+          try {
+            return !(
+              await fetch("http://127.0.0.1:9224/json/version", {
+                signal: AbortSignal.timeout(700),
+              })
+            ).ok;
+          } catch {
+            return true;
+          }
+        },
+        10000,
+        "clean Vivaldi baseline closed",
+      );
+      await openVivaldi(true);
+    } else {
+      browser = await chromium.launchPersistentContext(
+        path.join(work, "chromium-profile"),
+        {
+          ...(browserExecutable
+            ? { executablePath: browserExecutable }
+            : { channel: "chromium" }),
+          // Vivaldi's Windows headless process crashed before extension loading.
+          // Exercise its real headed UI; Chrome also needs its normal approval UI.
+          headless: browserId !== "chrome",
+          timeout: 60000,
+          ignoreDefaultArgs: ["--disable-extensions"],
+          args:
+            browserId === "chrome"
+              ? []
+              : [
+                  `--disable-extensions-except=${prepared.path}`,
+                  `--load-extension=${prepared.path}`,
+                ],
+        },
+      );
+    }
     if (browserId === "chrome") {
       // Deliberately use Chrome's supported visible developer-mode controls and
       // native folder picker in a throwaway profile, not removed load flags,
       // policies, signing bypasses or writes to the user's browser profile.
       const manager = await browser.newPage();
       await manager.goto("chrome://extensions/");
+      await manager.bringToFront();
       await manager.locator("#devMode").click();
       const session = await browser.browser().newBrowserCDPSession();
       const { processInfo } = await session.send("SystemInfo.getProcessInfo");
@@ -258,6 +379,7 @@ const exec = promisify(execFile);
           browserExecutable: browserExecutable || "Playwright bundled Chromium",
           browserVersion: await browser.browser().version(),
           extensionId: CHROMIUM_ID,
+          ...(baseline ? { baseline } : {}),
           installation:
             browserId === "chrome"
               ? "Normal developer-mode UI and native folder picker in a disposable test profile"
@@ -280,18 +402,36 @@ const exec = promisify(execFile);
         2,
       ),
     );
-    await browser.close();
-    browser = null;
+    await closeBrowser();
     await invoke("app:quit");
     await waitFor(() => app.exitCode !== null, 15000, "app quit");
   } catch (error) {
     await fs.writeFile(
       path.join(root, "browser-report.json"),
-      JSON.stringify({ passed: false, error: error.stack, logs }, null, 2),
+      JSON.stringify(
+        {
+          passed: false,
+          browser: browserId,
+          date: new Date().toISOString(),
+          ...(baseline ? { baseline } : {}),
+          ...(failureCategory ? { failureCategory } : {}),
+          error: error.stack,
+          logs,
+        },
+        null,
+        2,
+      ),
     );
     throw error;
   } finally {
-    await browser?.close().catch(() => {});
+    await closeBrowser().catch(() => {});
+    if (externalProcess && externalProcess.exitCode === null)
+      await exec("taskkill.exe", [
+        "/pid",
+        String(externalProcess.pid),
+        "/T",
+        "/F",
+      ]).catch(() => {});
     await electron?.close().catch(() => {});
     if (app.exitCode === null)
       await exec("taskkill.exe", ["/pid", String(app.pid), "/T", "/F"]).catch(

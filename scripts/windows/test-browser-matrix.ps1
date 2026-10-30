@@ -56,7 +56,9 @@ foreach($id in @('helium','brave','vivaldi','opera','firefox','chrome')) {
  $code=$LASTEXITCODE
  if(Test-Path "$folder\browser-report.json") {
   $report=Get-Content "$folder\browser-report.json" -Raw | ConvertFrom-Json
-  $matrix.Add(@{browser=$id;status=($code -eq 0 -and $report.passed ? 'passed' : 'failed');report="$id/browser-report.json"})
+  if($id -eq 'vivaldi' -and $report.failureCategory -eq 'browser-baseline' -and $report.baseline.passed -eq $false) {
+   $matrix.Add(@{browser=$id;status='unverified';reason=('Normal browser baseline WITHOUT GetANNY could not be verified in this runner: '+$report.baseline.error);report="$id/browser-report.json"})
+  }else{$matrix.Add(@{browser=$id;status=($code -eq 0 -and $report.passed ? 'passed' : 'failed');report="$id/browser-report.json"})}
  }else{$matrix.Add(@{browser=$id;status='failed';reason="Test exited $code before producing a report."})}
 }
 $matrix.Add(@{browser='edge';status='unverified';reason='Additional browser; ordinary developer-mode/store installation needs individual manual verification.'})

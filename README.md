@@ -49,7 +49,7 @@ Helium, Google Chrome, Chromium, Brave, Firefox, Vivaldi, Opera, plus Microsoft 
 
 Persisted defaults, simultaneous jobs, connections, per-download speed limit, timeout, retries, auto-start, restart resumption, file categories, browser request confirmation, integration enablement, OS notifications, tray behavior, Windows/macOS login startup, start-minimized, two dark palettes / system theme, density and reduced motion. Each displayed setting has a behavioral consumer; transfer connection/rate preferences apply on new/resumed jobs.
 
-Single desktop titlebar, cohesive dark controls, keyboard-friendly dialogs, explicit loading/error states, responsive layouts and restrained animations. Native frame/menu are no longer duplicated on Windows.
+Single desktop titlebar, cohesive dark controls, keyboard-friendly dialogs, explicit loading/error states, responsive layouts and restrained animations. Small-label theme tokens are tested for 4.5:1 contrast on normal, raised and selected surfaces. Native frame/menu are no longer duplicated on Windows.
 
 ## Development
 

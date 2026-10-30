@@ -35,3 +35,7 @@ WebSocket binds loopback, restricts origins, bounds payloads, rejects unauthenti
 ## Shutdown and packaging
 
 An asynchronous Electron shutdown guard stops the bridge and awaits engines before closing SQLite. Tray-close behavior is honored only when a tray actually exists. Builders require renderer, both extension manifests, native modules, tools, licenses and a real Windows launcher. NSIS/MSI register hosts in HKCU; no browser policy or profile edits. Uninstall removes only registrations owned by the app and preserves history/downloads. Browser-side add-ons must be removed through browser UI.
+
+## Processing progress is not published completion
+
+After all HTTP segments are verified, processing snapshots expose the exact network byte count, zero network speed and unknown ETA. Output remains unpublished until assembly, final stat/length checks and atomic no-overwrite publication succeed. The regression asserts both truthful processing progress and absence of a completed destination at that boundary.

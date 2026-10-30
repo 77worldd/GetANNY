@@ -179,9 +179,63 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
       path: path.join(output, "settings-1320.png"),
       fullPage: true,
     });
-    await page
-      .getByLabel("Color theme", { exact: true })
-      .selectOption("graphite");
+    // Verify actual CSS tokens, not a screenshot-based accessibility claim.
+    // Small muted labels must remain readable even on selected/raised surfaces.
+    for (const [theme, colorScheme] of [
+      ["midnight", "dark"],
+      ["system", "light"],
+      ["graphite", "dark"],
+    ]) {
+      await page.emulateMedia({ colorScheme });
+      await page.getByLabel("Color theme", { exact: true }).selectOption(theme);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      const failures = await page.evaluate(() => {
+        const style = getComputedStyle(document.documentElement);
+        const luminance = (token) => {
+          let hex = style.getPropertyValue(token).trim().replace("#", "");
+          if (hex.length === 3)
+            hex = [...hex].map((char) => char + char).join("");
+          const rgb = [0, 2, 4]
+            .map((index) => parseInt(hex.slice(index, index + 2), 16) / 255)
+            .map((value) =>
+              value <= 0.04045
+                ? value / 12.92
+                : ((value + 0.055) / 1.055) ** 2.4,
+            );
+          return rgb.reduce(
+            (sum, value, index) =>
+              sum + value * [0.2126, 0.7152, 0.0722][index],
+            0,
+          );
+        };
+        const failures = [];
+        for (const text of ["--muted", "--secondary", "--text"])
+          for (const surface of [
+            "--bg",
+            "--sidebar",
+            "--panel",
+            "--raised",
+            "--input",
+            "--accent-soft",
+          ]) {
+            const a = luminance(text),
+              b = luminance(surface),
+              ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+            if (!Number.isFinite(ratio) || ratio < 4.5)
+              failures.push({ text, surface, ratio });
+          }
+        return failures;
+      });
+      if (failures.length)
+        throw new Error(
+          `${theme} text-token contrast: ${JSON.stringify(failures)}`,
+        );
+      if (theme === "system")
+        await page.screenshot({
+          path: path.join(output, "settings-system-light-1320.png"),
+          fullPage: true,
+        });
+    }
     await nav("All downloads").click();
     const activeName = `Live transfer verification ${Date.now()}.bin`;
     await add(fixture.url + "/file.bin", activeName);
@@ -257,6 +311,7 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
         "Actual empty-file completion shows verified zero bytes, not unknown size",
         "Real yt-dlp format analysis and video download",
         "Validated settings affect backend and theme",
+        "Graphite/Midnight/system-light text tokens meet 4.5:1 on normal, raised and selected surfaces",
         "Responsive pages at 1320,1024,760,480 pixels",
         "Keyboard Escape and focusable dialogs",
         "No uncaught renderer errors",

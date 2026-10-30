@@ -5,7 +5,7 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const { ChunkDownloader } = require("./ChunkDownloader");
-test("chunk downloader assembles concurrent byte ranges into the destination file", async (t) => {
+test("chunk downloader assembles verified ranges with exact finalization bytes before publishing completion", async (t) => {
   const data = Buffer.alloc(3 * 1024 * 1024);
   for (let i = 0; i < data.length; i++) data[i] = i % 251;
   const server = http.createServer((req, res) => {
@@ -43,6 +43,14 @@ test("chunk downloader assembles concurrent byte ranges into the destination fil
     savePath: dir,
     connections: 3,
   });
+  const finalizing = [];
+  downloader.on("status", (_id, status, data) => {
+    if (status === "processing")
+      finalizing.push({
+        data,
+        published: require("node:fs").existsSync(path.join(dir, "large.bin")),
+      });
+  });
   const complete = new Promise((resolve, reject) => {
     downloader.once("complete", (_id, result) => resolve(result));
     downloader.once("error", (_id, error) => reject(error));
@@ -50,5 +58,19 @@ test("chunk downloader assembles concurrent byte ranges into the destination fil
   await downloader.start();
   const result = await complete;
   assert.equal(result.filename, "large.bin");
+  assert.equal(finalizing.length, 1);
+  assert.equal(
+    finalizing[0].data.downloadedSize,
+    data.length,
+    "verified segment bytes must not remain at the last 400ms progress tick",
+  );
+  assert.equal(finalizing[0].data.totalSize, data.length);
+  assert.equal(finalizing[0].data.speed, 0);
+  assert.equal(finalizing[0].data.eta, null);
+  assert.equal(
+    finalizing[0].published,
+    false,
+    "100% network bytes is still processing, not a completed output",
+  );
   assert.deepEqual(await fs.readFile(path.join(dir, "large.bin")), data);
 });

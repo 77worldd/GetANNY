@@ -22,13 +22,14 @@ test("CI evidence aggregation retains every fixture report within annotation lim
       platform: "win32",
       packaged: true,
       token: canary,
-      checks: [
-        {
-          name: "Unit fixture",
-          passed: true,
-          detail: { url: canary, settings: canary },
-        },
-      ],
+      date: "2026-10-30T00:00:00.000Z",
+      version: "unit-fixture",
+      electron: "unit-fixture",
+      checks: Array.from({ length: 14 }, (_, index) => ({
+        name: `Realistically sized reporter unit fixture definition ${index}`,
+        passed: true,
+        detail: { url: canary, settings: canary },
+      })),
     });
   const browsers = [
     "helium",
@@ -45,7 +46,12 @@ test("CI evidence aggregation retains every fixture report within annotation lim
       browser,
       browserVersion: "unit-fixture",
       token: canary,
-      checks: ["Reporter unit fixture"],
+      transport:
+        "Native Messaging → C# executable → Electron Node → authenticated WebSocket → installed Electron → SQLite/download engine",
+      checks: Array.from(
+        { length: 5 },
+        (_, index) => `Reporter unit fixture ${index}`,
+      ),
     });
   await write(
     "browser-matrix/matrix.json",
@@ -61,15 +67,25 @@ test("CI evidence aggregation retains every fixture report within annotation lim
     root,
   ]);
   const lines = stdout.trim().split("\n");
-  assert.equal(lines.length, 4);
+  assert.equal(lines.length, 6);
+  for (const line of lines)
+    assert.ok(
+      Buffer.byteLength(line) < 3800,
+      "each actual annotation must fit the GitHub truncation limit",
+    );
   assert.ok(lines.length < 10);
   assert.ok(!stdout.includes(canary));
   const reports = lines.map((line) => JSON.parse(line.split("::").at(-1)));
   assert.equal(reports[0].length, 6);
-  assert.equal(reports[1].length, 7);
+  assert.ok(
+    reports[0].every(
+      (item) => item.checks.total === 14 && item.checks.passed === 14,
+    ),
+  );
+  assert.equal(reports[2].length, 7);
   assert.deepEqual(
-    reports[2].map((item) => item.browser).sort(),
+    reports[3].map((item) => item.browser).sort(),
     [...browsers].sort(),
   );
-  assert.equal(reports[3][0].defaultProfileRetention.exe.retained, true);
+  assert.equal(reports[5][0].defaultProfileRetention.exe.retained, true);
 });

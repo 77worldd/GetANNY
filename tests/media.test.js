@@ -354,6 +354,7 @@ test(
       await services.close();
       services = await createServices(options);
       assert.equal(services.manager.requireItem(id).status, "paused");
+      const resumeRequestsFrom = fixture.server.state.requests.length;
       services.manager.resume(id);
       await waitFor(
         () =>
@@ -370,9 +371,9 @@ test(
         checksum(await fs.readFile(path.join(fixture.dir, "video.mp4"))),
       );
       assert.ok(
-        fixture.server.state.requests.some((request) =>
-          /^bytes=[1-9]\d*-/.test(request.range || ""),
-        ),
+        fixture.server.state.requests
+          .slice(resumeRequestsFrom)
+          .some((request) => /^bytes=[1-9]\d*-/.test(request.range || "")),
         `yt-dlp actually requested remaining bytes: ${JSON.stringify(fixture.server.state.requests)}`,
       );
       const cancelled = await services.manager.addMedia(selection);

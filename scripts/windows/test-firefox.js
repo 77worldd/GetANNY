@@ -96,7 +96,7 @@ const exec = promisify(execFile);
       .setFirefoxOptions(
         new firefox.Options()
           .setBinary(firefoxExe)
-          .addArguments("-headless", "--allow-system-access"),
+          .addArguments("-headless", "-remote-allow-system-access"),
       )
       .setFirefoxService(new firefox.ServiceBuilder(geckoExe))
       .build();
