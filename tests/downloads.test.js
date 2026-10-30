@@ -366,3 +366,81 @@ test("a resumed URL without entity validators restarts rather than mixing change
     checksum(server.state.data),
   );
 });
+
+test("daily start window handles daytime, overnight and equal endpoints in local time", () => {
+  const { isWithinSchedule } = require("../src/main/engine/DownloadManager");
+  const at = (hours, minutes = 0) => new Date(2026, 0, 15, hours, minutes);
+  const day = {
+    scheduleEnabled: true,
+    scheduleStartMinute: 8 * 60,
+    scheduleEndMinute: 17 * 60,
+  };
+  assert.equal(isWithinSchedule(day, at(8)), true);
+  assert.equal(isWithinSchedule(day, at(17)), false);
+  const overnight = {
+    ...day,
+    scheduleStartMinute: 22 * 60,
+    scheduleEndMinute: 6 * 60,
+  };
+  assert.equal(isWithinSchedule(overnight, at(23)), true);
+  assert.equal(isWithinSchedule(overnight, at(5, 59)), true);
+  assert.equal(isWithinSchedule(overnight, at(12)), false);
+  assert.equal(
+    isWithinSchedule(
+      { ...day, scheduleEndMinute: day.scheduleStartMinute },
+      at(2),
+    ),
+    true,
+  );
+  assert.equal(
+    isWithinSchedule({ ...day, scheduleEnabled: false }, at(2)),
+    true,
+  );
+});
+
+test("scheduled downloads remain queued across restart and start when scheduling is disabled", async (t) => {
+  const dir = await fs.mkdtemp(
+    path.join(require("node:os").tmpdir(), "getanny-schedule-"),
+  );
+  const fixture = await fixtureServer(t, { size: 32768 });
+  let db = new Database(dir);
+  await db.initialize();
+  const now = new Date();
+  const minute = now.getHours() * 60 + now.getMinutes();
+  const settings = {
+    defaultDownloadPath: dir,
+    scheduleEnabled: true,
+    scheduleStartMinute: (minute + 5) % 1440,
+    scheduleEndMinute: (minute + 6) % 1440,
+    resumeOnStartup: false,
+  };
+  let manager = new DownloadManager({
+    settings,
+    downloadsRepo: new DownloadsRepo(db),
+  });
+  t.after(async () => {
+    await manager.shutdown();
+    db.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  const id = await manager.addDownload({ url: fixture.url + "/file.bin" });
+  assert.equal(manager.requireItem(id).status, "queued");
+  assert.equal(fixture.state.requests.length, 0);
+  await manager.shutdown();
+  db.close();
+  db = new Database(dir);
+  await db.initialize();
+  manager = new DownloadManager({
+    settings,
+    downloadsRepo: new DownloadsRepo(db),
+  });
+  await manager.restoreDownloads();
+  assert.equal(manager.requireItem(id).status, "queued");
+  assert.equal(fixture.state.requests.length, 0);
+  manager.updateSettings({ scheduleEnabled: false });
+  await waitFor(() => manager.requireItem(id).status === "completed");
+  assert.equal(
+    checksum(await fs.readFile(manager.requireItem(id).filePath)),
+    checksum(fixture.state.data),
+  );
+});

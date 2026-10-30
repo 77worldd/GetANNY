@@ -42,6 +42,7 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
   try {
     await invoke("settings:set", { key: "firstRunCompleted", value: false });
     await invoke("settings:set", { key: "autoStartDownloads", value: true });
+    await invoke("settings:set", { key: "scheduleEnabled", value: false });
     await invoke("settings:set", { key: "maxConcurrentDownloads", value: 3 });
     // Make the real transfer last long enough to actually click Pause even on
     // fast parallel local sockets; no fabricated progress or sleeps as proof.
@@ -228,9 +229,42 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
     ).toBeVisible();
     if ((await invoke("settings:get-all")).maxConcurrentDownloads !== 2)
       throw new Error("Setting did not persist");
+    await page.getByRole("switch", { name: "scheduleEnabled" }).click();
+    await expect(
+      page.getByRole("switch", { name: "scheduleEnabled" }),
+    ).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByLabel("Schedule start time")).toBeEnabled();
+    await page.getByLabel("Schedule start time").fill("22:15");
+    await expect
+      .poll(async () => (await invoke("settings:get-all")).scheduleStartMinute)
+      .toBe(1335);
+    await expect(
+      page.getByText("Changes saved", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("switch", { name: "scheduleEnabled" }),
+    ).toBeEnabled();
+    await page.getByRole("switch", { name: "scheduleEnabled" }).click();
+    await expect(
+      page.getByRole("switch", { name: "scheduleEnabled" }),
+    ).toHaveAttribute("aria-checked", "false");
+    await expect
+      .poll(async () => (await invoke("settings:get-all")).scheduleEnabled)
+      .toBe(false);
     await page
       .getByRole("button", { name: "Application", exact: true })
       .click();
+    await page.getByLabel("Animations").selectOption("disabled");
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-motion",
+      "disabled",
+    );
+    await expect(page.getByLabel("Animations")).toBeEnabled();
+    await page.getByLabel("Animations").selectOption("standard");
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-motion",
+      "standard",
+    );
     await page.screenshot({
       path: path.join(output, "settings-1320.png"),
       fullPage: true,
@@ -401,7 +435,7 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
         "Actual empty-file completion shows verified zero bytes, not unknown size",
         "Real yt-dlp metadata, thumbnails, independent SRT, alongside VTT and video downloads",
         "Completed-video lazy preview renders from the bounded cache",
-        "Validated settings affect backend and theme",
+        "Validated settings, scheduling and animation modes affect the backend and renderer",
         "All theme palettes and both system modes meet 4.5:1 text-token contrast on normal, raised and selected surfaces",
         "Themes gallery filtering and top-left quick switcher persist selections",
         "Responsive pages including Themes at 1320,1024,760,480 pixels",

@@ -2,6 +2,8 @@
 
 ## End-user installation
 
+For the portable executable and its browser-integration limitations, see [PORTABLE_WINDOWS.md](PORTABLE_WINDOWS.md).
+
 Requirements: Windows 10/11 x64, ordinary user account, writable destination/download folders, network access to your download sources. The standalone application includes its JavaScript runtime, native modules, yt-dlp, FFmpeg/ffprobe and native messaging launcher. Windows supplies .NET Framework 4.x for the small launcher; no separate Node.js or Python is needed.
 
 1. Download **GetANNY Setup.exe** OR **GetANNY Setup.msi** and `SHA256SUMS.txt` from the same GitHub Release.
@@ -15,7 +17,7 @@ Unless release evidence says Authenticode **Valid**, these packages are unsigned
 
 ## Development test-build downloads
 
-Each successful packaging step now retains a **`GetANNY-unsigned-test-build` artifact** on its Actions run, containing EXE, MSI, extension ZIPs, SHA-256 sums and `BUILD_STATUS.txt`. A later installed/uninstall/browser check may still be running or may fail. These artifacts are **not verified final releases**. Downloading Actions artifacts may require GitHub sign-in. The fully verified publication route requires the separate full verification gate. A specifically authorized public RC can instead publish the same immutable build with pending/failed verification prominently disclosed; its `MEASURED_RESULTS.md` and release-page warning are authoritative. Public hosting alone is not certification.
+Each successful packaging step now retains a **`GetANNY-unsigned-test-build` artifact** on its Actions run, containing EXE, MSI, portable EXE, extension ZIPs, SHA-256 sums and `BUILD_STATUS.txt`. A later installed/uninstall/browser check may still be running or may fail. These artifacts are **not verified final releases**. Downloading Actions artifacts may require GitHub sign-in. The fully verified publication route requires the separate full verification gate. A specifically authorized public RC can instead publish the same immutable build with pending/failed verification prominently disclosed; its `MEASURED_RESULTS.md` and release-page warning are authoritative. Public hosting alone is not certification.
 
 ## What has actually been measured
 
@@ -71,4 +73,4 @@ Automated evidence includes installed renderer/preload/IPC, HTTP/HTTPS, resume/c
 
 ## Releasing
 
-On the session branch, run the **Windows installers and integration tests** workflow with `publish=true`. If the connected integration cannot dispatch Actions, an explicitly authorized push whose commit message includes the trailer `GetANNY-Publish: prerelease` opts into the same gated publication. Ordinary pushes build/test only; documentation-only pushes are skipped. Publication is allowed only after all gates pass. It creates a semantic-versioned prerelease with EXE, MSI, eight browser ZIPs (seven requested + Edge), instructions, evidence archive, checksums and GitHub's source archives. Existing tags/assets are never silently overwritten. Manual certification and Mozilla / extension-store signing are not automated by this workflow.
+On the session branch, run the **Windows installers and integration tests** workflow with `publish=true`. If the connected integration cannot dispatch Actions, an explicitly authorized push whose commit message includes the trailer `GetANNY-Publish: stable` opts into the same gated publication. Ordinary pushes build/test only; documentation-only pushes are skipped. Publication is allowed only after all gates pass. It creates a semantic-versioned official release with EXE, MSI, eight browser ZIPs (seven requested + Edge), instructions, evidence archive, checksums and GitHub's source archives. Existing tags/assets are never silently overwritten. Manual certification and Mozilla / extension-store signing are not automated by this workflow.

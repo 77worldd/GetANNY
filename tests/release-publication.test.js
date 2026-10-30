@@ -99,3 +99,42 @@ test("only the specifically prepared marked prerelease may receive assets", () =
       assertPreparedRelease({ ...release, ...change }, expected, "v2.0.0-rc.1"),
     );
 });
+
+test("draft release must contain every byte-verified asset before publication", async (t) => {
+  const fs = require("node:fs/promises");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { createHash } = require("node:crypto");
+  const { verifyReleaseAssets } = require("../scripts/verify-release-assets");
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "getanny-release-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const bytes = Buffer.from("test only");
+  await fs.writeFile(path.join(dir, "GetANNY Setup.exe"), bytes);
+  const release = {
+    tag_name: "v2.0.0",
+    target_commitish: "commit",
+    draft: true,
+    prerelease: false,
+    assets: [
+      {
+        label: "GetANNY Setup.exe",
+        name: "GetANNY.Setup.exe",
+        state: "uploaded",
+        digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+      },
+    ],
+  };
+  const expected = { tag: "v2.0.0", source: "commit" };
+  assert.equal(await verifyReleaseAssets(release, dir, expected), 1);
+  for (const change of [
+    { draft: false },
+    { prerelease: true },
+    { target_commitish: "other" },
+    { assets: [] },
+    { assets: [{ ...release.assets[0], digest: "sha256:wrong" }] },
+    { assets: [{ ...release.assets[0], state: "starter" }] },
+  ])
+    await assert.rejects(
+      verifyReleaseAssets({ ...release, ...change }, dir, expected),
+    );
+});

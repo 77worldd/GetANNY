@@ -3,6 +3,7 @@ const THEMES = require("../../shared/themes.json").map((theme) => theme.id);
 const BOOLEAN_KEYS = [
   "autoStartDownloads",
   "resumeOnStartup",
+  "scheduleEnabled",
   "organizeByType",
   "confirmBrowserDownloads",
   "notifications",
@@ -22,6 +23,8 @@ const NUMBER_RULES = {
   requestTimeoutSeconds: [5, 300],
   retryAttempts: [0, 5],
   retryDelaySeconds: [1, 120],
+  scheduleStartMinute: [0, 1439],
+  scheduleEndMinute: [0, 1439],
 };
 const BROWSERS = [
   "helium",
@@ -44,6 +47,9 @@ function defaults(downloadPath) {
     retryDelaySeconds: 3,
     autoStartDownloads: true,
     resumeOnStartup: false,
+    scheduleEnabled: false,
+    scheduleStartMinute: 0,
+    scheduleEndMinute: 360,
     organizeByType: false,
     confirmBrowserDownloads: true,
     notifications: true,
@@ -53,6 +59,7 @@ function defaults(downloadPath) {
     theme: "graphite",
     compactList: false,
     reduceMotion: false,
+    animationMode: "standard",
     browserIntegrationEnabled: true,
     mediaIntegration: true,
     firstRunCompleted: false,
@@ -79,6 +86,9 @@ function validateSetting(key, value) {
   } else if (key === "theme") {
     if (![...THEMES, "system"].includes(value))
       throw new Error("Choose a supported theme.");
+  } else if (key === "animationMode") {
+    if (!["standard", "reduced", "disabled"].includes(value))
+      throw new Error("Choose a supported animation mode.");
   } else if (key === "preferredBrowser") {
     if (!BROWSERS.includes(value))
       throw new Error("Choose a supported browser.");

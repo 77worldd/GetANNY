@@ -7,7 +7,8 @@ class SettingsService {
     this.onChange = onChange;
     this.values = { ...this.defaults };
     // Discard invalid legacy values instead of breaking startup.
-    for (let [key, value] of Object.entries(repo.getAll())) {
+    const saved = repo.getAll();
+    for (let [key, value] of Object.entries(saved)) {
       if (key === "theme" && value === "dark") value = "graphite";
       try {
         this.values[key] = validateSetting(key, value);
@@ -15,6 +16,9 @@ class SettingsService {
         /* unsupported legacy preference */
       }
     }
+    // Preserve the old accessibility preference when upgrading existing users.
+    if (saved.animationMode === undefined && saved.reduceMotion === true)
+      this.values.animationMode = "reduced";
   }
   getAll() {
     return { ...this.values };

@@ -85,3 +85,21 @@ test("v1 SQLite database is migrated without losing history or settings", async 
   );
   assert.equal(db.db.pragma("user_version", { simple: true }), 2);
 });
+
+test("animation mode validates, persists and preserves legacy reduced-motion preference", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "getanny-motion-"));
+  const db = new Database(dir);
+  await db.initialize();
+  t.after(async () => {
+    db.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  const repo = new SettingsRepo(db);
+  repo.set("reduceMotion", true);
+  let service = new SettingsService({ repo, downloadPath: dir });
+  assert.equal(service.get("animationMode"), "reduced");
+  await service.set("animationMode", "disabled");
+  service = new SettingsService({ repo, downloadPath: dir });
+  assert.equal(service.get("animationMode"), "disabled");
+  await assert.rejects(service.set("animationMode", "unknown"), /supported/);
+});

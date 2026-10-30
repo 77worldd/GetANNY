@@ -92,7 +92,6 @@ function Sidebar({ bridge, version }) {
         ))}
         <div className="nav-group-label tools-label">TOOLS</div>
         <Nav id="media" icon={LuFilm} label="Media studio" />
-        <Nav id="themes" icon={LuPalette} label="Themes" />
         <Nav
           id="torrent"
           icon={LuMagnet}
@@ -122,6 +121,7 @@ function Sidebar({ bridge, version }) {
           <LuChevronRight />
         </button>
         <Nav id="browser" icon={LuGlobe} label="Browser integration" />
+        <Nav id="themes" icon={LuPalette} label="Themes" />
         <Nav id="settings" icon={LuSettings2} label="Settings" />
         <button
           className="sidebar-connection"
@@ -214,13 +214,12 @@ export default function App() {
     return () => system.removeEventListener("change", update);
   }, [settings.theme]);
   useEffect(() => {
-    document.documentElement.dataset.motion = settings.reduceMotion
-      ? "reduced"
-      : "full";
+    document.documentElement.dataset.motion =
+      settings.animationMode || "standard";
     document.documentElement.dataset.density = settings.compactList
       ? "compact"
       : "comfortable";
-  }, [settings.reduceMotion, settings.compactList]);
+  }, [settings.animationMode, settings.compactList]);
   const detail = downloads.find((item) => item.id === detailId);
   const review = (request) => {
     if (request.kind === "media") useUIStore.getState().openMedia(request.url);

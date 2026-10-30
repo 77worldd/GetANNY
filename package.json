@@ -1,6 +1,6 @@
 {
   "name": "getanny",
-  "version": "2.0.0-rc.2",
+  "version": "2.0.0",
   "description": "GetANNY — reliable downloads, clear control",
   "main": "src/main/main.js",
   "author": "GetANNY Team",
@@ -13,7 +13,7 @@
     "download-ytdlp": "node scripts/download-ytdlp.js",
     "prepare:tools": "node scripts/prepare-tools.js",
     "build": "npm run build-extension && npm run build:renderer && electron-builder --publish never",
-    "build:win": "npm run build-extension && npm run build:renderer && electron-builder --win nsis msi --publish never",
+    "build:win": "npm run build-extension && npm run build:renderer && electron-builder --win nsis msi portable --publish never",
     "build:linux": "npm run build-extension && npm run build:renderer && electron-builder --linux --publish never",
     "test": "node --test --test-concurrency=1 tests/*.test.js src/main/**/*.test.js",
     "test:ui": "node scripts/test-ui.js",

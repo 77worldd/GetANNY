@@ -1,6 +1,15 @@
-# GetANNY 2.0.0-rc.2 — Windows release candidate
+# GetANNY 2.0.0 — official Windows release
 
-A reliability, browser-handoff, media-workflow, appearance and source-backend performance upgrade. Existing HTTP, media, torrent, history and settings systems remain in place.
+A reliability, browser-handoff, scheduling, workspace and distribution update. Existing HTTP, media, torrent, history and settings systems remain in place.
+
+## Changes since rc.2
+
+- Browser review locks the intercepted file link and verifies the matching desktop transfer before cancelling the browser copy.
+- Browser handoffs use unique IDs and retain in-flight Chromium handoff state across service-worker suspension. A browser restart may still require manually resuming a paused browser download.
+- An optional daily local-time window gates queued transfer starts; running transfers are not stopped when the window ends. Scheduled queue entries persist across clean restarts.
+- Added an Open source action, compact headings, Themes beside Settings, and standard, reduced and disabled animation modes.
+- Added a portable target and a single Windows distribution bundle. The portable app requires the paired WebSocket fallback for browser integration while it is running; persistent native host setup requires the installer. See `PORTABLE_WINDOWS.md`.
+- Complete application localization and Arabic RTL are not included in this release.
 
 ## Downloads and performance
 
@@ -30,7 +39,7 @@ A reliability, browser-handoff, media-workflow, appearance and source-backend pe
 
 ## Delivery and verification
 
-- **GetANNY Setup.exe** and **GetANNY Setup.msi**, plus targeted packages for Helium, Chrome, Chromium, Brave, Firefox, Vivaldi, Opera and Edge.
+- **GetANNY Setup.exe**, **GetANNY Setup.msi** and **GetANNY Portable.exe**, plus targeted packages for Helium, Chrome, Chromium, Brave, Firefox, Vivaldi, Opera and Edge.
 - The Windows workflow builds with pinned SHA-256-verified tools, runs the backend/media suites, installs and exercises both installer formats, checks lifecycle/history retention and runs available real-browser tests. Ordinary browser interception checks include cookie forwarding, desktop hash verification and native-entry cleanup.
 - Read the appended `MEASURED_RESULTS.md`, source/run identity, SHA-256 sums and raw evidence for the actual result. A package being built or published is not by itself an installation or browser certification.
 
@@ -43,4 +52,4 @@ A reliability, browser-handoff, media-workflow, appearance and source-backend pe
 - Public-network performance, installed whole-desktop RAM/idle CPU, disk-full/power-loss, proxies, antivirus and real-world tracker behavior require broader field evidence.
 - Per-download connection/rate changes apply to new/resumed jobs. The optional limit is per transfer, not a hidden global limit.
 
-See [test evidence](https://github.com/77worldd/GetANNY/blob/arena/456bcab4-getanny/docs/TESTING.md), [Windows instructions](https://github.com/77worldd/GetANNY/blob/arena/456bcab4-getanny/docs/INSTALL_WINDOWS.md), and [browser guides](https://github.com/77worldd/GetANNY/blob/arena/456bcab4-getanny/docs/BROWSERS.md). This remains a **prerelease** until the attached verification gates and disclosed manual requirements are resolved.
+See [test evidence](https://github.com/p4yy/GetANNY/blob/arena/42d3216b-getanny/docs/TESTING.md), [Windows instructions](https://github.com/p4yy/GetANNY/blob/arena/42d3216b-getanny/docs/INSTALL_WINDOWS.md), and [browser guides](https://github.com/p4yy/GetANNY/blob/arena/42d3216b-getanny/docs/BROWSERS.md). This is an official release, not an assurance that the limitations above or the remaining manual verification requirements have been resolved.

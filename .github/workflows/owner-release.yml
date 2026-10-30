@@ -1,0 +1,49 @@
+name: Owner-requested official release without waiting for tests
+on:
+  push:
+    branches: [arena/42d3216b-getanny]
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    if: >-
+      ${{ contains(github.event.head_commit.message, 'GetANNY-Publish-NoTests: 41108662586') }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_RUN: '41108662586'
+      BUILD_SHA: '010b2e0f25e5aa32a9abb536055a41bcae5a99ff'
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Obtain the specifically identified build artifact
+        shell: pwsh
+        run: |
+          trap { $msg = ($_ | Out-String).Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A'); Write-Output "::error title=Build artifact acquisition::$msg"; exit 1 }
+          $run = gh run view $env:BUILD_RUN --json headSha,headBranch | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $run.headSha -ne $env:BUILD_SHA -or $run.headBranch -ne 'arena/42d3216b-getanny') { throw 'Build source does not match the authorized commit and branch.' }
+          $deadline = (Get-Date).AddMinutes(15)
+          do {
+            $artifactData = gh api "repos/$env:REPO/actions/runs/$env:BUILD_RUN/artifacts" | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the existing build artifacts.' }
+            $artifact = @($artifactData.artifacts | Where-Object { $_.name -eq 'GetANNY-unsigned-test-build' -and -not $_.expired })
+            if ($artifact.Count -eq 1) { break }
+            Start-Sleep -Seconds 15
+          } while ((Get-Date) -lt $deadline)
+          if ($artifact.Count -ne 1) { throw 'The requested build artifact was not produced before the deadline.' }
+          New-Item owner-build -ItemType Directory -Force | Out-Null
+          gh run download $env:BUILD_RUN -n GetANNY-unsigned-test-build -D owner-build
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download the identified build artifact.' }
+      - name: Assemble and publish the owner-requested release
+        shell: pwsh
+        run: |
+          trap { $msg = ($_ | Out-String).Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A'); Write-Output "::error title=Official release publication::$msg"; exit 1 }
+          ./scripts/windows/publish-owner-build.ps1

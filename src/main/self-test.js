@@ -8,6 +8,7 @@ const http = require("node:http");
 const { spawn, execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
 const { CHROMIUM_ID } = require("./browser-integration/catalog");
+const { WebSocket } = require("ws");
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const sleep = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -18,7 +19,29 @@ async function until(predicate, label, timeout = 25000) {
     await sleep(25);
   }
 }
+async function checkBrowserPreparation(s, portable) {
+  const detected = await s.browserDetector.detect();
+  assert.equal(detected.length, 8);
+  if (portable) {
+    // The portable launcher extracts to a temporary directory. Registering a
+    // persistent native host would leave a broken path after it exits.
+    await assert.rejects(s.prepareBrowser("chromium"), /portable launcher/i);
+    const prepared = await s.extensionInstaller.install("chromium");
+    assert.equal(prepared.prepared, true);
+    assert.equal(prepared.installed, null);
+  } else {
+    const prepared = await s.prepareBrowser("chromium");
+    assert.equal(prepared.prepared, true);
+    assert.equal(prepared.installed, null);
+    assert.equal(
+      (await s.nativeMessagingHost.check("chromium")).registered,
+      true,
+    );
+  }
+  return detected.map(({ id, installed }) => ({ id, installed }));
+}
 async function runSelfTest({ services: s, win, app, binPath, userDataPath }) {
+  const portable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
   const checks = [];
   const check = async (name, callback) => {
     const start = Date.now();
@@ -394,20 +417,8 @@ async function runSelfTest({ services: s, win, app, binPath, userDataPath }) {
         }
       },
     );
-    await check(
-      "Browser detection and real extension preparation",
-      async () => {
-        const detected = await s.browserDetector.detect();
-        assert.equal(detected.length, 8);
-        const prepared = await s.prepareBrowser("chromium");
-        assert.equal(prepared.prepared, true);
-        assert.equal(prepared.installed, null);
-        assert.equal(
-          (await s.nativeMessagingHost.check("chromium")).registered,
-          true,
-        );
-        return detected.map(({ id, installed }) => ({ id, installed }));
-      },
+    await check("Browser detection and real extension preparation", async () =>
+      checkBrowserPreparation(s, portable),
     );
     await check(
       "Windows native executable → Electron Node → framed bridge → download",
@@ -490,6 +501,77 @@ async function runSelfTest({ services: s, win, app, binPath, userDataPath }) {
         }
       },
     );
+    if (portable)
+      await check("Portable paired WebSocket → download", async () => {
+        const messages = [];
+        const client = new WebSocket(
+          `ws://127.0.0.1:${s.wsServer.status().port}`,
+          {
+            origin: `chrome-extension://${CHROMIUM_ID}`,
+          },
+        );
+        client.on("message", (raw) =>
+          messages.push(JSON.parse(raw.toString())),
+        );
+        client.on("error", () => {});
+        try {
+          await until(
+            () => client.readyState === WebSocket.OPEN,
+            "portable bridge connection",
+          );
+          client.send(
+            JSON.stringify({
+              type: "authenticate",
+              token: s.identity.token,
+              transport: "websocket",
+            }),
+          );
+          await until(
+            () => messages.some((message) => message.type === "authenticated"),
+            "portable bridge authentication",
+          );
+          client.send(
+            JSON.stringify({
+              type: "hello",
+              requestId: "portable-hello",
+              browserId: "chromium",
+              extensionId: CHROMIUM_ID,
+            }),
+          );
+          await until(
+            () =>
+              messages.some(
+                (message) =>
+                  message.requestId === "portable-hello" && message.success,
+              ),
+            "portable bridge handshake",
+          );
+          client.send(
+            JSON.stringify({
+              type: "download",
+              requestId: "portable-file",
+              url: base + "/portable-bridge.bin",
+              filename: "portable-bridge.bin",
+            }),
+          );
+          await until(
+            () =>
+              messages.some(
+                (message) =>
+                  message.requestId === "portable-file" && message.success,
+              ),
+            "portable bridge acknowledgement",
+          );
+          const response = messages.find(
+            (message) => message.requestId === "portable-file",
+          );
+          const item = await finish(response.id);
+          assert.equal(hash(await fs.readFile(item.filePath)), hash(data));
+          return { bytes: item.totalSize, transport: "websocket" };
+        } finally {
+          client.terminate();
+        }
+      });
     await check(
       "Persisted history, settings and actual process restart marker",
       async () => {
@@ -554,4 +636,4 @@ async function runSelfTest({ services: s, win, app, binPath, userDataPath }) {
     ],
   };
 }
-module.exports = { runSelfTest };
+module.exports = { runSelfTest, checkBrowserPreparation };

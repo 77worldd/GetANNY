@@ -1,3 +1,7 @@
+# rc.3 verification status
+
+The rc.3 source adds scheduling, service-worker handoff recovery, a portable target and a distribution bundle. Until the Windows CI run for the exact rc.3 commit passes, none of those packaged artifacts or Windows/browser lifecycle gates is certified. The portable target requires its own packaged self-test and is limited to paired WebSocket browser integration while running. The historical results below refer to earlier source revisions.
+
 # Test evidence and release gates
 
 This file distinguishes executed tests from intended CI gates and manual work. No simulated transfer results are used as download evidence.

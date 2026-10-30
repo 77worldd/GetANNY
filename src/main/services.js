@@ -29,6 +29,7 @@ async function createServices({
   extensionPath,
   appPath = process.execPath,
   isPackaged = false,
+  isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE),
   nativeImage = null,
   port = 29615,
   onSettingChange = async () => {},
@@ -128,8 +129,18 @@ async function createServices({
           createdAt: Date.now(),
         };
         pendingBrowserRequests.push(review);
-        events.emit("event", "browser:request", review);
-        onBrowserRequest(review);
+        // A UI delivery/focus failure must not turn an already-recorded
+        // review into a rejection that resumes the browser copy.
+        try {
+          events.emit("event", "browser:request", review);
+        } catch {
+          // The pending request remains available through bootstrap.
+        }
+        try {
+          onBrowserRequest(review);
+        } catch {
+          // Window focus is best effort, not an ownership decision.
+        }
         return {
           action: request.kind === "media" ? "analyze" : "review",
           pendingId: review.id,
@@ -142,6 +153,14 @@ async function createServices({
         browserTransferId: request.transferId || undefined,
         browserSource: request.source,
       });
+      // Accepted automatic handoffs should be visible just like reviews.
+      // The transfer has already been persisted, so a UI notification error
+      // must not turn acceptance into a browser-side resume/duplicate.
+      try {
+        onBrowserRequest(request);
+      } catch {
+        // Window focus is best effort; it does not affect transfer ownership.
+      }
       return { action: "queued", id };
     })();
     if (dedupeKey) {
@@ -225,7 +244,22 @@ async function createServices({
   async function commitBrowserRequest(id, downloadId) {
     const request = pendingBrowserRequests.find((request) => request.id === id);
     if (!request) return { found: false };
-    if (downloadId) manager.requireItem(downloadId);
+    if (request.intercepted && request.transferId) {
+      if (!downloadId)
+        throw new Error(
+          "A matching desktop download is required before browser handoff.",
+        );
+      const item = manager.requireItem(downloadId);
+      if (
+        item.kind !== "file" ||
+        item.browserTransferId !== request.transferId ||
+        item.browserSource !== request.source ||
+        item.url !== request.url
+      )
+        throw new Error(
+          "The desktop download does not match this browser request.",
+        );
+    } else if (downloadId) manager.requireItem(downloadId);
     takeBrowserRequest(id);
     if (request.intercepted && request.transferId) {
       const result = await wsServer.downloadCommand(
@@ -267,6 +301,10 @@ async function createServices({
     return { websocket, browsers };
   }
   async function prepareBrowser(id, onProgress = async () => {}) {
+    if (isPortable)
+      throw new Error(
+        "The portable launcher uses temporary files and cannot register a persistent native host. Use the installed app, or load the extension and pair its WebSocket while GetANNY is running.",
+      );
     await onProgress("extension-prepare", { browserId: id });
     const extension = await extensionInstaller.install(id);
     await onProgress("native-register", { browserId: id });

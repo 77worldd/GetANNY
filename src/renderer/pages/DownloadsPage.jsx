@@ -249,6 +249,17 @@ function DownloadRow({ item, onConfirm }) {
       run: () => act("open-folder"),
     },
     {
+      label: "Open source",
+      icon: LuArrowUpRight,
+      disabled: !api.desktop || !/^https?:\/\//i.test(item.url || ""),
+      run: () =>
+        api
+          .invoke("app:open-external", item.url)
+          .catch((error) =>
+            useUIStore.getState().notify(errorMessage(error), "error"),
+          ),
+    },
+    {
       label: "Copy source link",
       icon: LuCopy,
       run: () =>

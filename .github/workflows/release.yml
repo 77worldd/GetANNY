@@ -1,30 +1,31 @@
 name: Windows installers and integration tests
 on:
   push:
-    branches: [arena/456bcab4-getanny]
+    branches: [arena/456bcab4-getanny, arena/42d3216b-getanny]
     paths-ignore: ["**/*.md"]
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish a prerelease ONLY after all automated gates pass
+        description: Publish the official release ONLY after all automated gates pass
         type: boolean
         default: false
 permissions:
   contents: write
 concurrency:
-  # A metadata-only publication request must not cancel the running app tests.
+  # Isolate each commit so an unresponsive older job cannot block verification
+  # of a fix. Repeated runs of the same commit still cancel each other.
   group: >-
-    ${{ contains(github.event.head_commit.message, 'GetANNY-Publish-Existing:') && format('getanny-publication-only-{0}', github.sha) || format('getanny-windows-{0}', github.ref) }}
+    ${{ contains(github.event.head_commit.message, 'GetANNY-Publish-Existing:') && format('getanny-publication-only-{0}', github.sha) || format('getanny-windows-{0}-{1}', github.ref, github.sha) }}
   cancel-in-progress: true
 jobs:
   windows:
     # Existing-build publication has its own narrow provenance/digest job.
     # Product changes and normal pushes still run every original verification gate.
     if: >-
-      ${{ !contains(github.event.head_commit.message, 'GetANNY-Publish-Existing:') }}
+      ${{ !contains(github.event.head_commit.message, 'GetANNY-Publish-Existing:') && !contains(github.event.head_commit.message, 'GetANNY-Publish-NoTests:') }}
     name: Build, install, exercise and uninstall EXE + MSI
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
@@ -68,6 +69,7 @@ jobs:
       - name: Build all browser packages
         run: npm run build-extension
       - name: Exercise actual compiled C# launcher before packaging
+        timeout-minutes: 5
         shell: pwsh
         run: |
           New-Item test-results/windows -ItemType Directory -Force | Out-Null
@@ -89,7 +91,7 @@ jobs:
       - name: Build branded EXE and MSI installers
         shell: pwsh
         run: |
-          npx electron-builder --win nsis msi --publish never 2>&1 | Tee-Object test-results/windows/build.log
+          npx electron-builder --win nsis msi portable --publish never 2>&1 | Tee-Object test-results/windows/build.log
           exit $LASTEXITCODE
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -99,7 +101,7 @@ jobs:
         run: |
           $destination = Join-Path $env:RUNNER_TEMP 'GetANNY-test-build'
           New-Item $destination -ItemType Directory -Force | Out-Null
-          Copy-Item 'dist/GetANNY Setup.exe','dist/GetANNY Setup.msi' $destination
+          Copy-Item 'dist/GetANNY Setup.exe','dist/GetANNY Setup.msi','dist/GetANNY Portable.exe' $destination
           Copy-Item 'release-assets/*.zip' $destination
           Copy-Item 'docs/INSTALL_WINDOWS.md','docs/BROWSERS.md' $destination
           @(
@@ -170,12 +172,12 @@ jobs:
           name: GetANNY-tested-windows-release
           path: release-assets/
           retention-days: 30
-      - name: Publish explicitly requested release candidate (not a claim of manual certification)
+      - name: Publish explicitly requested official release (not a claim of manual certification)
         # A trusted push can explicitly opt in when the repository integration
         # lacks Actions dispatch permission. Neither route skips a single gate.
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.publish) ||
-          (github.event_name == 'push' && contains(github.event.head_commit.message, 'GetANNY-Publish: prerelease'))
+          (github.event_name == 'push' && contains(github.event.head_commit.message, 'GetANNY-Publish: stable'))
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -184,7 +186,6 @@ jobs:
           $tag = "v$version"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) { throw "Release $tag already exists. Never silently replace an existing release." }
-          $assets = Get-ChildItem release-assets -File | ForEach-Object { $_.FullName }
           $notesFile = Join-Path $env:RUNNER_TEMP 'GetANNY-release-notes.md'
           @(
             (Get-Content docs/RELEASE_NOTES.md -Raw),
@@ -200,5 +201,22 @@ jobs:
             (Get-Content release-assets/SHA256SUMS.txt -Raw),
             '```'
           ) -join "`n" | Set-Content $notesFile
-          gh release create $tag @assets --target '${{ github.sha }}' --prerelease --title "GetANNY $version · Windows release candidate" --notes-file $notesFile
-          if ($LASTEXITCODE -ne 0) { throw 'GitHub release publication failed.' }
+          # Never expose a partially uploaded release if GitHub or the network
+          # fails mid-transfer. Leave a draft for investigation instead.
+          gh release create $tag --draft --target '${{ github.sha }}' --title "GetANNY $version · Official Windows release" --notes-file $notesFile
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub draft creation failed.' }
+          $labeledAssets = Get-ChildItem release-assets -File | ForEach-Object { "$($_.FullName)#$($_.Name)" }
+          gh release upload $tag @labeledAssets
+          if ($LASTEXITCODE -ne 0) { throw 'Asset upload failed; release remains a draft.' }
+          $releaseFile = Join-Path $env:RUNNER_TEMP 'GetANNY-draft.json'
+          $releaseJson = gh api "repos/${{ github.repository }}/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect draft; release remains a draft.' }
+          $matching = @($releaseJson | ConvertFrom-Json | Where-Object { $_.tag_name -ceq $tag })
+          if ($matching.Count -ne 1) { throw 'Expected exactly one matching draft release.' }
+          $matching[0] | ConvertTo-Json -Depth 30 | Set-Content $releaseFile
+          node scripts/verify-release-assets.js $releaseFile release-assets $tag '${{ github.sha }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Asset verification failed; release remains a draft.' }
+          gh release edit $tag --draft=false
+          if ($LASTEXITCODE -ne 0) { throw 'Draft promotion failed; inspect the release state.' }
+          $ref = gh api "repos/${{ github.repository }}/git/ref/tags/$tag" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $ref.object.sha -ne '${{ github.sha }}') { throw 'Published tag verification failed.' }

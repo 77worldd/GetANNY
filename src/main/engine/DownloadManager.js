@@ -12,6 +12,16 @@ const {
 } = require("./utils");
 
 const ACTIVE = new Set(["connecting", "downloading", "processing"]);
+// Daily local-time window. Equal endpoints mean the full day, avoiding a
+// configuration that could silently prevent every transfer forever.
+function isWithinSchedule(settings, date = new Date()) {
+  if (!settings.scheduleEnabled) return true;
+  const start = settings.scheduleStartMinute ?? 0;
+  const end = settings.scheduleEndMinute ?? 360;
+  const now = date.getHours() * 60 + date.getMinutes();
+  if (start === end) return true;
+  return start < end ? now >= start && now < end : now >= start || now < end;
+}
 class DownloadManager extends EventEmitter {
   constructor({
     settings = {},
@@ -40,6 +50,7 @@ class DownloadManager extends EventEmitter {
     this.progressDirty = new Set();
     this.progressTimer = null;
     this.persistenceTimer = null;
+    this.scheduleTimer = null;
     this.stopped = false;
     this.reservationQueue = Promise.resolve();
   }
@@ -262,6 +273,15 @@ class DownloadManager extends EventEmitter {
   }
   pump() {
     if (this.stopped) return;
+    clearTimeout(this.scheduleTimer);
+    this.scheduleTimer = null;
+    if (this.queue.length && !isWithinSchedule(this.settings)) {
+      // Recheck after clock changes or wake from sleep as well as at the next
+      // minute. Running transfers are not interrupted by the window closing.
+      this.scheduleTimer = setTimeout(() => this.pump(), 30000);
+      this.scheduleTimer.unref?.();
+      return;
+    }
     const limit = Math.max(1, this.settings.maxConcurrentDownloads || 3);
     while (this.running.size < limit && this.queue.length) {
       const id = this.queue.shift();
@@ -409,14 +429,20 @@ class DownloadManager extends EventEmitter {
   async restoreDownloads() {
     for (const saved of this.repo?.getAll() || []) {
       const item = { ...saved, speed: 0, eta: null };
+      const scheduledQueue =
+        this.settings.scheduleEnabled && item.status === "queued";
       if (
         ACTIVE.has(item.status) ||
-        ["queued", "pending", "retrying"].includes(item.status)
+        (!scheduledQueue &&
+          ["queued", "pending", "retrying"].includes(item.status))
       )
         item.status = "paused";
       this.items.set(item.id, item);
       this.persist(item);
-      if (this.settings.resumeOnStartup && item.status === "paused")
+      if (
+        scheduledQueue ||
+        (this.settings.resumeOnStartup && item.status === "paused")
+      )
         this.queue.push(item.id);
     }
     if (this.settings.resumeOnStartup)
@@ -431,6 +457,8 @@ class DownloadManager extends EventEmitter {
     this.stopped = true;
     this.flushProgress();
     this.flushPersistence();
+    clearTimeout(this.scheduleTimer);
+    this.scheduleTimer = null;
     for (const timer of this.retryTimers.values()) clearTimeout(timer);
     this.retryTimers.clear();
     await Promise.all(
@@ -438,6 +466,12 @@ class DownloadManager extends EventEmitter {
     );
     for (const item of this.items.values())
       if (["queued", "retrying"].includes(item.status)) {
+        // Preserve scheduled queue entries across clean restarts. Retry timers
+        // are not durable and remain paused rather than being silently reset.
+        if (item.status === "queued" && this.settings.scheduleEnabled) {
+          this.persist(item);
+          continue;
+        }
         item.status = "paused";
         item.speed = 0;
         this.persist(item);
@@ -450,4 +484,4 @@ class DownloadManager extends EventEmitter {
       .map((item) => ({ ...item }));
   }
 }
-module.exports = { DownloadManager, ACTIVE };
+module.exports = { DownloadManager, ACTIVE, isWithinSchedule };

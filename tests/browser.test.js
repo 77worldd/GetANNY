@@ -414,3 +414,175 @@ test("per-user native launcher copies lose MSI read-only flags and can be replac
   assert.notEqual((await fs.stat(launcher)).mode & 0o200, 0);
   await fs.chmod(source, 0o600);
 });
+
+test("automatic browser handoff foregrounds the application without jeopardizing ownership", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "getanny-handoff-"));
+  let shown = 0;
+  const services = await createServices({
+    userDataPath: dir,
+    downloadPath: path.join(dir, "downloads"),
+    binPath: path.resolve("bin"),
+    extensionPath: path.resolve("dist-extension"),
+    port: 0,
+    startTransfers: false,
+    onBrowserRequest: () => {
+      shown++;
+      throw new Error("window unavailable");
+    },
+  });
+  t.after(async () => {
+    await services.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  await services.settings.set("confirmBrowserDownloads", false);
+  const client = await connect(t, services.wsServer);
+  await message(client, {
+    type: "authenticate",
+    token: services.identity.token,
+  });
+  await message(client, {
+    type: "hello",
+    browserId: "chrome",
+    extensionId: CHROMIUM_ID,
+  });
+  const request = {
+    type: "download",
+    url: "https://example.test/file",
+    intercepted: true,
+    transferId: "unique-handoff",
+  };
+  const accepted = await message(client, request);
+  assert.equal(accepted.action, "queued");
+  assert.equal(accepted.success, true);
+  const duplicate = await message(client, request);
+  assert.equal(duplicate.id, accepted.id);
+  assert.equal(services.manager.getAll().length, 1);
+  assert.equal(shown, 1);
+});
+
+test("portable builds refuse persistent native host registration and retain WebSocket pairing", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "getanny-portable-"));
+  const fixture = await fixtureServer(t, { size: 256 * 1024 });
+  const services = await createServices({
+    userDataPath: dir,
+    downloadPath: path.join(dir, "downloads"),
+    binPath: path.resolve("bin"),
+    extensionPath: path.resolve("dist-extension"),
+    port: 0,
+    isPortable: true,
+  });
+  t.after(async () => {
+    await services.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  await assert.rejects(
+    services.prepareBrowser("chrome"),
+    /portable launcher.*temporary files/i,
+  );
+  const { checkBrowserPreparation } = require("../src/main/self-test");
+  assert.equal((await checkBrowserPreparation(services, true)).length, 8);
+  await services.settings.set("confirmBrowserDownloads", false);
+  const client = await connect(
+    t,
+    services.wsServer,
+    `chrome-extension://${CHROMIUM_ID}`,
+  );
+  const auth = await message(client, {
+    type: "authenticate",
+    token: services.identity.token,
+    transport: "websocket",
+  });
+  assert.equal(auth.success, true);
+  const hello = await message(client, {
+    type: "hello",
+    browserId: "chromium",
+    extensionId: CHROMIUM_ID,
+  });
+  assert.equal(hello.connected, true);
+  assert.equal(hello.transport, "websocket");
+  const response = await message(client, {
+    type: "download",
+    url: fixture.url + "/portable-bridge.bin",
+    filename: "portable-bridge.bin",
+  });
+  assert.equal(response.action, "queued");
+  await waitFor(
+    () => services.manager.requireItem(response.id).status === "completed",
+  );
+  const item = services.downloadsRepo.get(response.id);
+  assert.equal(
+    checksum(await fs.readFile(item.filePath)),
+    checksum(fixture.state.data),
+  );
+});
+
+test("reviewed handoff cancels the browser only for the matching desktop file", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "getanny-review-match-"));
+  const services = await createServices({
+    userDataPath: dir,
+    downloadPath: path.join(dir, "downloads"),
+    binPath: path.resolve("bin"),
+    extensionPath: path.resolve("dist-extension"),
+    port: 0,
+    startTransfers: false,
+    onBrowserRequest: () => {
+      throw new Error("window unavailable");
+    },
+  });
+  t.after(async () => {
+    await services.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  const client = await connect(t, services.wsServer);
+  await message(client, {
+    type: "authenticate",
+    token: services.identity.token,
+  });
+  await message(client, {
+    type: "hello",
+    browserId: "chrome",
+    extensionId: CHROMIUM_ID,
+  });
+  const response = await message(client, {
+    type: "download",
+    url: "https://example.test/file.zip",
+    kind: "file",
+    intercepted: true,
+    transferId: "review-transfer",
+  });
+  assert.equal(response.action, "review");
+  assert.equal(services.pendingBrowserRequests.length, 1);
+  const commands = [];
+  services.wsServer.downloadCommand = async (...args) => {
+    commands.push(args);
+    return { success: true };
+  };
+  const unrelated = await services.manager.addDownload({
+    url: "https://example.test/other.zip",
+    browserSource: "chrome",
+    browserTransferId: "review-transfer",
+  });
+  await assert.rejects(
+    services.commitBrowserRequest(response.pendingId),
+    /matching desktop download/,
+  );
+  await assert.rejects(
+    services.commitBrowserRequest(response.pendingId, unrelated),
+    /does not match/,
+  );
+  assert.equal(commands.length, 0);
+  assert.equal(services.pendingBrowserRequests.length, 1);
+  const matching = await services.manager.addDownload({
+    url: "https://example.test/file.zip",
+    browserSource: "chrome",
+    browserTransferId: "review-transfer",
+  });
+  const committed = await services.commitBrowserRequest(
+    response.pendingId,
+    matching,
+  );
+  assert.equal(committed.cancelled, true);
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0][1], "cancel");
+  assert.equal(commands[0][2], "review-transfer");
+});
