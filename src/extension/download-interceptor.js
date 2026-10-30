@@ -37,20 +37,26 @@
     }
 
     entry(id) {
-      const key = String(id);
-      if (!this.entries.has(key))
-        this.entries.set(key, {
-          transferId: key,
-          paused: false,
-          stage: "preparing",
-          requestStarted: false,
-        });
-      return this.entries.get(key);
+      // Browser download IDs can be reused in another profile or after a
+      // browser restart. They are not suitable as persistent desktop IDs.
+      const existing = [...this.entries.values()].find(
+        (entry) => entry.downloadId === id,
+      );
+      if (existing) return existing;
+      const entry = {
+        downloadId: id,
+        transferId: crypto.randomUUID(),
+        paused: false,
+        stage: "preparing",
+        requestStarted: false,
+      };
+      this.entries.set(entry.transferId, entry);
+      return entry;
     }
 
     async pause(entry) {
       try {
-        await this.api.downloads.pause(Number(entry.transferId));
+        await this.api.downloads.pause(entry.downloadId);
         entry.paused = true;
       } catch (error) {
         // A short, completed, or non-resumable native transfer cannot be handed
@@ -71,7 +77,11 @@
         headers["User-Agent"] = globalThis.navigator.userAgent;
       if (this.api.cookies?.getAll) {
         try {
-          const cookies = await this.api.cookies.getAll({ url });
+          // Firefox containers and other cookie stores must not silently use
+          // a different account's default-store cookies.
+          const query = { url };
+          if (item.cookieStoreId) query.storeId = item.cookieStoreId;
+          const cookies = await this.api.cookies.getAll(query);
           if (cookies.length)
             headers.Cookie = cookies
               .map((cookie) => `${cookie.name}=${cookie.value}`)
@@ -92,7 +102,7 @@
       if (
         !Number.isInteger(id) ||
         id < 0 ||
-        this.entries.has(String(id)) ||
+        [...this.entries.values()].some((entry) => entry.downloadId === id) ||
         item.byExtensionId === this.api.runtime.id ||
         item.incognito === true ||
         !validUrl(url) ||
@@ -141,8 +151,9 @@
     }
 
     async cancel(transferId) {
-      const id = Number(transferId);
       const entry = this.entries.get(String(transferId));
+      if (!entry) throw new Error("Browser transfer is no longer available.");
+      const id = entry.downloadId;
       if (entry?.stage !== "cancelling") {
         await this.api.downloads.cancel(id);
         if (entry) entry.stage = "cancelling";
@@ -155,7 +166,7 @@
     async resumeEntry(entry) {
       if (!entry?.paused) return false;
       try {
-        await this.api.downloads.resume(Number(entry.transferId));
+        await this.api.downloads.resume(entry.downloadId);
         entry.paused = false;
         entry.stage = "browser";
         return true;

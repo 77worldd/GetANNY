@@ -404,10 +404,21 @@ export default function SettingsPage({ capabilities, version }) {
               {toggle("compactList")}
             </SettingRow>
             <SettingRow
-              title="Reduce motion"
-              description="Disable nonessential animations. Your system’s reduced-motion preference is always respected."
+              title="Animations"
+              description="Choose how much motion to show. Your system’s reduced-motion preference is always respected."
             >
-              {toggle("reduceMotion")}
+              <Select
+                aria-label="Animations"
+                value={settings.animationMode || "standard"}
+                disabled={!!saving}
+                onChange={(event) =>
+                  persist("animationMode", event.target.value)
+                }
+              >
+                <option value="standard">Standard</option>
+                <option value="reduced">Reduced</option>
+                <option value="disabled">Disabled</option>
+              </Select>
             </SettingRow>
           </section>
           <section className="settings-panel">

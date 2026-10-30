@@ -414,3 +414,45 @@ test("per-user native launcher copies lose MSI read-only flags and can be replac
   assert.notEqual((await fs.stat(launcher)).mode & 0o200, 0);
   await fs.chmod(source, 0o600);
 });
+
+test("automatic browser handoff foregrounds the application without jeopardizing ownership", async (t) => {
+  const dir = await temporary(t);
+  let shown = 0;
+  const services = await createServices({
+    userDataPath: dir,
+    downloadPath: path.join(dir, "downloads"),
+    binPath: path.resolve("bin"),
+    extensionPath: path.resolve("dist-extension"),
+    port: 0,
+    startTransfers: false,
+    onBrowserRequest: () => {
+      shown++;
+      throw new Error("window unavailable");
+    },
+  });
+  t.after(() => services.close());
+  await services.settings.set("confirmBrowserDownloads", false);
+  const client = await connect(t, services.wsServer);
+  await message(client, {
+    type: "authenticate",
+    token: services.identity.token,
+  });
+  await message(client, {
+    type: "hello",
+    browserId: "chrome",
+    extensionId: CHROMIUM_ID,
+  });
+  const request = {
+    type: "download",
+    url: "https://example.test/file",
+    intercepted: true,
+    transferId: "unique-handoff",
+  };
+  const accepted = await message(client, request);
+  assert.equal(accepted.action, "queued");
+  assert.equal(accepted.success, true);
+  const duplicate = await message(client, request);
+  assert.equal(duplicate.id, accepted.id);
+  assert.equal(services.manager.getAll().length, 1);
+  assert.equal(shown, 1);
+});

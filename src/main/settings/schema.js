@@ -53,6 +53,7 @@ function defaults(downloadPath) {
     theme: "graphite",
     compactList: false,
     reduceMotion: false,
+    animationMode: "standard",
     browserIntegrationEnabled: true,
     mediaIntegration: true,
     firstRunCompleted: false,
@@ -79,6 +80,9 @@ function validateSetting(key, value) {
   } else if (key === "theme") {
     if (![...THEMES, "system"].includes(value))
       throw new Error("Choose a supported theme.");
+  } else if (key === "animationMode") {
+    if (!["standard", "reduced", "disabled"].includes(value))
+      throw new Error("Choose a supported animation mode.");
   } else if (key === "preferredBrowser") {
     if (!BROWSERS.includes(value))
       throw new Error("Choose a supported browser.");

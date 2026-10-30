@@ -142,6 +142,14 @@ async function createServices({
         browserTransferId: request.transferId || undefined,
         browserSource: request.source,
       });
+      // Accepted automatic handoffs should be visible just like reviews.
+      // The transfer has already been persisted, so a UI notification error
+      // must not turn acceptance into a browser-side resume/duplicate.
+      try {
+        onBrowserRequest(request);
+      } catch {
+        // Window focus is best effort; it does not affect transfer ownership.
+      }
       return { action: "queued", id };
     })();
     if (dedupeKey) {

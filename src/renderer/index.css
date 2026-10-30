@@ -4521,4 +4521,23 @@ html.theme-transition *::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+:root[data-motion="disabled"] *,
+:root[data-motion="disabled"] *:before,
+:root[data-motion="disabled"] *:after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+
+/* Keep workspace section headings compact without changing dialog typography. */
+.page-header h1 {
+  font-size: 22px;
+  line-height: 1.2;
+}
+@media (max-width: 650px) {
+  .page-header h1 {
+    font-size: 20px;
+  }
 }

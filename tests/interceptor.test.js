@@ -5,6 +5,7 @@ const vm = require("node:vm");
 
 const context = vm.createContext({
   URL,
+  crypto: require("node:crypto"),
   navigator: { userAgent: "Browser Test" },
 });
 vm.runInContext(
@@ -222,14 +223,39 @@ test("private, non-HTTP and extension-owned downloads remain native", async () =
 test("review commands are idempotent and return dismissed items to the browser", async () => {
   const f = fixture({ request: async () => ({ action: "review" }) });
   await f.interceptor.created(item(18));
-  await f.interceptor.command({ action: "resume", transferId: "18" });
+  const transferId = f.interceptor.entry(18).transferId;
+  await f.interceptor.command({ action: "resume", transferId });
   assert.deepEqual(
     f.calls.filter((call) => call.name === "resume").map((call) => call.value),
     [18],
   );
   const missing = await f.interceptor.command({
     action: "cancel",
-    transferId: "18",
+    transferId,
   });
   assert.equal(missing.missing, true);
+});
+
+test("browser download IDs reused across profiles or restarts get distinct handoff identities", async () => {
+  const first = fixture();
+  const second = fixture();
+  await first.interceptor.created(item(1));
+  await second.interceptor.created(item(1));
+  const a = first.calls.find((call) => call.name === "request").value
+    .transferId;
+  const b = second.calls.find((call) => call.name === "request").value
+    .transferId;
+  assert.notEqual(a, b);
+  assert.notEqual(a, "1");
+});
+
+test("cookie lookup uses the download's browser cookie store when provided", async () => {
+  const f = fixture();
+  await f.interceptor.created({
+    ...item(21),
+    cookieStoreId: "firefox-container-2",
+  });
+  const query = f.calls.find((call) => call.name === "cookies").value;
+  assert.equal(query.storeId, "firefox-container-2");
+  assert.equal(query.url, "https://cdn.example.test/file.bin");
 });
