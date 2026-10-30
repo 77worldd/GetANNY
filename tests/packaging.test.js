@@ -166,3 +166,19 @@ test("afterPack verifies the real SQLite N-API layout and torrent binary; missin
   );
   await assert.rejects(afterPack(context), /Not a real Windows executable/);
 });
+
+test("release checksums stream file contents and exclude their own output", async (t) => {
+  const { writeChecksums } = require("../scripts/checksums");
+  const dir = await temporary(t);
+  const content = Buffer.alloc(1024 * 1024, 42);
+  await fs.writeFile(path.join(dir, "GetANNY Setup.exe"), content);
+  await fs.writeFile(path.join(dir, "SHA256SUMS.txt"), "old data");
+  await fs.mkdir(path.join(dir, "folder"));
+  const expected = createHash("sha256").update(content).digest("hex");
+  const lines = await writeChecksums(dir);
+  assert.deepEqual(lines, [`${expected}  GetANNY Setup.exe`]);
+  assert.equal(
+    await fs.readFile(path.join(dir, "SHA256SUMS.txt"), "utf8"),
+    lines[0] + "\n",
+  );
+});
