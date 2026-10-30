@@ -1,11 +1,32 @@
+/* Runtime palette. The desktop app sends its resolved theme over the bridge so
+   the popup, the injected button and the application always match. */
+:root {
+  --ga-ready: 1;
+  --bg: #0b0c0e;
+  --sidebar: #0f1114;
+  --panel: #121417;
+  --raised: #1a1d21;
+  --input: #0d0f12;
+  --line: #2a2f36;
+  --line-soft: #21252a;
+  --text: #f2f4f6;
+  --secondary: #b3bac1;
+  --muted: #98a1a9;
+  --accent: #ffffff;
+  --accent-hover: #e9edf0;
+  --accent-text: #08090a;
+  --accent-soft: #22262b;
+  --red: #f0a6a0;
+  --amber: #dcc493;
+}
 :root {
   color-scheme: dark;
   font:
     13px/1.5 "Segoe UI",
     system-ui,
     sans-serif;
-  background: #0b0c0e;
-  color: #f2f4f6;
+  background: var(--bg);
+  color: var(--text);
 }
 * {
   box-sizing: border-box;
@@ -19,7 +40,7 @@ header {
   align-items: center;
   gap: 12px;
   padding: 20px;
-  border-bottom: 1px solid #21252a;
+  border-bottom: 1px solid var(--line-soft);
 }
 header .app-icon {
   width: 34px;
@@ -33,7 +54,7 @@ header .wordmark {
 }
 header span {
   display: block;
-  color: #98a1a9;
+  color: var(--muted);
   font-size: 11px;
 }
 button {
@@ -54,14 +75,14 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 summary:focus-visible {
-  outline: 2px solid #ffffff;
+  outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 .icon {
   margin-left: auto;
   background: none;
-  color: #b3bac1;
-  border: 1px solid #2a2f36;
+  color: var(--secondary);
+  border: 1px solid var(--line);
   border-radius: 6px;
   width: 30px;
   height: 30px;
@@ -72,21 +93,21 @@ main {
 }
 .connection {
   padding: 10px 12px;
-  background: #1a1d21;
-  color: #b3bac1;
-  border: 1px solid #2a2f36;
+  background: var(--raised);
+  color: var(--secondary);
+  border: 1px solid var(--line);
   border-radius: 6px;
   font-size: 11px;
   margin-bottom: 23px;
   overflow-wrap: anywhere;
 }
 .connection.online {
-  border-color: #3a4048;
-  color: #f2f4f6;
-  background: #22262b;
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--accent-soft);
 }
 .connection.offline {
-  color: #dcc493;
+  color: var(--amber);
 }
 h1 {
   font-size: 14px;
@@ -102,13 +123,13 @@ h1 {
 .text-button {
   background: none;
   border: 0;
-  color: #ffffff;
+  color: var(--accent);
   font-size: 11px;
   padding: 2px;
 }
 label {
   display: block;
-  color: #98a1a9;
+  color: var(--muted);
   font-size: 11px;
   margin: 12px 0 6px;
 }
@@ -117,13 +138,13 @@ select {
   font: inherit;
   width: 100%;
   padding: 10px 11px;
-  border: 1px solid #2a2f36;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: #0d0f12;
-  color: #f2f4f6;
+  background: var(--input);
+  color: var(--text);
 }
 input::placeholder {
-  color: #6f7881;
+  color: var(--muted);
 }
 .primary,
 .secondary {
@@ -131,53 +152,53 @@ input::placeholder {
   justify-content: space-between;
   width: 100%;
   padding: 11px 13px;
-  border: 1px solid #ffffff;
+  border: 1px solid var(--accent);
   border-radius: 6px;
-  background: #ffffff;
-  color: #08090a;
+  background: var(--accent);
+  color: var(--accent-text);
   font-weight: 650;
   margin-top: 15px;
 }
 .primary:hover {
-  background: #e9edf0;
+  background: var(--accent-hover);
 }
 .secondary {
-  background: #1a1d21;
-  color: #d6dce1;
-  border-color: #2f353c;
+  background: var(--raised);
+  color: var(--secondary);
+  border-color: var(--raised);
   justify-content: center;
 }
 .secondary:hover,
 .detected-item:hover {
-  background: #262a30;
+  background: var(--panel);
 }
 #message {
   font-size: 11px;
-  color: #d6dce1;
+  color: var(--secondary);
   min-height: 18px;
   overflow-wrap: anywhere;
   margin: 13px 0;
 }
 .error {
-  color: #f0a6a0 !important;
+  color: var(--red) !important;
 }
 details {
-  border-top: 1px solid #21252a;
+  border-top: 1px solid var(--line-soft);
   margin-top: 18px;
   padding-top: 15px;
 }
 summary {
   cursor: pointer;
-  color: #b3bac1;
+  color: var(--secondary);
   font-size: 12px;
 }
 details p {
   font-size: 11px;
-  color: #98a1a9;
+  color: var(--muted);
 }
 h2 {
   font-size: 11px;
-  color: #b3bac1;
+  color: var(--secondary);
   font-weight: 500;
 }
 #detected {
@@ -191,9 +212,9 @@ h2 {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
-  background: #1a1d21;
-  color: #d6dce1;
-  border: 1px solid #2a2f36;
+  background: var(--raised);
+  color: var(--secondary);
+  border: 1px solid var(--line);
   border-radius: 5px;
   padding: 8px;
   margin: 5px 0;
@@ -201,14 +222,14 @@ h2 {
 }
 footer {
   padding: 13px 20px;
-  border-top: 1px solid #21252a;
+  border-top: 1px solid var(--line-soft);
   font-size: 10px;
-  color: #6f7881;
+  color: var(--muted);
 }
 ::-webkit-scrollbar {
   width: 5px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #4a525c;
+  background: var(--secondary);
   border-radius: 5px;
 }

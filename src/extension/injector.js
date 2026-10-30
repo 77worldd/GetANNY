@@ -5,7 +5,37 @@
       location.hostname,
     );
   const dismissed = new Set();
-  let current, host, button, close, frame;
+  let current, host, button, close, frame, theme;
+  // The floating button mirrors the desktop palette. Custom properties
+  // inherit into the shadow root, so painting the host is enough.
+  const paint = (value) => {
+    if (!value || typeof value !== "object" || !value.colors) return;
+    theme = value;
+    if (!host) return;
+    const tokens = {
+      "--ga-bg": "--panel",
+      "--ga-raised": "--raised",
+      "--ga-border": "--line",
+      "--ga-close-bg": "--sidebar",
+      "--ga-text": "--text",
+      "--ga-close-text": "--secondary",
+      "--ga-accent": "--accent",
+      "--ga-accent-text": "--accent-text",
+    };
+    for (const [name, token] of Object.entries(tokens)) {
+      const color = value.colors?.[token];
+      if (color) host.style.setProperty(name, color);
+    }
+  };
+  try {
+    api.storage.local.get(["getannyTheme"]).then((saved) => paint(saved.getannyTheme));
+    api.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && changes.getannyTheme)
+        paint(changes.getannyTheme.newValue);
+    });
+  } catch {
+    /* theme sync is optional when storage is unavailable */
+  }
   const key = () => {
     const url = new URL(location.href);
     const video = url.searchParams.get("v");
@@ -36,16 +66,17 @@
     const shadow = host.attachShadow({ mode: "closed" });
     shadow.innerHTML = `<style>
       .wrap{display:flex;align-items:center;gap:4px;pointer-events:auto;font-family:system-ui,-apple-system,sans-serif}
-      button{all:initial;box-sizing:border-box;display:flex;align-items:center;justify-content:center;height:28px;background:#151d24eF;color:#e8f0f2;border:1px solid #40515c;cursor:pointer;font:600 11px/1 system-ui,-apple-system,sans-serif;transition:background .12s,border-color .12s}
+      button{all:initial;box-sizing:border-box;display:flex;align-items:center;justify-content:center;height:28px;background:var(--ga-bg,#151d24ef);color:var(--ga-text,#e8f0f2);border:1px solid var(--ga-border,#40515c);cursor:pointer;font:600 11px/1 system-ui,-apple-system,sans-serif;transition:background .12s,border-color .12s,color .12s}
       .send{gap:5px;padding:0 8px;border-radius:6px;box-shadow:0 2px 8px #0004;white-space:nowrap}
       .logo{width:15px;height:15px;object-fit:contain;display:block;flex:none}
-      .dismiss{width:22px;height:22px;margin-left:1px;border-radius:50%;background:#151d24d9;color:#b9c5cc;font-size:14px;font-weight:400}
-      button:hover{background:#24323b;border-color:#a2dfc2;color:#fff}
-      button:focus-visible{outline:2px solid #a2dfc2;outline-offset:2px}
+      .dismiss{width:22px;height:22px;margin-inline-start:1px;border-radius:50%;background:var(--ga-close-bg,#151d24d9);color:var(--ga-close-text,#b9c5cc);font-size:14px;font-weight:400}
+      button:hover{background:var(--ga-raised,#24323b);border-color:var(--ga-accent,#a2dfc2);color:var(--ga-text,#fff)}
+      button:focus-visible{outline:2px solid var(--ga-accent,#a2dfc2);outline-offset:2px}
       button:disabled{opacity:.65;cursor:wait}
       @media(prefers-reduced-motion:reduce){button{transition:none}}
     </style><div class="wrap"><button class="send" type="button" aria-label="Send media to GetANNY"><img class="logo" alt="" src="${logo}" draggable="false"><span class="label">GetANNY</span></button><button class="dismiss" type="button" aria-label="Dismiss GetANNY for this video" title="Dismiss for this video">×</button></div>`;
     document.documentElement.appendChild(host);
+    paint(theme);
     button = shadow.querySelector(".send");
     close = shadow.querySelector(".dismiss");
     button.addEventListener("click", send);

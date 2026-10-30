@@ -521,5 +521,6 @@
   "media.capProgress": "تقدم نقل حقيقي",
   "media.availabilityNote": "يعتمد التوفر على الموقع. المحتوى المحمي بـDRM غير مدعوم.",
   "media.privateNote": "قد تتطلب الصفحات الخاصة مصادقة لا يوفرها هذا التطبيق.",
-  "media.engineMissingBanner": "محرك الوسائط مفقود من هذا التثبيت. أعد تثبيت حزمة Windows الكاملة أو شغّل خطوة تجهيز الأدوات."
+  "media.engineMissingBanner": "محرك الوسائط مفقود من هذا التثبيت. أعد تثبيت حزمة Windows الكاملة أو شغّل خطوة تجهيز الأدوات.",
+  "browser.openDownloads": "فتح التنزيلات"
 }

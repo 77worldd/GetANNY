@@ -156,31 +156,35 @@ export default function MediaPage({ tools }) {
         <Field label={t("media.pageLabel")} id="media-url">
           <div className="media-search">
             <LuLink />
-            <input
-              id="media-url"
-              type="url"
-              required
-              placeholder={t("media.urlPlaceholder")}
-              value={url}
-              onChange={(event) => {
-                setUrl(event.target.value);
-                if (result) {
-                  setResult(null);
-                  setSelected(null);
-                }
-              }}
-              spellCheck="false"
-              autoComplete="off"
-            />
-            {url && (
-              <IconButton
-                label={t("media.clearLink")}
-                className="clear-link"
-                onClick={clearLink}
-              >
-                <LuX />
-              </IconButton>
-            )}
+            <div className="media-field">
+              <input
+                id="media-url"
+                type="url"
+                required
+                placeholder={t("media.urlPlaceholder")}
+                value={url}
+                onChange={(event) => {
+                  setUrl(event.target.value);
+                  if (result) {
+                    setResult(null);
+                    setSelected(null);
+                  }
+                }}
+                spellCheck="false"
+                autoComplete="off"
+              />
+              {url && (
+                <button
+                  type="button"
+                  className="clear-link"
+                  title={t("media.clearLink")}
+                  aria-label={t("media.clearLink")}
+                  onClick={clearLink}
+                >
+                  <LuX />
+                </button>
+              )}
+            </div>
             <Button
               type="submit"
               icon={LuSearch}

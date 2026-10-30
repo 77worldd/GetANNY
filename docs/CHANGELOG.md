@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.2 — Setup, subtitles and interface polish
+
+- The first-run browser setup is now remembered: a verified extension handshake marks setup complete and later launches open the download library directly. The setup screen only appears again when opened from the sidebar.
+- YouTube and other captions now download from the analyzed track URL with retries, then convert VTT ↔ SRT locally, so subtitle downloads no longer depend on a second yt-dlp page scrape or FFmpeg post-processing.
+- Fixed the duplicated, misaligned selection checkboxes: each row now owns a real checkbox column, the header select-all matches it, and the selection toolbar keeps its state.
+- Rebuilt the Media link field: the clear button sits inside the input as a subtle inline control instead of a detached grey square.
+- Moved Back out of the title bar into a sticky context bar, mirrored automatically for right-to-left layouts.
+- Arabic layout fixes: mirrored switches, logical margins and borders, translated chevrons, right-aligned tab bars, LTR numbers, paths and progress tracks.
+- Nordic is now the default theme for new installations, and the browser extension (popup and floating button) mirrors the desktop palette over the authenticated bridge.
+- Performance: the app shell no longer subscribes to every download tick, inactive download tabs skip reconciling their rows, memoized row callbacks avoid needless re-renders and off-screen rows are layout-skipped.
+- Fixed the Torrents section, which previously opened an empty workspace.
+
 ## 2.1.1 — Workflow, interception and localization release
 
 - Studio and Media link fields show the active link with an inline clear (X) control that also resets analysis state.

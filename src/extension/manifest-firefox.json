@@ -1,6 +1,6 @@
 {
   "name": "GetANNY · Browser Assistant",
-  "version": "2.1.0",
+  "version": "2.1.2",
   "description": "Send files and supported media pages to your GetANNY desktop download manager. Authenticated native connection and explicit user control.",
   "permissions": [
     "storage",
@@ -20,24 +20,38 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js", "injector.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js",
+        "injector.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "manifest_version": 2,
-  "web_accessible_resources": ["icons/icon48.png"],
+  "web_accessible_resources": [
+    "icons/icon48.png"
+  ],
   "browser_specific_settings": {
     "gecko": {
       "id": "getanny@getanny.app",
       "strict_min_version": "128.0",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": [
+          "none"
+        ]
       }
     }
   },
   "background": {
-    "scripts": ["config.js", "download-interceptor.js", "background.js"]
+    "scripts": [
+      "config.js",
+      "download-interceptor.js",
+      "background.js"
+    ]
   },
   "browser_action": {
     "default_title": "GetANNY",

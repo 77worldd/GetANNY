@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   LuPlus,
@@ -28,6 +34,7 @@ import {
   LuMagnet,
   LuSquareCheck,
   LuArrowLeft,
+  LuMinus,
 } from "react-icons/lu";
 import { api, errorMessage } from "../api";
 import {
@@ -598,7 +605,7 @@ function DownloadRow({
   );
 }
 const MemoDownloadRow = React.memo(DownloadRow);
-export default function DownloadsPage({ filter }) {
+export default function DownloadsPage({ filter, active: visible = true }) {
   const { t } = useI18n();
   const downloads = useDownloadStore((state) => state.downloads);
   const [search, setSearch] = useState(""),
@@ -645,34 +652,40 @@ export default function DownloadsPage({ filter }) {
         ),
     [base, search, category, sort],
   );
-  const select = (index, { toggle, range }) => {
-    const item = rows[index];
-    if (!item) return;
-    // Shift-click without a previous anchor still selects the clicked row so
-    // the gesture never becomes a no-op.
-    if (range && anchor.current != null) {
-      const [from, to] = [anchor.current, index].sort((a, b) => a - b);
-      setSelected((previous) => {
-        const next = new Set(previous);
-        for (let cursor = from; cursor <= to; cursor++)
-          if (rows[cursor]) next.add(rows[cursor].id);
-        return next;
-      });
-      return;
-    }
-    if (toggle || range) {
-      anchor.current = index;
-      setSelected((previous) => {
-        const next = new Set(previous);
-        if (next.has(item.id)) next.delete(item.id);
-        else next.add(item.id);
-        return next;
-      });
-    }
-  };
-  const selectAll = () => {
-    const allVisible = rows.length > 0 && rows.every((item) => selected.has(item.id));
+  // Stable callbacks keep every memoized row from re-rendering whenever a
+  // progress tick changes the list.
+  const select = useCallback(
+    (index, { toggle, range }) => {
+      const item = rows[index];
+      if (!item) return;
+      // Shift-click without a previous anchor still selects the clicked row so
+      // the gesture never becomes a no-op.
+      if (range && anchor.current != null) {
+        const [from, to] = [anchor.current, index].sort((a, b) => a - b);
+        setSelected((previous) => {
+          const next = new Set(previous);
+          for (let cursor = from; cursor <= to; cursor++)
+            if (rows[cursor]) next.add(rows[cursor].id);
+          return next;
+        });
+        return;
+      }
+      if (toggle || range) {
+        anchor.current = index;
+        setSelected((previous) => {
+          const next = new Set(previous);
+          if (next.has(item.id)) next.delete(item.id);
+          else next.add(item.id);
+          return next;
+        });
+      }
+    },
+    [rows],
+  );
+  const selectAll = useCallback(() => {
     setSelected((previous) => {
+      const allVisible =
+        rows.length > 0 && rows.every((item) => previous.has(item.id));
       const next = new Set(previous);
       for (const item of rows)
         if (allVisible) next.delete(item.id);
@@ -680,11 +693,17 @@ export default function DownloadsPage({ filter }) {
       return next;
     });
     anchor.current = null;
-  };
-  const exitSelection = () => {
+  }, [rows]);
+  const exitSelection = useCallback(() => {
     setSelected(new Set());
     anchor.current = null;
-  };
+  }, []);
+  const selectState =
+    !rows.length || !selected.size
+      ? "none"
+      : rows.every((item) => selected.has(item.id))
+        ? "all"
+        : "some";
   useEffect(() => {
     // Rows can disappear after a transfer is removed; stale ids must not keep
     // the toolbar open or act on unrelated future items.
@@ -813,6 +832,9 @@ export default function DownloadsPage({ filter }) {
       setBulkBusy(false);
     }
   };
+  // Inactive tabs stay mounted so their filters and selection survive, but
+  // their rows are not reconciled on every progress tick.
+  if (!visible) return <div className="page downloads-page" hidden />;
   return (
     <div className="page downloads-page">
       <PageHeader
@@ -980,26 +1002,24 @@ export default function DownloadsPage({ filter }) {
           </div>
         )}
         <div className="list-heading">
-          <label className="select-all">
-            <input
-              type="checkbox"
-              checked={rows.length > 0 && selected.size === rows.length}
-              ref={(input) => {
-                if (input)
-                  input.indeterminate =
-                    selected.size > 0 && selected.size < rows.length;
-              }}
-              onChange={selectAll}
-              disabled={!rows.length}
-              aria-label={t("downloads.selectAll")}
-            />
-            <span className="file-heading">
-              {t("downloads.fileName")}
-            </span>
-          </label>
-          <span>{t("downloads.transfer")}</span>
-          <span>{t("downloads.status")}</span>
-          <span />
+          <button
+            type="button"
+            className={`select-all-check ${selectState === "all" ? "selected" : ""}`}
+            role="checkbox"
+            aria-checked={selectState === "some" ? "mixed" : selectState === "all"}
+            aria-label={t("downloads.selectAll")}
+            disabled={!rows.length}
+            onClick={selectAll}
+          >
+            {selectState === "some" ? (
+              <LuMinus />
+            ) : selectState === "all" ? (
+              <LuCheck />
+            ) : null}
+          </button>
+          <span className="heading-name">{t("downloads.fileName")}</span>
+          <span className="heading-transfer">{t("downloads.transfer")}</span>
+          <span className="heading-status">{t("downloads.status")}</span>
         </div>
         <div role="list" aria-label={title} className="download-list">
           {rows.length ? (

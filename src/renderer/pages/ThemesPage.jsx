@@ -46,7 +46,7 @@ function Preview({ theme }) {
 export default function ThemesPage() {
   const { t } = useI18n();
   const selected = useSettingsStore(
-    (state) => state.settings.theme || "graphite",
+    (state) => state.settings.theme || "nord",
   );
   const save = useSettingsStore((state) => state.save);
   const [filter, setFilter] = useState("all");

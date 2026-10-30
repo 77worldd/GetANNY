@@ -405,18 +405,23 @@ export default function BrowserPage() {
                   </small>
                 </div>
               </div>
-              {browser?.connected && !settings.firstRunCompleted && (
+              {browser?.connected && (
                 <Button
                   icon={LuArrowRight}
                   variant="primary"
                   onClick={() =>
                     run(async () => {
-                      await save("firstRunCompleted", true);
+                      if (!settings.firstRunCompleted)
+                        await save("firstRunCompleted", true);
                       useUIStore.getState().setActiveTab("all");
                     })
                   }
                 >
-                  {t("browser.startDownloading")}
+                  {t(
+                    settings.firstRunCompleted
+                      ? "browser.openDownloads"
+                      : "browser.startDownloading",
+                  )}
                 </Button>
               )}
             </div>

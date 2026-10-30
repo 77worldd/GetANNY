@@ -24,6 +24,7 @@ import {
   LuLoaderCircle,
   LuRefreshCw,
   LuArrowLeft,
+  LuArrowRight,
 } from "react-icons/lu";
 import { api, errorMessage } from "./api";
 import { useIPC } from "./hooks/useIPC";
@@ -161,6 +162,54 @@ function Sidebar({ bridge, version }) {
     </aside>
   );
 }
+function StatusBar({ version }) {
+  const { t } = useI18n();
+  const downloads = useDownloadStore((state) => state.downloads);
+  const transferring = downloads.filter(active);
+  const speed = transferring.reduce(
+    (sum, item) => sum + (item.status === "downloading" ? item.speed || 0 : 0),
+    0,
+  );
+  return (
+    <footer className="statusbar">
+      <div>
+        <span className={`live-dot ${transferring.length ? "live" : ""}`} />
+        {transferring.length
+          ? t("shell.activeTransfers", { count: transferring.length })
+          : t("shell.ready")}
+        <span className="status-separator">/</span>
+        <span>
+          {t("shell.queued", {
+            count: downloads.filter((item) => item.status === "queued").length,
+          })}
+        </span>
+      </div>
+      <div>
+        <LuArrowDown />
+        {speed > 0 ? `${bytes(speed)}/s` : "0 B/s"}
+        <span className="status-separator">/</span>
+        <span>
+          {t("shell.storedLocally")} · {version}
+        </span>
+      </div>
+    </footer>
+  );
+}
+// The detail sheet owns its subscription so progress ticks do not re-render
+// the whole shell for a single transfer.
+function DetailSheet() {
+  const detailId = useUIStore((state) => state.details);
+  const item = useDownloadStore((state) =>
+    detailId ? state.downloads.find((entry) => entry.id === detailId) : null,
+  );
+  if (!item) return null;
+  return (
+    <DownloadDetails
+      item={item}
+      onClose={() => useUIStore.getState().setDetails(null)}
+    />
+  );
+}
 export default function App() {
   useIPC();
   const { t, language, rtl } = useI18n();
@@ -179,8 +228,7 @@ export default function App() {
     requests = useUIStore((state) => state.browserRequests),
     tabHistory = useUIStore((state) => state.tabHistory),
     goBack = useUIStore((state) => state.goBack);
-  const downloads = useDownloadStore((state) => state.downloads),
-    settings = useSettingsStore((state) => state.settings);
+  const settings = useSettingsStore((state) => state.settings);
   const [visited, setVisited] = useState(() => new Set(["all"]));
   useEffect(() => {
     setVisited((previous) =>
@@ -201,8 +249,17 @@ export default function App() {
       setBoot(data);
       for (const request of data.pendingRequests)
         useUIStore.getState().addRequest(request);
-      if (!data.settings.firstRunCompleted)
+      // Setup is only a first-launch destination. A browser that is already
+      // paired means the user finished installing the extension, so remember
+      // that and open the download library directly on later launches.
+      const connected = data.bridge?.clients > 0;
+      if (!data.settings.firstRunCompleted && !connected)
         useUIStore.getState().setActiveTab("browser");
+      if (!data.settings.firstRunCompleted && connected)
+        useSettingsStore
+          .getState()
+          .save("firstRunCompleted", true)
+          .catch(() => {});
     } catch (error) {
       setError(errorMessage(error));
     }
@@ -234,11 +291,20 @@ export default function App() {
       cleanup();
     };
   }, [!!boot]);
+  // Completing setup from the extension side (first successful handshake) is
+  // enough of a signal; the welcome panel should not return on the next launch.
   useEffect(() => {
-    applyTheme(settings.theme || "graphite");
+    if (!boot || settings.firstRunCompleted || !(bridge.clients > 0)) return;
+    useSettingsStore
+      .getState()
+      .save("firstRunCompleted", true)
+      .catch(() => {});
+  }, [boot, bridge.clients, settings.firstRunCompleted]);
+  useEffect(() => {
+    applyTheme(settings.theme || "nord");
     const system = window.matchMedia("(prefers-color-scheme: light)");
     const update = () => {
-      if ((settings.theme || "graphite") === "system") applyTheme("system");
+      if ((settings.theme || "nord") === "system") applyTheme("system");
     };
     system.addEventListener("change", update);
     return () => system.removeEventListener("change", update);
@@ -250,7 +316,6 @@ export default function App() {
       ? "compact"
       : "comfortable";
   }, [settings.animationMode, settings.compactList]);
-  const detail = downloads.find((item) => item.id === detailId);
   // File handoffs are queued automatically by the desktop bridge, so the only
   // request that still needs attention is a media page awaiting a format.
   const review = (request) => {
@@ -280,9 +345,6 @@ export default function App() {
         );
     }
   };
-  const speed = downloads
-    .filter((item) => item.status === "downloading")
-    .reduce((sum, item) => sum + (item.speed || 0), 0);
   useEffect(() => {
     if (boot && requests[0]?.kind === "media" && !addModal && !detailId)
       review(requests[0]);
@@ -301,22 +363,6 @@ export default function App() {
             <span className="brand-divider" />
             <span className="app-caption">{t("shell.downloadManager")}</span>
           </div>
-          {(tabHistory.length > 0 || detailId) && (
-            <button
-              type="button"
-              className="back-button"
-              title={t("shell.backTitle")}
-              onClick={() => {
-                // A detail sheet is the deepest view; back closes it before
-                // returning to the previous workspace section.
-                if (detailId) useUIStore.getState().setDetails(null);
-                else goBack();
-              }}
-            >
-              <LuArrowLeft />
-              <span>{t("shell.back")}</span>
-            </button>
-          )}
           <ThemeSwitcher />
           <LanguageSwitcher />
         </div>
@@ -357,6 +403,24 @@ export default function App() {
           <div className="app-body">
             <Sidebar bridge={bridge} version={boot.version} />
             <main className="main-content" id="main-content">
+              {(tabHistory.length > 0 || detailId) && (
+                <div className="context-bar">
+                  <button
+                    type="button"
+                    className="back-button"
+                    title={t("shell.backTitle")}
+                    onClick={() => {
+                      // A detail sheet is the deepest view; back closes it
+                      // before returning to the previous section.
+                      if (detailId) useUIStore.getState().setDetails(null);
+                      else goBack();
+                    }}
+                  >
+                    {rtl ? <LuArrowRight /> : <LuArrowLeft />}
+                    <span>{t("shell.back")}</span>
+                  </button>
+                </div>
+              )}
               {!api.desktop && (
                 <div className="preview-strip">
                   <LuMonitor />
@@ -400,9 +464,18 @@ export default function App() {
                       key={id}
                       aria-hidden={tab !== id}
                     >
-                      <DownloadsPage filter={id} />
+                      <DownloadsPage filter={id} active={tab === id} />
                     </div>
                   ),
+              )}
+              {(visited.has("torrent") || tab === "torrent") && (
+                <div
+                  className="page-slot"
+                  hidden={tab !== "torrent"}
+                  aria-hidden={tab !== "torrent"}
+                >
+                  <DownloadsPage filter="torrent" active={tab === "torrent"} />
+                </div>
               )}
               {(visited.has("media") || tab === "media") && (
                 <div className="page-slot" hidden={tab !== "media"}>
@@ -429,33 +502,7 @@ export default function App() {
               )}
             </main>
           </div>
-          <footer className="statusbar">
-            <div>
-              <span
-                className={`live-dot ${downloads.some(active) ? "live" : ""}`}
-              />
-              {downloads.some(active)
-                ? t("shell.activeTransfers", {
-                    count: downloads.filter(active).length,
-                  })
-                : t("shell.ready")}
-              <span className="status-separator">/</span>
-              <span>
-                {t("shell.queued", {
-                  count: downloads.filter((item) => item.status === "queued")
-                    .length,
-                })}
-              </span>
-            </div>
-            <div>
-              <LuArrowDown />
-              {speed > 0 ? `${bytes(speed)}/s` : "0 B/s"}
-              <span className="status-separator">/</span>
-              <span>
-                {t("shell.storedLocally")} · {boot.version}
-              </span>
-            </div>
-          </footer>
+          <StatusBar version={boot.version} />
         </>
       ) : (
         <div className="startup-screen">
@@ -486,12 +533,7 @@ export default function App() {
       {addModal && (
         <AddDownloadDialog initial={addModal} onClose={closeAdd} />
       )}
-      {detail && (
-        <DownloadDetails
-          item={detail}
-          onClose={() => useUIStore.getState().setDetails(null)}
-        />
-      )}
+      <DetailSheet />
       <Toasts />
     </div>
   );

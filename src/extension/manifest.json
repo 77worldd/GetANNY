@@ -1,6 +1,6 @@
 {
   "name": "GetANNY · Browser Assistant",
-  "version": "2.1.0",
+  "version": "2.1.2",
   "description": "Send files and supported media pages to your GetANNY desktop download manager. Authenticated native connection and explicit user control.",
   "permissions": [
     "storage",
@@ -18,19 +18,33 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js", "injector.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js",
+        "injector.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "manifest_version": 3,
   "minimum_chrome_version": "116",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2VdsmWCFSUPqmiLW4cPA98CEdv+oJRCR0TPz6nvQCz2t/tYcHAu+mfosLVfkiR99PpORcyxNqFTlg5YASYW6ZSCQZJLDN7cctoyFnhQ3bC6uhg8RpPNZsEbCg/19MqTRHaJTiu3wJk1iiwfDg00vYU1oAs1htpT3dwzM6LUTKj6O2nmHRXnWIV80B/ZMP480VPVGh34wz5+DIfpy73mnJWyByqofplUens5G66FQUv8Rr3cVNz0TffurXgIef7F/PtdV8F+g+YYdt1bU7GXq/3sc6ZPRKX5cEqswGYhno/J05i2RP1Q5ZTl9Eaa4odWzVaqLUXh2NRKHQdSJEF5zCQIDAQAB",
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
   "web_accessible_resources": [
     {
-      "resources": ["icons/icon48.png"],
-      "matches": ["http://*/*", "https://*/*"]
+      "resources": [
+        "icons/icon48.png"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
     }
   ],
   "background": {

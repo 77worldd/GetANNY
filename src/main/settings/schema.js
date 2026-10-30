@@ -57,7 +57,7 @@ function defaults(downloadPath) {
     closeToTray: true,
     launchAtLogin: false,
     startMinimized: false,
-    theme: "graphite",
+    theme: "nord",
     language: "en",
     compactList: false,
     reduceMotion: false,

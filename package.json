@@ -1,6 +1,6 @@
 {
   "name": "getanny",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "GetANNY — reliable downloads, clear control",
   "main": "src/main/main.js",
   "author": "GetANNY Team",

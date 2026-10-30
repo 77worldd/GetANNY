@@ -2,6 +2,7 @@ const { EventEmitter } = require("node:events");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { sanitizeFilename } = require("../engine/utils");
+const { convertCaptions, fetchCaption } = require("./subtitles");
 
 class MediaEngine extends EventEmitter {
   constructor(options, wrapper) {
@@ -42,13 +43,17 @@ class MediaEngine extends EventEmitter {
       let filePath;
       if (media.type === "subtitle") {
         this.setStatus("downloading", { phase: "Downloading subtitles" });
-        filePath = await this.wrapper.downloadSubtitles({
-          url: this.url,
-          ...media.subtitle,
-          outputTemplate,
-          timeout: this.timeout / 1000,
-          signal: this.controller.signal,
-        });
+        // Prefer the caption track URL captured during analysis: one request,
+        // no second page scrape, and conversions happen locally.
+        filePath = await this.downloadCaption(stem);
+        if (!filePath)
+          filePath = await this.wrapper.downloadSubtitles({
+            url: this.url,
+            ...media.subtitle,
+            outputTemplate,
+            timeout: this.timeout / 1000,
+            signal: this.controller.signal,
+          });
       } else {
         await this.wrapper.download({
           url: this.url,
@@ -148,6 +153,33 @@ class MediaEngine extends EventEmitter {
         this.setStatus("failed", { error: error.message });
         this.emit("error", this.id, error);
       }
+    }
+  }
+  async downloadCaption(stem) {
+    const subtitle = this.media?.subtitle || {};
+    const sources = subtitle.sources || {};
+    const wanted = subtitle.format === "srt" ? "srt" : "vtt";
+    const source = [wanted, "vtt", "srt"].find((ext) => sources[ext]);
+    if (!source) return null;
+    try {
+      const raw = await fetchCaption(sources[source], {
+        signal: this.controller.signal,
+        timeout: this.timeout,
+      });
+      const text = convertCaptions(raw, source, wanted);
+      if (!text) return null;
+      const target = path.join(
+        this.workPath,
+        `${stem}.${sanitizeFilename(subtitle.language || "subtitle")}.${wanted}`,
+      );
+      await fs.writeFile(target, text, "utf8");
+      return target;
+    } catch (error) {
+      // A cancelled transfer must stop; anything else falls back to yt-dlp so
+      // a track that needs its cookies or referrer still has a path.
+      if (this.controller.signal.aborted) throw error;
+      this.subtitleFallbackReason = error.message;
+      return null;
     }
   }
   async publish(source, target) {

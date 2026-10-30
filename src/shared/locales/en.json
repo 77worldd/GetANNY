@@ -521,5 +521,6 @@
   "media.capProgress": "Real transfer progress",
   "media.availabilityNote": "Availability depends on the website. DRM-protected content is not supported.",
   "media.privateNote": "Private pages may require authentication not provided by this application.",
-  "media.engineMissingBanner": "The media engine is missing from this installation. Reinstall the complete Windows package or run the tools preparation step."
+  "media.engineMissingBanner": "The media engine is missing from this installation. Reinstall the complete Windows package or run the tools preparation step.",
+  "browser.openDownloads": "Open downloads"
 }

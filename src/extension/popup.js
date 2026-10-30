@@ -6,6 +6,18 @@ function feedback(text, error = false) {
   message.textContent = text;
   message.className = error ? "error" : "";
 }
+function applyTheme(theme) {
+  if (!theme || typeof theme !== "object" || !theme.colors) return;
+  const root = document.documentElement;
+  for (const [token, value] of Object.entries(theme.colors))
+    if (/^--[a-z0-9-]+$/.test(token) && typeof value === "string")
+      root.style.setProperty(token, value);
+  root.style.colorScheme = theme.mode === "light" ? "light" : "dark";
+  root.dataset.theme = theme.id || "nord";
+}
+api.runtime.onMessage.addListener((incoming) => {
+  if (incoming?.type === "theme") applyTheme(incoming.theme);
+});
 async function send(payload) {
   const response = await api.runtime.sendMessage(payload);
   if (response?.success === false) throw new Error(response.error);
@@ -79,6 +91,11 @@ $("pair").onclick = async () => {
   }
 };
 (async () => {
+  try {
+    applyTheme(await send({ type: "theme" }));
+  } catch {
+    /* the popup still works without a synced palette */
+  }
   const saved = await api.storage.local.get(["browserId", "pairingKey"]);
   $("browser").value =
     saved.browserId || globalThis.GETANNY_BROWSER || "chrome";

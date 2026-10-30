@@ -15,6 +15,7 @@ let nativePort,
 let reconnectTimer;
 let reconnectAttempts = 0;
 let state = { connected: false, transport: null, error: null };
+let currentTheme = null;
 let browserId = globalThis.GETANNY_BROWSER || "chrome";
 let pairingKey = "";
 let interceptor;
@@ -64,7 +65,17 @@ function hello() {
     version: api.runtime.getManifest().version,
   });
 }
+function applyTheme(theme) {
+  if (!theme || typeof theme !== "object" || !theme.colors) return;
+  currentTheme = theme;
+  Promise.resolve(api.storage.local.set({ getannyTheme: theme })).catch(() => {});
+  interceptor?.theme?.(theme);
+}
 function deliver(message) {
+  if (message.type === "theme") {
+    applyTheme(message.theme);
+    return;
+  }
   if (message.type === "browser-download-command") {
     interceptor
       ?.command(message)
@@ -93,6 +104,7 @@ function deliver(message) {
     reconnectTimer = null;
     reconnectAttempts = 0;
     update({ connected: true, transport: message.transport, error: null });
+    if (message.theme) applyTheme(message.theme);
     connectResolve?.(state);
     connecting = null;
     connectResolve = null;
@@ -323,6 +335,11 @@ api.runtime.onMessage.addListener((message, sender, respond) => {
     }
     if (message.type === "detected" && ui)
       return { items: detected.get(message.tabId) || [] };
+    if (message.type === "theme") {
+      if (currentTheme) return currentTheme;
+      const saved = await api.storage.local.get(["getannyTheme"]);
+      return saved.getannyTheme || null;
+    }
     if (message.type === "download") {
       if (!validUrl(message.url))
         throw new Error(

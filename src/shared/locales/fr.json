@@ -521,5 +521,6 @@
   "media.capProgress": "Progression réelle",
   "media.availabilityNote": "La disponibilité dépend du site. Les contenus protégés par DRM ne sont pas pris en charge.",
   "media.privateNote": "Les pages privées peuvent exiger une authentification non fournie par cette application.",
-  "media.engineMissingBanner": "Le moteur média est absent de cette installation. Réinstallez le paquet Windows complet ou préparez les outils."
+  "media.engineMissingBanner": "Le moteur média est absent de cette installation. Réinstallez le paquet Windows complet ou préparez les outils.",
+  "browser.openDownloads": "Ouvrir les téléchargements"
 }

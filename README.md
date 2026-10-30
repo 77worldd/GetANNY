@@ -9,11 +9,11 @@
 
 **Reliable downloads. Clear control.** A Windows-first Electron download manager with a React workspace, persistent SQLite history, verified HTTP range transfers, yt-dlp media downloads, and authenticated browser integration.
 
-> **Current source: 2.1.1.** This release introduces the official GetANNY identity: the supplied eagle/shield mark and wordmark are used unchanged across the application, Windows icons, installers and browser extensions, and the entire palette has been rebuilt around that monochrome artwork. A Windows build is not a certified release until its installer, portable and browser gates have passed; see [testing evidence and remaining gates](docs/TESTING.md).
+> **Current source: 2.1.2.** This release introduces the official GetANNY identity: the supplied eagle/shield mark and wordmark are used unchanged across the application, Windows icons, installers and browser extensions, and the entire palette has been rebuilt around that monochrome artwork. A Windows build is not a certified release until its installer, portable and browser gates have passed; see [testing evidence and remaining gates](docs/TESTING.md).
 
 ## Get the Windows app
 
-### Official GetANNY 2.1.1 release
+### Official GetANNY 2.1.2 release
 
 The [**GetANNY 2.1.1 GitHub Release**](https://github.com/p4yy/GetANNY/releases/tag/v2.1.1) contains the real Windows installers, the portable build, eight browser packages, the complete distribution bundle, guides, source provenance and SHA-256 checksums.
 

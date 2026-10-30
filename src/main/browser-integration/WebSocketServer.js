@@ -21,6 +21,7 @@ class WebSocketServer {
     },
     onDownloadStatus = async () => ({ action: "missing" }),
     onHello = () => {},
+    theme = null,
   } = {}) {
     Object.assign(this, {
       port,
@@ -30,6 +31,7 @@ class WebSocketServer {
       onDownloadRequest,
       onDownloadStatus,
       onHello,
+      theme,
     });
     this.clients = new Map();
     this.browserCommands = new Map();
@@ -138,6 +140,7 @@ class WebSocketServer {
           connected: true,
           browserId: state.browserId,
           transport: state.transport,
+          theme: this.theme,
         });
       } else if (!state.browserId)
         throw new Error(
@@ -246,6 +249,13 @@ class WebSocketServer {
         transferId: String(transferId),
       });
     });
+  }
+  setTheme(theme) {
+    this.theme = theme || null;
+    if (!this.theme) return;
+    for (const [socket, state] of this.clients)
+      if (state.authenticated && state.browserId && socket.readyState === WebSocket.OPEN)
+        this.reply(socket, { type: "theme", theme: this.theme });
   }
   status() {
     const sessions = [...this.clients.values()]

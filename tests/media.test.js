@@ -577,3 +577,67 @@ test("media partial cleanup cannot delete a different file sharing only the old 
   );
   await assert.rejects(fs.access(owned), { code: "ENOENT" });
 });
+
+test("caption conversion produces valid SRT and VTT documents", () => {
+  const { vttToSrt, srtToVtt } = require("../src/main/media/subtitles");
+  const vtt =
+    "WEBVTT\n\nNOTE generated\n\n1\n00:00:01.500 --> 00:00:03.250 line:90%\nHello <b>world</b>\n\n00:04.000 --> 00:05.000\nSecond cue\n";
+  const srt = vttToSrt(vtt);
+  assert.equal(
+    srt,
+    "1\n00:00:01,500 --> 00:00:03,250\nHello world\n\n2\n00:00:04,000 --> 00:00:05,000\nSecond cue\n",
+  );
+  const back = srtToVtt(srt);
+  assert.match(back, /^WEBVTT\n/);
+  assert.match(back, /00:00:01\.500 --> 00:00:03\.250/);
+});
+
+test("subtitle downloads use the analyzed track URL and convert locally without yt-dlp", async (t) => {
+  const http = require("node:http");
+  const dir = await temporary(t, "getanny-subtitle-");
+  const server = http.createServer((request, response) => {
+    if (request.url === "/captions/ar.vtt") {
+      response.writeHead(200, { "content-type": "text/vtt" });
+      response.end("WEBVTT\n\n00:00:02.000 --> 00:00:04.000\nمرحبا بالعالم\n");
+      return;
+    }
+    response.writeHead(404).end("missing");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+  });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  let completed;
+  const engine = new MediaEngine(
+    {
+      id: "caption-direct",
+      url: `${base}/watch`,
+      savePath: path.join(dir, "out"),
+      tempPath: path.join(dir, "work"),
+      media: {
+        type: "subtitle",
+        title: "Arabic captions",
+        subtitle: {
+          language: "ar",
+          automatic: false,
+          format: "srt",
+          sourceFormats: ["vtt"],
+          sources: { vtt: `${base}/captions/ar.vtt` },
+        },
+      },
+    },
+    {
+      downloadSubtitles: async () => {
+        throw new Error("yt-dlp must not be needed for a direct caption track");
+      },
+    },
+  );
+  engine.on("complete", (id, data) => (completed = data));
+  await engine.start();
+  assert.ok(completed, engine.status);
+  const saved = await fs.readFile(completed.filePath, "utf8");
+  assert.match(saved, /^1\n00:00:02,000 --> 00:00:04,000\nمرحبا بالعالم/);
+  assert.equal(completed.filename, "Arabic captions.ar.srt");
+  await assert.rejects(fs.access(path.join(dir, "work")));
+});

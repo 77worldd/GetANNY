@@ -9,7 +9,7 @@ import { useI18n } from "../i18n/useI18n";
 export default function ThemeSwitcher() {
   const { t } = useI18n();
   const selected = useSettingsStore(
-    (state) => state.settings.theme || "graphite",
+    (state) => state.settings.theme || "nord",
   );
   const save = useSettingsStore((state) => state.save);
   const [open, setOpen] = useState(false);

@@ -21,6 +21,17 @@ const {
 } = require("./browser-integration/NativeMessagingHost");
 const { getBridgeIdentity } = require("./browser-integration/BridgeIdentity");
 const { validateUrl } = require("./engine/utils");
+const themes = require("../shared/themes.json");
+
+// The browser extension mirrors the desktop palette, so the bridge sends the
+// resolved tokens rather than a theme name the extension cannot resolve.
+function themePayload(id) {
+  const theme =
+    themes.find((item) => item.id === id) ||
+    themes.find((item) => item.id === "nord") ||
+    themes[0];
+  return { id: theme.id, name: theme.name, mode: theme.mode, colors: theme.colors };
+}
 
 async function createServices({
   userDataPath,
@@ -47,6 +58,7 @@ async function createServices({
     onChange: async (key, value) => {
       await onSettingChange(key, value);
       if (key === "browserIntegrationEnabled") wsServer?.setEnabled(value);
+      if (key === "theme") wsServer?.setTheme(themePayload(value));
       manager?.updateSettings({ ...settings.getAll(), [key]: value });
       events.emit("event", "settings:changed", {
         ...settings.getAll(),
@@ -177,6 +189,7 @@ async function createServices({
     port,
     token: identity.token,
     enabled: settings.get("browserIntegrationEnabled"),
+    theme: themePayload(settings.get("theme")),
     onDownloadRequest: processBrowserRequest,
     onDownloadStatus: async ({ transferId, source }, { sessionId }) => {
       const review = pendingBrowserRequests.find(
@@ -203,6 +216,10 @@ async function createServices({
         transport: session.transport,
       };
       settingsRepo.set("integrationEvidence", evidence);
+      // A verified handshake is the completion signal for first-time setup, so
+      // later launches open the library instead of the welcome screen.
+      if (!settings.get("firstRunCompleted"))
+        settings.set("firstRunCompleted", true).catch(() => {});
       events.emit("event", "browser:changed", wsServer.status());
     },
   });

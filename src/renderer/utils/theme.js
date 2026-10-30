@@ -10,7 +10,7 @@ export function themeById(id) {
 
 export function resolveTheme(id, light = false) {
   return id === "system"
-    ? themeById(light ? "porcelain" : "graphite")
+    ? themeById(light ? "porcelain" : "nord")
     : themeById(id);
 }
 

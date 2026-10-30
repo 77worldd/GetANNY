@@ -150,20 +150,27 @@ function normalizeSubtitles(info) {
     [true, info.automatic_captions],
   ]) {
     for (const [language, tracks] of Object.entries(groups || {})) {
-      const formats = (tracks || [])
-        .map((track) => ({
-          ext: String(track.ext || "").toLowerCase(),
-          url: mediaUrl(track.url),
-          name: track.name || null,
-        }))
-        .filter((track) => track.url && /^[a-z0-9]{1,12}$/.test(track.ext));
+      // Keep the direct track URL per format. Fetching the caption straight
+      // from the extractor is far more reliable than asking yt-dlp to resolve
+      // the same page again, which is where most subtitle failures came from.
+      const sources = {};
+      let name = null;
+      for (const track of tracks || []) {
+        const ext = String(track.ext || "").toLowerCase();
+        const url = mediaUrl(track.url);
+        if (!url || !/^[a-z0-9]{1,12}$/.test(ext)) continue;
+        if (track.name && !name) name = String(track.name).slice(0, 120);
+        if (!sources[ext]) sources[ext] = url;
+      }
+      const formats = Object.keys(sources);
       if (!formats.length) continue;
       result.push({
         id: `${automatic ? "automatic" : "manual"}:${language}`,
         language,
-        name: formats.find((track) => track.name)?.name || language,
+        name: name || language,
         automatic,
-        formats: [...new Set(formats.map((track) => track.ext))],
+        formats,
+        sources,
       });
     }
   }

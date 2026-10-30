@@ -71,6 +71,9 @@ class MediaDetector {
           automatic: subtitle.automatic,
           format,
           sourceFormats: subtitle.formats,
+          ...(Object.keys(subtitle.sources || {}).length
+            ? { sources: subtitle.sources }
+            : {}),
         },
       },
     };
