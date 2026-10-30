@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.1 — Workflow, interception and localization release
+
+- Studio and Media link fields show the active link with an inline clear (X) control that also resets analysis state.
+- Downloads gained native multi-selection, batch removal, Escape to leave selection, and a scoped Clear history menu for selected, completed, failed or all history. History cleanup never deletes downloaded files.
+- Every workspace subsection and download detail sheet now has one contextual Back control that preserves tab and filter state.
+- Intercepted browser files are queued and started automatically; the paused browser copy is erased only after desktop ownership is confirmed.
+- Torrent output uses the swarm metadata name instead of UUID folders, and legacy folders migrate on resume.
+- Chunk and partial files live in a private per-transfer work directory outside the destination.
+- Added centralized English, Arabic (RTL), French and Spanish localization with immediate switching and persistence.
+- The floating video-page button uses the official GetANNY mark and wordmark.
+
 ## 2.1.0 — Obsidian identity release
 
 - Adopted the official supplied eagle/shield mark and GetANNY wordmark unchanged. A reproducible generator rebuilds transparency, recolours and resamples the original artwork into a multi-resolution Windows ICO, ICNS, application/tray/notification PNGs, installer header and sidebar bitmaps, favicon and browser-extension icons.
