@@ -42,6 +42,9 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
     await invoke("settings:set", { key: "firstRunCompleted", value: false });
     await invoke("settings:set", { key: "autoStartDownloads", value: true });
     await invoke("settings:set", { key: "maxConcurrentDownloads", value: 3 });
+    // Make the real transfer last long enough to actually click Pause even on
+    // fast parallel local sockets; no fabricated progress or sleeps as proof.
+    await invoke("settings:set", { key: "speedLimit", value: 1024 ** 2 });
     await invoke("settings:set", { key: "theme", value: "graphite" });
     await page.goto(base);
     await expect(
@@ -83,6 +86,7 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
     await expect(row.getByText("Completed", { exact: true })).toBeVisible({
       timeout: 20000,
     });
+    await invoke("settings:set", { key: "speedLimit", value: 0 });
     const items = await invoke("download:get-all"),
       item = items.find((item) => item.filename === filename);
     if (

@@ -74,3 +74,61 @@ test("chunk downloader assembles verified ranges with exact finalization bytes b
   );
   assert.deepEqual(await fs.readFile(path.join(dir, "large.bin")), data);
 });
+
+test("paused single and segmented snapshots match settled physical bytes, not the progress ticker", async (t) => {
+  const {
+    temporary,
+    fixtureServer,
+    waitFor,
+  } = require("../../../tests/helpers");
+  const fixture = await fixtureServer(t, { size: 8 * 1024 ** 2, delay: 2 });
+  for (const connections of [1, 3]) {
+    const dir = await temporary(t, "getanny-pause-snapshot-");
+    const id = `paused-${connections}`;
+    const downloader = new ChunkDownloader({
+      id,
+      url: fixture.url + "/file.bin",
+      savePath: dir,
+      connections,
+      speedLimit: 2 * 1024 ** 2,
+    });
+    const paused = [];
+    downloader.on("status", (_id, status, data) => {
+      if (status === "paused") paused.push(data);
+    });
+    downloader.on("error", () => {});
+    const task = downloader.start();
+    t.after(async () => {
+      await downloader.pause();
+      await task;
+    });
+    await waitFor(
+      () => downloader.downloadedSize > 0,
+      10000,
+      "actual partial bytes before pause",
+    );
+    await downloader.pause();
+    await task;
+    const names = (await fs.readdir(dir)).filter((name) =>
+      name.startsWith(`.getanny-${id}.part`),
+    );
+    const physical = (
+      await Promise.all(
+        names.map(async (name) => (await fs.stat(path.join(dir, name))).size),
+      )
+    ).reduce((a, b) => a + b, 0);
+    assert.ok(physical > 0);
+    assert.equal(paused.length, 1);
+    assert.equal(
+      paused[0].downloadedSize,
+      physical,
+      `${connections} connection(s): paused status must publish physically settled bytes`,
+    );
+    assert.equal(paused[0].speed, 0);
+    assert.equal(paused[0].eta, null);
+    assert.equal(
+      require("node:fs").existsSync(path.join(dir, "file.bin")),
+      false,
+    );
+  }
+});

@@ -1,7 +1,7 @@
 {
   "name": "getanny",
   "version": "2.0.0-rc.1",
-  "description": "GetANNY — reliable downloads, clear control",
+  "description": "GetANNY \u2014 reliable downloads, clear control",
   "main": "src/main/main.js",
   "author": "GetANNY Team",
   "license": "Apache-2.0",
@@ -19,7 +19,8 @@
     "test:ui": "node scripts/test-ui.js",
     "format": "prettier --write src scripts tests docs README.md electron-builder.yml .github/workflows/*.yml",
     "postinstall": "electron-builder install-app-deps",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "test:large-http": "node scripts/test-large-transfer.js"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

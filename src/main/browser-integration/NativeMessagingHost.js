@@ -231,7 +231,12 @@ class NativeMessagingHost {
       }
     }
     await fs
-      .rm(this.base, { force: true, recursive: true })
+      .rm(this.base, {
+        force: true,
+        recursive: true,
+        maxRetries: 10,
+        retryDelay: 150,
+      })
       .catch((error) => errors.push(error.message));
     return { removed: errors.length === 0, errors };
   }

@@ -196,8 +196,21 @@ class DownloadEngine extends EventEmitter {
       if (this.wantedState) {
         if (this.wantedState === "cancelled")
           await this.cleanupPartials().catch(() => {});
+        if (this.wantedState === "paused") {
+          // Abort/pause has settled every writer and worker. The 400 ms UI
+          // sample and in-flight meter can both differ from durable partials.
+          try {
+            this.downloadedSize = await this.partialBytes();
+          } catch (error) {
+            this.speed = 0;
+            this.setStatus("failed", { error: error.message });
+            this.emit("error", this.id, error);
+            return;
+          }
+        }
         this.speed = 0;
-        this.setStatus(this.wantedState);
+        this.tickBytes = 0;
+        this.setStatus(this.wantedState, this.progress());
       } else {
         if (
           ["ECONNRESET", "ETIMEDOUT", "ERR_STREAM_PREMATURE_CLOSE"].includes(
@@ -319,6 +332,15 @@ class DownloadEngine extends EventEmitter {
     );
     await this.task;
     return true;
+  }
+  async partialBytes(file = this.partialPath) {
+    if (!file) return 0;
+    try {
+      return (await fsp.stat(file)).size;
+    } catch (error) {
+      if (error.code === "ENOENT") return 0;
+      throw error;
+    }
   }
   async cleanupPartials() {
     if (!this.savePath) return;

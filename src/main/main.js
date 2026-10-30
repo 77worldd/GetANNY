@@ -155,10 +155,26 @@ async function init() {
     await fs.rm(path.join(userDataPath, "extensions"), {
       recursive: true,
       force: true,
+      maxRetries: 10,
+      retryDelay: 150,
     });
     if (["win32", "darwin"].includes(process.platform))
       app.setLoginItemSettings({ openAtLogin: false });
     await services.close();
+    await fs.writeFile(
+      path.join(userDataPath, "browser-uninstall-report.json"),
+      JSON.stringify(
+        {
+          passed: result.removed,
+          date: new Date().toISOString(),
+          nativeFilesRemoved: result.removed,
+          extensionFilesRemoved: true,
+          errors: result.errors,
+        },
+        null,
+        2,
+      ),
+    );
     app.exit(result.removed ? 0 : 1);
     return;
   }
@@ -257,8 +273,23 @@ else {
   app
     .whenReady()
     .then(init)
-    .catch((error) => {
+    .catch(async (error) => {
       log.error(error);
+      if (unregisterOnly)
+        await fs
+          .writeFile(
+            path.join(app.getPath("userData"), "browser-uninstall-report.json"),
+            JSON.stringify(
+              {
+                passed: false,
+                date: new Date().toISOString(),
+                error: error.message,
+              },
+              null,
+              2,
+            ),
+          )
+          .catch(() => {});
       if (!setupOnly && !unregisterOnly && !selfTest)
         dialog.showErrorBox("GetANNY could not start", error.message);
       app.exit(1);

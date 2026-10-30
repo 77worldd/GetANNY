@@ -3,6 +3,10 @@ $ErrorActionPreference='Stop'
 $evidenceRoot = 'test-results/windows'
 $overall = Get-Content "$evidenceRoot/installer-report.json" -Raw | ConvertFrom-Json
 if (-not $overall.passed) { throw 'Cannot assemble a release from failed installer/browser evidence.' }
+foreach($format in @('exe','msi')) {
+  $retention=$overall.defaultProfileRetention.$format
+  if(-not $retention.retained -or -not $retention.nativeCleanupVerified -or $retention.ownedNativeEntries -lt 1 -or $retention.history -lt 1){throw "Default-profile/output/native-cleanup evidence incomplete: $format"}
+}
 $measured = [System.Collections.Generic.List[string]]::new()
 $measured.Add('## Measured automated results for this build')
 $measured.Add('')

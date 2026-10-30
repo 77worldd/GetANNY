@@ -88,6 +88,35 @@ jobs:
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      - name: Preserve built installers independently of later verification
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP 'GetANNY-test-build'
+          New-Item $destination -ItemType Directory -Force | Out-Null
+          Copy-Item 'dist/GetANNY Setup.exe','dist/GetANNY Setup.msi' $destination
+          Copy-Item 'release-assets/*.zip' $destination
+          Copy-Item 'docs/INSTALL_WINDOWS.md','docs/BROWSERS.md' $destination
+          @(
+            'UNSIGNED DEVELOPMENT TEST BUILD — NOT A VERIFIED FINAL RELEASE',
+            'Source: ${{ github.sha }}',
+            'Verification: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}',
+            'Packaging succeeded. Installed-app, uninstall and individual browser tests may still be running or may fail.',
+            'Consult the run and raw evidence. Do not interpret this artifact as passing those gates.',
+            'Firefox ZIP is unsigned development source; permanent installation requires Mozilla signing.'
+          ) | Set-Content (Join-Path $destination 'BUILD_STATUS.txt')
+          Get-ChildItem $destination -File | Where-Object Name -ne 'SHA256SUMS.txt' | Sort-Object Name | ForEach-Object { ('{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(),$_.Name) } | Set-Content (Join-Path $destination 'SHA256SUMS.txt')
+      - name: Downloadable development installers (not certification)
+        id: built-installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: GetANNY-unsigned-test-build
+          path: ${{ runner.temp }}/GetANNY-test-build/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Record the actual test-build download link
+        shell: pwsh
+        run: |
+          'Test-build artifact (not final verification): ${{ steps.built-installers.outputs.artifact-url }}' | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Install, launch, download, integrate, restart, reinstall and uninstall both packages
         shell: pwsh
         run: |

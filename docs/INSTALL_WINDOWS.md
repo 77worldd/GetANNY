@@ -13,6 +13,10 @@ Requirements: Windows 10/11 x64, ordinary user account, writable destination/dow
 
 Unless release evidence says Authenticode **Valid**, these packages are unsigned. Branding is not signing. SmartScreen reputation warnings may occur. No certificate was provided during this session.
 
+## Development test-build downloads
+
+Each successful packaging step now retains a **`GetANNY-unsigned-test-build` artifact** on its Actions run, containing EXE, MSI, extension ZIPs, SHA-256 sums and `BUILD_STATUS.txt`. A later installed/uninstall/browser check may still be running or may fail. These artifacts are **not verified final releases**. Downloading Actions artifacts may require GitHub sign-in. The GitHub Release is only published if the separate full verification gate succeeds.
+
 ## What has actually been measured
 
 The latest development snapshot (Windows run [40980506581](https://github.com/77worldd/GetANNY/actions/runs/40980506581), source `a863dc2`) passed 61 backend checks, 9 compiled C# launcher checks, EXE default-profile checks and actual compiled-native cold / Desktop / Start Menu launch and close checks. That job then failed in three browser tests; newer MSI default-profile lifecycle/uninstall gates were not reached. Do not mistake that failed snapshot for a certified release. A published candidate's **`MEASURED_RESULTS.md`, release notes and attached raw evidence** supersede this snapshot with actual results for its exact source commit. Interactive consumer-machine gates below remain separate.

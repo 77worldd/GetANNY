@@ -1,4 +1,10 @@
 $ErrorActionPreference = 'Stop'
+trap {
+  if($results -and (Test-Path $results)) {
+    @{passed=$false;date=(Get-Date -Format o);error=$_.Exception.Message;script=$_.ScriptStackTrace} | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $results 'installer-fatal.json')
+  }
+  throw $_
+}
 if($env:CI -ne 'true' -or -not $env:RUNNER_TEMP){throw 'Installer tests modify the default app profile and require a disposable Windows CI account.'}
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $results = Join-Path $root 'test-results\windows'
@@ -71,6 +77,8 @@ function Owned-NativeEntries([string] $Data) {
   return $found.ToArray()
 }
 function Assert-Uninstalled([string] $InstalledExe, $Shortcuts, [string] $Data, $Before, $NativeEntries) {
+  $bridgeReport=Join-Path $Data 'browser-uninstall-report.json'
+  if(Test-Path $bridgeReport){Copy-Item $bridgeReport (Join-Path $results ((Split-Path (Split-Path $InstalledExe -Parent) -Leaf)+'-uninstall-bridge.json'))}
   if (Test-Path $InstalledExe) { throw 'Uninstallation left the application executable.' }
   foreach ($link in $Shortcuts) { if (Test-Path $link.path) { throw "Uninstallation left shortcut $($link.path)" } }
   foreach($directory in @('native-messaging','extensions')) {if(Test-Path (Join-Path $Data $directory)){throw "Uninstall left owned prepared directory $directory"}}
@@ -106,8 +114,10 @@ Run-Checked $uninstaller.FullName @('/S')
 Start-Sleep -Seconds 2
 if (Test-Path $installedExe) { throw 'EXE uninstallation left the application executable.' }
 if (-not (Test-Path (Join-Path $exeData 'getanny.db'))) { throw 'Uninstaller destroyed isolated test history.' }
-$exeDefaultRetained=Assert-Uninstalled $installedExe $exeShortcuts $defaultData $exeDefaultBefore $exeNativeEntries
-@{passed=$true;exe=@{installed=$true;reinstalled=$true;uninstalled=$true};defaultProfileRetention=@{exe=$exeDefaultRetained};shortcuts=@{exe=$exeShortcuts;createdAndTargetsVerified=$true;removedOnUninstall=$true;shellLaunch='passed-in-exe-desktop-lifecycle.json'}} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $results 'exe-uninstall.json')
+$exeCleanupError=$null;$exeDefaultRetained=$null
+try {$exeDefaultRetained=Assert-Uninstalled $installedExe $exeShortcuts $defaultData $exeDefaultBefore $exeNativeEntries}
+catch {$exeCleanupError=$_.Exception.Message;Write-Warning "EXE cleanup gate failed; preserve failure and measure independent MSI tests: $exeCleanupError"}
+@{passed=($null -eq $exeCleanupError);error=$exeCleanupError;exe=@{installed=$true;reinstalled=$true;uninstalled=($null -eq $exeCleanupError);applicationFilesRemoved=$true};defaultProfileRetention=@{exe=$exeDefaultRetained};shortcuts=@{exe=$exeShortcuts;createdAndTargetsVerified=$true;removedOnUninstall=$true;shellLaunch='passed-in-exe-desktop-lifecycle.json'}} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $results 'exe-uninstall.json')
 Write-Host 'Installing the actual MSI package...'
 $msiDir = Join-Path $installRoot 'msi-app'
 $msiData = Join-Path $installRoot 'msi-data'
@@ -136,6 +146,7 @@ if (Test-Path $installedMsiExe) { throw 'MSI uninstallation left the application
 if (-not (Test-Path (Join-Path $msiData 'getanny.db'))) { throw 'MSI uninstall destroyed isolated test history.' }
 $msiDefaultRetained=Assert-Uninstalled $installedMsiExe $msiShortcuts $defaultData $msiDefaultBefore $msiNativeEntries
 $signatures = @($exePackage,$msiPackage) | ForEach-Object { $sig = Get-AuthenticodeSignature $_; @{file=(Split-Path $_ -Leaf);status=$sig.Status.ToString()} }
-@{passed=($null -eq $matrixError);browserMatrixError=$matrixError;date=(Get-Date -Format o);exe=@{installed=$true;reinstalled=$true;uninstalled=$true};msi=@{installed=$true;reinstalled=$true;uninstalled=$true};signatures=$signatures;defaultProfileRetention=@{exe=$exeDefaultRetained;msi=$msiDefaultRetained};shortcuts=@{exe=$exeShortcuts;msi=$msiShortcuts;createdAndTargetsVerified=$true;removedOnUninstall=$true;shellLaunch='passed-in-desktop-lifecycle-reports'};limitations=@('GitHub-hosted Windows runner is not a pristine consumer Windows installation.','Same-version reinstall tested; migration from the old v1 installer requires manual validation.','Shortcut files, targets, removal and actual shell launches checked; interactive options dialogs still require manual inspection.','See browser-matrix/matrix.json for actual per-brand results; Production browser-UI consent and permanent store/signed installation remain manual.')} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $results 'installer-report.json')
+@{passed=($null -eq $matrixError -and $null -eq $exeCleanupError);exeCleanupError=$exeCleanupError;browserMatrixError=$matrixError;date=(Get-Date -Format o);exe=@{installed=$true;reinstalled=$true;uninstalled=($null -eq $exeCleanupError);applicationFilesRemoved=$true};msi=@{installed=$true;reinstalled=$true;uninstalled=$true};signatures=$signatures;defaultProfileRetention=@{exe=$exeDefaultRetained;msi=$msiDefaultRetained};shortcuts=@{exe=$exeShortcuts;msi=$msiShortcuts;createdAndTargetsVerified=$true;removedOnUninstall=$true;shellLaunch='passed-in-desktop-lifecycle-reports'};limitations=@('GitHub-hosted Windows runner is not a pristine consumer Windows installation.','Same-version reinstall tested; migration from the old v1 installer requires manual validation.','Shortcut files, targets, removal and actual shell launches checked; interactive options dialogs still require manual inspection.','See browser-matrix/matrix.json for actual per-brand results; Production browser-UI consent and permanent store/signed installation remain manual.')} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $results 'installer-report.json')
+if($exeCleanupError){throw "EXE cleanup gate failed: $exeCleanupError. Independent MSI/browser evidence was preserved; this is not a release pass."}
 if($matrixError){throw "Available browser gate failed: $matrixError. Independent installer/retention results are preserved in installer-report.json."}
 Write-Host 'EXE, MSI, installed downloads, restart preservation, native chain and available-browser extension checks passed.'

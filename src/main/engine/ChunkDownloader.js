@@ -95,6 +95,17 @@ class ChunkDownloader extends DownloadEngine {
       { signal: this.controller.signal },
     );
   }
+  async partialBytes() {
+    if (this.segmentCount > 1 && this.partialPath) {
+      const sizes = await Promise.all(
+        Array.from({ length: this.segmentCount }, (_, index) =>
+          super.partialBytes(`${this.partialPath}-${index}`),
+        ),
+      );
+      return sizes.reduce((sum, size) => sum + size, 0);
+    }
+    return super.partialBytes();
+  }
   runWorker(part) {
     return new Promise((resolve, reject) => {
       const workerPath = path
