@@ -339,6 +339,58 @@ const exec = promisify(execFile);
       15000,
       "content-script media detection",
     );
+    const ordinaryUrl = fixture.url + "/file.bin?ordinary-browser=1";
+    await site.evaluate(() => {
+      document.cookie = "getanny_e2e=browser-cookie; SameSite=Lax";
+    });
+    await site.evaluate((url) => {
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "ordinary-browser.bin";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    }, ordinaryUrl);
+    await waitFor(
+      async () =>
+        (await invoke("download:get-all")).some(
+          (item) => item.url === ordinaryUrl && item.status === "completed",
+        ),
+      30000,
+      "ordinary browser-download interception",
+    );
+    const ordinary = (await invoke("download:get-all")).find(
+      (item) => item.url === ordinaryUrl,
+    );
+    if (!ordinary.browserTransferId || ordinary.browserSource !== browserId)
+      throw new Error("Ordinary download lacks browser handoff identity");
+    if (
+      checksum(await fs.readFile(ordinary.filePath)) !==
+      checksum(fixture.state.data)
+    )
+      throw new Error("Ordinary intercepted download hash mismatch");
+    const desktopProbe = fixture.state.requests.find(
+      (request) =>
+        request.url.includes("ordinary-browser=1") &&
+        request.range === "bytes=0-0",
+    );
+    if (!desktopProbe?.cookie?.includes("getanny_e2e=browser-cookie"))
+      throw new Error("Ordinary handoff did not forward the browser cookie");
+    const remainingNative = await worker.evaluate(async (url) => {
+      const downloads = await chrome.downloads.search({});
+      return downloads.filter((item) => (item.finalUrl || item.url) === url);
+    }, ordinaryUrl);
+    if (remainingNative.length)
+      throw new Error(
+        "Native browser entry was not cancelled and erased after handoff",
+      );
+    const handoffsLeft = await worker.evaluate(() =>
+      Array.from(interceptor.entries.keys()),
+    );
+    if (handoffsLeft.length)
+      throw new Error(
+        `Unhandled native handoffs remain: ${handoffsLeft.join(",")}`,
+      );
     await popup.locator("#url").fill(media.server.url + "/watch.html");
     await popup.locator("#kind").selectOption("media");
     await popup.locator("#send").click();
@@ -391,6 +443,7 @@ const exec = promisify(execFile);
             "Extension loads with stable ID",
             "Native handshake shown in popup and desktop",
             "Popup-origin HTTP download hash verified",
+            "Ordinary browser download intercepted with cookie forwarding, desktop hash verification and native-entry cleanup",
             "Content script detects actual HTML5 media",
             "Popup-origin media request analyzes and downloads through desktop UI",
           ],

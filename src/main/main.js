@@ -6,6 +6,7 @@ const {
   dialog,
   Menu,
   Notification,
+  nativeImage,
 } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
@@ -135,6 +136,7 @@ async function init() {
     extensionPath,
     appPath: process.execPath,
     isPackaged: app.isPackaged,
+    nativeImage,
     port: selfTest ? 0 : 29615,
     startTransfers: !setupOnly && !unregisterOnly,
     onSettingChange: async (key, value) => {

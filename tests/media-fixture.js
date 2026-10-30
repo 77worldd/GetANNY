@@ -87,6 +87,21 @@ async function mediaFixture(t, { largeVideo = false } = {}) {
     "-y",
     "-i",
     path.join(dir, "video.mp4"),
+    "-frames:v",
+    "1",
+    path.join(dir, "poster.jpg"),
+  ]);
+  await fs.writeFile(
+    path.join(dir, "subtitles.en.vtt"),
+    "WEBVTT\n\n00:00.000 --> 00:01.500\nGetANNY caption integration\n\n00:01.500 --> 00:03.000\nReal subtitle bytes\n",
+  );
+  execFileSync(ffmpeg, [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-y",
+    "-i",
+    path.join(dir, "video.mp4"),
     "-vn",
     "-c:a",
     "copy",
@@ -97,7 +112,7 @@ async function mediaFixture(t, { largeVideo = false } = {}) {
       if (url.pathname === "/watch.html" || url.pathname === "/listen.html") {
         res.setHeader("Content-Type", "text/html");
         res.end(
-          `<html><head><title>GetANNY integration fixture</title></head><body>${url.pathname === "/watch.html" ? '<video controls src="/video.mp4"></video>' : '<audio controls src="/audio.m4a"></audio>'}</body></html>`,
+          `<html><head><title>GetANNY integration fixture</title><meta name="description" content="Full integration description with caption and thumbnail metadata."><meta property="og:description" content="Full integration description with caption and thumbnail metadata."><meta property="og:image" content="/poster.jpg"><meta name="keywords" content="integration,video,captions"></head><body>${url.pathname === "/watch.html" ? '<video controls src="/video.mp4" poster="/poster.jpg"><track kind="subtitles" srclang="en" label="English" src="/subtitles.en.vtt" default></video>' : '<audio controls src="/audio.m4a"></audio>'}</body></html>`,
         );
         return true;
       }
@@ -108,9 +123,13 @@ async function mediaFixture(t, { largeVideo = false } = {}) {
         );
         return true;
       }
-      const file = ["/video.mp4", "/silent.mp4", "/audio.m4a"].includes(
-        url.pathname,
-      )
+      const file = [
+        "/video.mp4",
+        "/silent.mp4",
+        "/audio.m4a",
+        "/poster.jpg",
+        "/subtitles.en.vtt",
+      ].includes(url.pathname)
         ? path.join(dir, path.basename(url.pathname))
         : null;
       if (!file) return false;
@@ -118,7 +137,13 @@ async function mediaFixture(t, { largeVideo = false } = {}) {
       res.setHeader("Accept-Ranges", "bytes");
       res.setHeader(
         "Content-Type",
-        file.endsWith(".m4a") ? "audio/mp4" : "video/mp4",
+        file.endsWith(".m4a")
+          ? "audio/mp4"
+          : file.endsWith(".jpg")
+            ? "image/jpeg"
+            : file.endsWith(".vtt")
+              ? "text/vtt"
+              : "video/mp4",
       );
       let start = 0,
         end = buffer.length - 1;

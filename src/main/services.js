@@ -10,6 +10,7 @@ const { DownloadManager } = require("./engine/DownloadManager");
 const { TorrentEngine } = require("./engine/TorrentEngine");
 const { MediaEngine } = require("./media/MediaEngine");
 const { MediaDetector } = require("./media/MediaDetector");
+const { PreviewService } = require("./previews/PreviewService");
 const { WebSocketServer } = require("./browser-integration/WebSocketServer");
 const { BrowserDetector } = require("./browser-integration/BrowserDetector");
 const {
@@ -28,6 +29,7 @@ async function createServices({
   extensionPath,
   appPath = process.execPath,
   isPackaged = false,
+  nativeImage = null,
   port = 29615,
   onSettingChange = async () => {},
   onBrowserRequest = () => {},
@@ -52,6 +54,7 @@ async function createServices({
     },
   });
   const mediaDetector = new MediaDetector({ binPath });
+  const previews = new PreviewService({ userDataPath, binPath, nativeImage });
   let manager, wsServer;
   manager = new DownloadManager({
     settings: settings.getAll(),
@@ -79,22 +82,51 @@ async function createServices({
     extensionPath,
   });
   const pendingBrowserRequests = [];
-  wsServer = new WebSocketServer({
-    port,
-    token: identity.token,
-    enabled: settings.get("browserIntegrationEnabled"),
-    onDownloadRequest: async (request) => {
-      request.url = validateUrl(request.url);
-      if (request.kind === "media" && !settings.get("mediaIntegration"))
-        throw new Error(
-          "Media-page integration is disabled in GetANNY settings.",
+  const recentBrowserRequests = new Map();
+  async function processBrowserRequest(request, { sessionId }) {
+    request.url = validateUrl(request.url);
+    if (request.kind === "media" && !settings.get("mediaIntegration"))
+      throw new Error(
+        "Media-page integration is disabled in GetANNY settings.",
+      );
+    const dedupeKey = request.transferId
+      ? `${request.source}:${request.transferId}`
+      : null;
+    if (dedupeKey) {
+      const existing = manager
+        .getAll()
+        .find(
+          (item) =>
+            item.browserSource === request.source &&
+            item.browserTransferId === request.transferId,
         );
+      if (existing) return { action: "queued", id: existing.id };
+    }
+    if (dedupeKey && recentBrowserRequests.has(dedupeKey))
+      return recentBrowserRequests.get(dedupeKey);
+    const operation = (async () => {
       if (request.kind === "media" || settings.get("confirmBrowserDownloads")) {
-        const review = { ...request, id: randomUUID(), createdAt: Date.now() };
+        const existing = request.transferId
+          ? pendingBrowserRequests.find(
+              (item) =>
+                item.source === request.source &&
+                item.transferId === request.transferId,
+            )
+          : null;
+        if (existing) {
+          existing.sessionId = sessionId;
+          return { action: "review", pendingId: existing.id };
+        }
         if (pendingBrowserRequests.length >= 20)
           throw new Error(
             "Too many unreviewed browser requests. Review the pending requests in GetANNY first.",
           );
+        const review = {
+          ...request,
+          sessionId,
+          id: randomUUID(),
+          createdAt: Date.now(),
+        };
         pendingBrowserRequests.push(review);
         events.emit("event", "browser:request", review);
         onBrowserRequest(review);
@@ -106,8 +138,41 @@ async function createServices({
       const id = await manager.addDownload({
         url: request.url,
         filename: request.filename,
+        headers: request.headers,
+        browserTransferId: request.transferId || undefined,
+        browserSource: request.source,
       });
       return { action: "queued", id };
+    })();
+    if (dedupeKey) {
+      recentBrowserRequests.set(dedupeKey, operation);
+      if (recentBrowserRequests.size > 100)
+        recentBrowserRequests.delete(recentBrowserRequests.keys().next().value);
+      operation.catch(() => recentBrowserRequests.delete(dedupeKey));
+    }
+    return operation;
+  }
+  wsServer = new WebSocketServer({
+    port,
+    token: identity.token,
+    enabled: settings.get("browserIntegrationEnabled"),
+    onDownloadRequest: processBrowserRequest,
+    onDownloadStatus: async ({ transferId, source }, { sessionId }) => {
+      const review = pendingBrowserRequests.find(
+        (item) => item.source === source && item.transferId === transferId,
+      );
+      if (review) {
+        review.sessionId = sessionId;
+        return { action: "review", pendingId: review.id };
+      }
+      const item = manager
+        .getAll()
+        .find(
+          (item) =>
+            item.browserSource === source &&
+            item.browserTransferId === transferId,
+        );
+      return item ? { action: "queued", id: item.id } : { action: "missing" };
     },
     onHello: (session) => {
       const evidence = settingsRepo.get("integrationEvidence") || {};
@@ -137,6 +202,41 @@ async function createServices({
   });
   if (!startTransfers) manager.stopped = true;
   else await manager.restoreDownloads();
+  function takeBrowserRequest(id) {
+    const index = pendingBrowserRequests.findIndex(
+      (request) => request.id === id,
+    );
+    if (index < 0) return null;
+    return pendingBrowserRequests.splice(index, 1)[0];
+  }
+  async function ackBrowserRequest(id) {
+    const request = takeBrowserRequest(id);
+    if (!request) return { found: false };
+    if (request.intercepted && request.transferId) {
+      const result = await wsServer.downloadCommand(
+        request.sessionId,
+        "resume",
+        request.transferId,
+      );
+      return { found: true, resumed: result.success === true };
+    }
+    return { found: true };
+  }
+  async function commitBrowserRequest(id, downloadId) {
+    const request = pendingBrowserRequests.find((request) => request.id === id);
+    if (!request) return { found: false };
+    if (downloadId) manager.requireItem(downloadId);
+    takeBrowserRequest(id);
+    if (request.intercepted && request.transferId) {
+      const result = await wsServer.downloadCommand(
+        request.sessionId,
+        "cancel",
+        request.transferId,
+      );
+      return { found: true, cancelled: result.success === true };
+    }
+    return { found: true, cancelled: true };
+  }
   async function browserStatus() {
     const websocket = wsServer.status();
     const evidence = settingsRepo.get("integrationEvidence") || {};
@@ -204,6 +304,7 @@ async function createServices({
     settings,
     settingsRepo,
     mediaDetector,
+    previews,
     wsServer,
     browserDetector,
     extensionInstaller,
@@ -211,9 +312,25 @@ async function createServices({
     identity,
     pendingBrowserRequests,
     browserStatus,
+    ackBrowserRequest,
+    commitBrowserRequest,
     prepareBrowser,
     setupInstalledBrowsers,
     async close() {
+      await previews.close();
+      // A reviewed native transfer is still paused in the browser. On clean
+      // shutdown, explicitly return those reviews instead of stranding them.
+      await Promise.all(
+        pendingBrowserRequests
+          .filter((request) => request.intercepted && request.transferId)
+          .map((request) =>
+            wsServer.downloadCommand(
+              request.sessionId,
+              "resume",
+              request.transferId,
+            ),
+          ),
+      );
       await wsServer.close();
       await manager.shutdown();
       db.close();

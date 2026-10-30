@@ -72,12 +72,35 @@ function createHandlers({ services: s, desktop }) {
       manager.remove(options.id, options.deleteFile === true),
     "download:clear-completed": () => manager.clearCompleted(),
     "download:get-all": () => manager.getAll(),
+    "download:preview": (id) => s.previews.get(manager.requireItem(id)),
     "download:open-file": (id) => openKnown(id, false),
     "download:open-folder": (id) => openKnown(id, true),
     "media:get-formats": (url) => mediaDetector.getFormats(url),
-    "media:download": (options) =>
+    "media:download": async (options) => {
+      const selection = mediaDetector.selection(options);
+      const subtitle = options.subtitle
+        ? mediaDetector.subtitleSelection({
+            analysisId: options.analysisId,
+            languageId: options.subtitle.languageId,
+            format: options.subtitle.format,
+          })
+        : null;
+      const id = await manager.addMedia({
+        ...selection,
+        savePath: options.savePath,
+      });
+      if (subtitle)
+        await manager.addMedia({ ...subtitle, savePath: options.savePath });
+      return id;
+    },
+    "media:download-subtitle": (options) =>
       manager.addMedia({
-        ...mediaDetector.selection(options),
+        ...mediaDetector.subtitleSelection(options),
+        savePath: options.savePath,
+      }),
+    "media:download-thumbnail": (options) =>
+      manager.addDownload({
+        ...mediaDetector.thumbnailSelection(options),
         savePath: options.savePath,
       }),
     "settings:get-all": () => settings.getAll(),
@@ -87,6 +110,7 @@ function createHandlers({ services: s, desktop }) {
     },
     "settings:reset": () => settings.reset(),
     "browser:status": () => s.browserStatus(),
+    "browser:bridge-status": () => s.wsServer.status(),
     "browser:detect": () => s.browserDetector.detect(),
     "browser:prepare": (id) => {
       desktopOnly();
@@ -117,13 +141,9 @@ function createHandlers({ services: s, desktop }) {
       return null;
     },
     "browser:pairing-key": () => s.identity.token,
-    "browser:ack-request": (id) => {
-      const index = s.pendingBrowserRequests.findIndex(
-        (request) => request.id === id,
-      );
-      if (index >= 0) s.pendingBrowserRequests.splice(index, 1);
-      return true;
-    },
+    "browser:ack-request": (id) => s.ackBrowserRequest(id),
+    "browser:commit-request": ({ id, downloadId }) =>
+      s.commitBrowserRequest(id, downloadId),
     "dialog:select-folder": async () => {
       const d = desktopOnly();
       const result = await d.dialog.showOpenDialog(d.mainWindow(), {

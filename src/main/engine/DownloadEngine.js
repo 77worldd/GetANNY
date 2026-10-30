@@ -38,32 +38,21 @@ class DownloadEngine extends EventEmitter {
   }
 
   async probe() {
-    const options = {
-      headers: this.headers,
+    // One real range response provides redirect, filename, validators, size
+    // and resume capability. A separate HEAD doubled connection initialization.
+    const rangeProbe = await request(this.url, {
+      headers: { ...this.headers, Range: "bytes=0-0" },
       timeout: this.timeout,
       signal: this.controller.signal,
       requestOptions: this.requestOptions,
-    };
-    const head = await request(this.url, { ...options, method: "HEAD" });
-    let response = head.response;
-    let finalUrl = head.url;
-    let headers = response.headers;
-    const headStatus = response.statusCode;
-    response.destroy();
-    if (![200, 204, 206, 400, 403, 405, 501].includes(headStatus))
-      throw httpError(headStatus, "Unable to inspect the download.");
-    // A successful one-byte range, not Accept-Ranges alone, is the capability test.
-    const rangeProbe = await request(finalUrl, {
-      ...options,
-      headers: { ...head.headers, Range: "bytes=0-0" },
     });
-    response = rangeProbe.response;
-    finalUrl = rangeProbe.url;
+    const response = rangeProbe.response;
+    const finalUrl = rangeProbe.url;
     this.headers = rangeProbe.headers;
     delete this.headers.Range;
-    const range = parseRange(response.headers["content-range"]);
+    const headers = response.headers;
+    const range = parseRange(headers["content-range"]);
     const status = response.statusCode;
-    headers = { ...headers, ...response.headers };
     response.destroy();
     if (![200, 204, 206, 416].includes(status))
       throw httpError(

@@ -2,7 +2,11 @@ const { spawn } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { validateUrl } = require("../engine/utils");
-const { normalizeFormats } = require("./formats");
+const {
+  normalizeFormats,
+  normalizeThumbnails,
+  normalizeSubtitles,
+} = require("./formats");
 
 class YtDlpWrapper {
   constructor({ binPath, executable, spawnProcess = spawn } = {}) {
@@ -165,8 +169,83 @@ class YtDlpWrapper {
       thumbnail: info.thumbnail || null,
       duration: info.duration || null,
       extractor: info.extractor_key || info.extractor || null,
+      description: typeof info.description === "string" ? info.description : "",
+      tags: Array.isArray(info.tags)
+        ? info.tags.filter((tag) => typeof tag === "string" && tag.trim())
+        : [],
+      thumbnails: normalizeThumbnails(info),
+      subtitles: normalizeSubtitles(info),
       formats: normalizeFormats(info),
     };
+  }
+  async downloadSubtitles({
+    url,
+    language,
+    automatic = false,
+    format = "vtt",
+    sourceFormats = [],
+    outputTemplate,
+    timeout = 30,
+    signal,
+  }) {
+    if (!/^[a-z0-9][a-z0-9-]{0,40}$/i.test(language))
+      throw new Error("Choose an available subtitle language.");
+    if (!["srt", "vtt"].includes(format))
+      throw new Error("Subtitles can be downloaded as SRT or VTT.");
+    await fs.mkdir(path.dirname(outputTemplate), { recursive: true });
+    const tools = await this.availability();
+    const direct = sourceFormats.includes(format);
+    if (!direct && !tools.ffmpeg)
+      throw new Error(
+        `This caption is not directly available as ${format.toUpperCase()}. FFmpeg is required for subtitle conversion.`,
+      );
+    const args = [
+      "--ignore-config",
+      "--js-runtimes",
+      `node:${process.execPath}`,
+      "--no-playlist",
+      "--skip-download",
+      automatic ? "--write-auto-subs" : "--write-subs",
+      "--sub-langs",
+      language,
+      "--sub-format",
+      direct ? format : "vtt/srv3/ttml/srv2/srv1/json3/best",
+      "--no-overwrites",
+      "--no-mtime",
+      "--windows-filenames",
+      "--socket-timeout",
+      String(timeout),
+      "--retries",
+      "2",
+      "-o",
+      outputTemplate,
+    ];
+    if (!direct) args.push("--convert-subs", format);
+    if (tools.ffmpeg) args.push("--ffmpeg-location", this.binPath);
+    args.push("--", validateUrl(url));
+    await this.run(args, { signal });
+    const folder = path.dirname(outputTemplate);
+    const stem = path.basename(outputTemplate).replace(/\.%\(ext\)s$/, "");
+    const candidates = (await fs.readdir(folder)).filter(
+      (name) =>
+        name.startsWith(`${stem}.`) &&
+        name.endsWith(`.${format}`) &&
+        !name.includes(".part"),
+    );
+    const stats = await Promise.all(
+      candidates.map(async (name) => ({
+        name,
+        stat: await fs.stat(path.join(folder, name)).catch(() => null),
+      })),
+    );
+    const file = stats
+      .filter((entry) => entry.stat?.isFile() && entry.stat.size > 0)
+      .sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs)[0];
+    if (!file)
+      throw new Error(
+        "yt-dlp did not produce the requested subtitle file. The caption may no longer be available.",
+      );
+    return path.join(folder, file.name);
   }
   async download({
     url,

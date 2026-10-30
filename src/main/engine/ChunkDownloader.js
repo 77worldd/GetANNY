@@ -1,25 +1,33 @@
-const { Worker } = require("node:worker_threads");
 const path = require("node:path");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
+const { Transform } = require("node:stream");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { DownloadEngine } = require("./DownloadEngine");
+const { request, validateRange, httpError } = require("./http");
 
+// HTTP ranges are I/O-bound. Running each stream in its own worker thread used
+// a separate V8 heap and a message round-trip for every throttled buffer without
+// adding CPU parallelism. Shared asynchronous streams retain backpressure and
+// cancellation while keeping memory and IPC bounded.
 class ChunkDownloader extends DownloadEngine {
   constructor(options = {}) {
     super(options);
     this.connections = Math.min(16, Math.max(1, options.connections || 8));
-    this.workers = new Set();
+    this.segmentStreams = new Set();
   }
+
   desiredSegments() {
-    return this.resumable && this.totalSize >= 2 * 1024 * 1024
-      ? Math.min(
-          this.connections,
-          Math.max(1, Math.floor(this.totalSize / (1024 * 1024))),
-        )
-      : 1;
+    if (!this.resumable || this.totalSize < 2 * 1024 * 1024) return 1;
+    // Avoid connection setup dominating small files. Large files can still use
+    // every configured connection; the default target is roughly 4 MiB/range.
+    return Math.min(
+      this.connections,
+      Math.max(2, Math.ceil(this.totalSize / (4 * 1024 * 1024))),
+    );
   }
+
   async transfer() {
     if (this.segmentCount === 1) return super.transfer();
     const chunkSize = Math.ceil(this.totalSize / this.segmentCount);
@@ -31,7 +39,7 @@ class ChunkDownloader extends DownloadEngine {
     this.downloadedSize = 0;
     for (const part of parts) {
       part.existing = await fsp.stat(part.file).then(
-        (s) => s.size,
+        (stat) => stat.size,
         () => 0,
       );
       if (part.existing > part.end - part.start + 1) {
@@ -40,12 +48,15 @@ class ChunkDownloader extends DownloadEngine {
       }
       this.downloadedSize += part.existing;
     }
+
     const stopAll = () => {
-      for (const worker of this.workers) worker.postMessage({ type: "cancel" });
+      for (const response of this.segmentStreams) response.destroy();
     };
     this.controller.signal.addEventListener("abort", stopAll, { once: true });
     let failure;
-    const pending = parts.filter((p) => p.existing < p.end - p.start + 1);
+    const pending = parts.filter(
+      (part) => part.existing < part.end - part.start + 1,
+    );
     let cursor = 0;
     const pool = Array.from(
       { length: Math.min(this.connections, pending.length) },
@@ -57,9 +68,9 @@ class ChunkDownloader extends DownloadEngine {
         ) {
           const part = pending[cursor++];
           try {
-            await this.runWorker(part);
+            await this.runSegment(part);
           } catch (error) {
-            if (!failure) {
+            if (!failure && !this.controller.signal.aborted) {
               failure = error;
               stopAll();
             }
@@ -69,6 +80,7 @@ class ChunkDownloader extends DownloadEngine {
     );
     await Promise.allSettled(pool);
     this.controller.signal.removeEventListener("abort", stopAll);
+    this.segmentStreams.clear();
     this.controller.signal.throwIfAborted();
     if (failure) throw failure;
     for (const part of parts) {
@@ -80,9 +92,8 @@ class ChunkDownloader extends DownloadEngine {
         for await (const buffer of fs.createReadStream(part.file)) yield buffer;
       }
     };
-    // Every segment is now physically size-verified. Publish the exact network
-    // bytes at this boundary, not the last (possibly stale) 400ms ticker sample.
-    // This is still processing; completion requires the assembled file/link.
+    // Processing is not completion: the final assembled file is verified and
+    // atomically published by DownloadEngine only after this pipeline settles.
     this.speed = 0;
     this.tickBytes = 0;
     this.setStatus("processing", {
@@ -95,6 +106,72 @@ class ChunkDownloader extends DownloadEngine {
       { signal: this.controller.signal },
     );
   }
+
+  async runSegment(part) {
+    const start = part.start + part.existing;
+    const headers = {
+      ...this.headers,
+      Range: `bytes=${start}-${part.end}`,
+    };
+    if (this.etag || this.lastModified)
+      headers["If-Range"] = this.etag || this.lastModified;
+    const { response } = await request(this.url, {
+      headers,
+      timeout: this.timeout,
+      signal: this.controller.signal,
+      requestOptions: this.requestOptions,
+    });
+    this.segmentStreams.add(response);
+    try {
+      if (response.statusCode >= 400) {
+        response.destroy();
+        throw httpError(response.statusCode);
+      }
+      validateRange(response, start, part.end, this.totalSize);
+      if (
+        response.headers["content-encoding"] &&
+        response.headers["content-encoding"] !== "identity"
+      ) {
+        response.destroy();
+        throw new Error("Encoded range responses are not safe to assemble.");
+      }
+      let received = 0;
+      const meter = new Transform({
+        transform: (chunk, _encoding, callback) => {
+          this.limiter
+            .consume(chunk.length, this.controller.signal)
+            .then(() => {
+              try {
+                this.controller.signal.throwIfAborted();
+                received += chunk.length;
+                if (received > part.end - start + 1)
+                  throw new Error("Segment exceeds its requested byte range.");
+                if (!this.wantedState) {
+                  this.downloadedSize += chunk.length;
+                  this.tickBytes += chunk.length;
+                }
+                callback(null, chunk);
+              } catch (error) {
+                callback(error);
+              }
+            }, callback);
+        },
+      });
+      await pipeline(
+        response,
+        meter,
+        fs.createWriteStream(part.file, {
+          flags: part.existing ? "a" : "w",
+        }),
+        { signal: this.controller.signal },
+      );
+      if (received !== part.end - start + 1)
+        throw new Error("Segment ended before all requested bytes arrived.");
+    } finally {
+      this.segmentStreams.delete(response);
+    }
+  }
+
   async partialBytes() {
     if (this.segmentCount > 1 && this.partialPath) {
       const sizes = await Promise.all(
@@ -106,63 +183,6 @@ class ChunkDownloader extends DownloadEngine {
     }
     return super.partialBytes();
   }
-  runWorker(part) {
-    return new Promise((resolve, reject) => {
-      const workerPath = path
-        .join(__dirname, "chunk-worker.js")
-        .replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
-      const worker = new Worker(workerPath, {
-        workerData: {
-          ...part,
-          url: this.url,
-          headers: this.headers,
-          etag: this.etag,
-          lastModified: this.lastModified,
-          totalSize: this.totalSize,
-          timeout: this.timeout,
-          requestOptions: this.requestOptions,
-        },
-      });
-      this.workers.add(worker);
-      let result;
-      let failure;
-      worker.on("message", (message) => {
-        if (message.type === "throttle") {
-          this.limiter.consume(message.bytes, this.controller.signal).then(
-            () => {
-              if (this.workers.has(worker))
-                worker.postMessage({
-                  type: "grant",
-                  requestId: message.requestId,
-                });
-            },
-            () => {
-              if (this.workers.has(worker))
-                worker.postMessage({ type: "cancel" });
-            },
-          );
-        } else if (message.type === "progress" && !this.wantedState) {
-          this.downloadedSize += message.bytes;
-          this.tickBytes += message.bytes;
-        } else if (message.type === "done") result = true;
-        else if (message.type === "error") {
-          failure = new Error(message.error);
-          failure.retryable = message.retryable;
-        }
-      });
-      worker.once("error", (error) => {
-        failure = error;
-      });
-      worker.once("exit", (code) => {
-        this.workers.delete(worker);
-        if (result) resolve();
-        else
-          reject(
-            failure ||
-              new Error(`Segment stopped before completion (exit ${code}).`),
-          );
-      });
-    });
-  }
 }
+
 module.exports = { ChunkDownloader };

@@ -7,6 +7,8 @@
       const url = new URL(media.url, location.href);
       if (!["http:", "https:"].includes(url.protocol)) return;
       seen.add(url.href);
+      // Media-heavy long-lived pages must not grow this cache indefinitely.
+      if (seen.size > 100) seen.delete(seen.values().next().value);
       api.runtime
         .sendMessage({
           type: "media-detected",
@@ -17,29 +19,47 @@
       /* non-downloadable URL */
     }
   };
-  function scan() {
-    for (const element of document.querySelectorAll("video,audio")) {
-      const url = element.currentSrc || element.src;
+  function element(root) {
+    if (!(root instanceof Element)) return;
+    if (root.matches("video,audio")) {
+      const url = root.currentSrc || root.src;
       if (url && !url.startsWith("blob:")) send({ url, kind: "file" });
       else send({ url: location.href, kind: "media" });
-      for (const source of element.querySelectorAll("source"))
-        send({
-          url: source.src,
-          mimeType: source.type,
-          kind: /mpegurl|dash/.test(source.type) ? "media" : "file",
-        });
     }
+    if (root.matches("source") && root.parentElement?.matches("video,audio"))
+      send({
+        url: root.src,
+        mimeType: root.type,
+        kind: /mpegurl|dash/.test(root.type) ? "media" : "file",
+      });
   }
+  function scan(root = document) {
+    element(root);
+    if (root.querySelectorAll)
+      for (const node of root.querySelectorAll("video,audio,source"))
+        element(node);
+  }
+  const pending = new Set();
   let timer;
-  new MutationObserver(() => {
+  const observer = new MutationObserver((records) => {
+    for (const record of records)
+      for (const node of record.addedNodes) {
+        if (node.nodeType !== Node.ELEMENT_NODE) continue;
+        // Only newly inserted subtrees are scanned, never the whole document on
+        // every mutation. Coalesce framework bursts into one inexpensive pass.
+        if (pending.size < 100) pending.add(node);
+      }
+    if (!pending.size) return;
     clearTimeout(timer);
-    timer = setTimeout(scan, 400);
-  }).observe(document.documentElement, {
+    timer = setTimeout(() => {
+      for (const node of pending) scan(node);
+      pending.clear();
+    }, 300);
+  });
+  observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
-    attributes: true,
-    attributeFilter: ["src"],
   });
-  document.addEventListener("play", scan, true);
+  document.addEventListener("play", (event) => scan(event.target), true);
   scan();
 })();

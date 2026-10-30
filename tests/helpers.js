@@ -42,6 +42,9 @@ async function fixtureServer(
       method: req.method,
       range: req.headers.range,
       ifRange: req.headers["if-range"],
+      cookie: req.headers.cookie,
+      referer: req.headers.referer,
+      userAgent: req.headers["user-agent"],
     });
     if (extra && (await extra(req, res, url, state))) return;
     if (url.pathname === "/redirect") {

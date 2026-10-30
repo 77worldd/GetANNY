@@ -27,18 +27,44 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
         throw new Error(
           "Enter an HTTP or HTTPS file URL. Use Media studio for a video page.",
         );
-      await api.invoke(
+      const downloadId = await api.invoke(
         kind === "torrent" ? "download:add-torrent" : "download:add",
         kind === "torrent"
           ? { torrent: url.trim(), savePath: folder }
           : {
               url: url.trim(),
               filename: filename || undefined,
+              headers: initial.headers,
+              browserTransferId: initial.browserTransferId,
+              browserSource: initial.browserSource,
               ...(folder !== settings.defaultDownloadPath
                 ? { savePath: folder }
                 : {}),
             },
       );
+      if (initial.browserRequestId) {
+        useUIStore.getState().removeRequest(initial.browserRequestId);
+        try {
+          const handoff = await api.invoke("browser:commit-request", {
+            id: initial.browserRequestId,
+            downloadId,
+          });
+          if (handoff.cancelled === false)
+            useUIStore
+              .getState()
+              .notify(
+                "GetANNY queued the file, but the browser did not confirm cancellation. Check its download list to avoid a duplicate.",
+                "error",
+              );
+        } catch (error) {
+          useUIStore
+            .getState()
+            .notify(
+              `Download queued; browser cleanup needs attention: ${errorMessage(error)}`,
+              "error",
+            );
+        }
+      }
       useUIStore
         .getState()
         .notify(
@@ -49,7 +75,7 @@ export default function AddDownloadDialog({ initial = {}, onClose }) {
       useUIStore
         .getState()
         .setActiveTab(kind === "torrent" ? "torrent" : "all");
-      onClose();
+      onClose(true);
     } catch (error) {
       setError(errorMessage(error));
     } finally {

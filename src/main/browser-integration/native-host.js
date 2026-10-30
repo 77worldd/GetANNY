@@ -19,7 +19,8 @@ function runNativeHost({
     authenticated = false,
     timer,
     launched = false,
-    hadDesktop = false;
+    hadDesktop = false,
+    reconnectAttempt = 0;
   const queue = [];
   let lastHello;
   function send(message) {
@@ -55,6 +56,7 @@ function runNativeHost({
         const message = JSON.parse(raw.toString());
         if (message.type === "authenticated") {
           authenticated = true;
+          reconnectAttempt = 0;
           if (lastHello && !queue.some((message) => message.type === "hello"))
             socket.send(JSON.stringify(lastHello));
           while (queue.length) socket.send(JSON.stringify(queue.shift()));
@@ -80,6 +82,7 @@ function runNativeHost({
             ? "Starting or reconnecting to GetANNY…"
             : "GetANNY desktop bridge is offline. Start the app.",
       });
+      const delay = Math.min(30000, 1500 * 2 ** reconnectAttempt++);
       timer = setTimeout(() => {
         if (closed) return;
         if (!launched && !hadDesktop && config.appPath) {
@@ -96,7 +99,7 @@ function runNativeHost({
           child.unref();
         }
         connect();
-      }, 1500);
+      }, delay);
     });
   }
   input.on("data", (data) => {

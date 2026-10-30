@@ -104,7 +104,7 @@ for (const connections of [1, 4]) {
     await first.pause();
     await task;
     assert.equal(first.status, "paused");
-    assert.equal(first.workers.size, 0);
+    assert.equal(first.segmentStreams.size, 0);
     const partials = (await fs.readdir(dir)).filter((name) =>
       name.includes(".part"),
     );
@@ -165,11 +165,11 @@ for (const route of ["/bad-range", "/truncated", "/missing"]) {
     });
     assert.ok(await run(engine));
     assert.equal(engine.status, "failed");
-    assert.equal(engine.workers.size, 0);
+    assert.equal(engine.segmentStreams.size, 0);
     assert.ok(!(await fs.readdir(dir)).includes("server-file.bin"));
   });
 }
-test("cancelling stops workers and removes only this transfer’s incomplete files", async (t) => {
+test("cancelling stops segment streams and removes only this transfer’s incomplete files", async (t) => {
   const server = await fixtureServer(t, { size: 8 * 1024 * 1024, delay: 10 });
   const dir = await temporary(t);
   await fs.writeFile(path.join(dir, "keep.txt"), "keep");
@@ -183,7 +183,7 @@ test("cancelling stops workers and removes only this transfer’s incomplete fil
   await engine.cancel();
   await task;
   assert.equal(engine.status, "cancelled");
-  assert.equal(engine.workers.size, 0);
+  assert.equal(engine.segmentStreams.size, 0);
   assert.deepEqual(await fs.readdir(dir), ["keep.txt"]);
 });
 test("explicit filenames are honored and pre-existing files cannot be overwritten", async (t) => {

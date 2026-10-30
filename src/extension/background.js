@@ -1,5 +1,6 @@
 /* Shared extension implementation. Browser-specific config is generated at packaging. */
-if (typeof importScripts === "function") importScripts("config.js");
+if (typeof importScripts === "function")
+  importScripts("config.js", "download-interceptor.js");
 const api = globalThis.browser || globalThis.chrome;
 const action = api.action || api.browserAction;
 const pending = new Map();
@@ -11,9 +12,12 @@ let nativePort,
   connectReject,
   connectTimeout,
   heartbeat;
+let reconnectTimer;
+let reconnectAttempts = 0;
 let state = { connected: false, transport: null, error: null };
 let browserId = globalThis.GETANNY_BROWSER || "chrome";
 let pairingKey = "";
+let interceptor;
 const validUrl = (value) => {
   try {
     return ["http:", "https:"].includes(new URL(value).protocol);
@@ -25,10 +29,23 @@ const requestId = () => crypto.randomUUID();
 function update(next) {
   state = { ...state, ...next };
 }
+function scheduleReconnect() {
+  if (reconnectTimer) return;
+  const delay = Math.min(30000, 2000 * 2 ** Math.min(reconnectAttempts, 4));
+  reconnectAttempts++;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connect().catch((error) => update({ error: error.message }));
+  }, delay);
+}
 function rejectPending(error) {
   for (const entry of pending.values()) {
     clearTimeout(entry.timer);
-    entry.reject(new Error(error));
+    const failure = new Error(
+      error?.message || error || "Desktop connection lost.",
+    );
+    failure.ambiguous = true;
+    entry.reject(failure);
   }
   pending.clear();
 }
@@ -48,8 +65,33 @@ function hello() {
   });
 }
 function deliver(message) {
+  if (message.type === "browser-download-command") {
+    interceptor
+      ?.command(message)
+      .then((result) =>
+        sendRaw({
+          type: "browser-download-result",
+          requestId: message.requestId,
+          transferId: message.transferId,
+          ...result,
+        }),
+      )
+      .catch((error) =>
+        sendRaw({
+          type: "browser-download-result",
+          requestId: message.requestId,
+          transferId: message.transferId,
+          success: false,
+          error: error.message,
+        }),
+      );
+    return;
+  }
   if (message.type === "hello-result" && message.success) {
     clearTimeout(connectTimeout);
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    reconnectAttempts = 0;
     update({ connected: true, transport: message.transport, error: null });
     connectResolve?.(state);
     connecting = null;
@@ -63,6 +105,7 @@ function deliver(message) {
         disconnected("Desktop connection lost.");
       }
     }, 25000);
+    interceptor?.reconnect().catch((error) => update({ error: error.message }));
   } else if (
     message.type === "transport-error" ||
     message.type === "authentication-error"
@@ -74,17 +117,22 @@ function deliver(message) {
   if (entry) {
     clearTimeout(entry.timer);
     pending.delete(message.requestId);
-    message.success
-      ? entry.resolve(message)
-      : entry.reject(
-          new Error(message.error || "GetANNY rejected the request."),
-        );
+    if (message.success) entry.resolve(message);
+    else {
+      const failure = new Error(
+        message.error || "GetANNY rejected the request.",
+      );
+      failure.definitive = true;
+      entry.reject(failure);
+    }
   }
 }
 function disconnected(error) {
   clearInterval(heartbeat);
   update({ connected: false, transport: null, error });
   rejectPending(error);
+  interceptor?.disconnected().catch(() => {});
+  scheduleReconnect();
 }
 function connectWebSocket() {
   if (!pairingKey) {
@@ -185,11 +233,11 @@ async function request(message) {
     const id = requestId();
     const timer = setTimeout(() => {
       pending.delete(id);
-      reject(
-        new Error(
-          "GetANNY did not acknowledge the request. Check the desktop application.",
-        ),
+      const failure = new Error(
+        "GetANNY did not acknowledge the request. Check the desktop application.",
       );
+      failure.ambiguous = true;
+      reject(failure);
     }, 15000);
     pending.set(id, { resolve, reject, timer });
     try {
@@ -226,6 +274,8 @@ api.runtime.onMessage.addListener((message, sender, respond) => {
       return { ...state, browserId };
     }
     if (message.type === "reconnect" && ui) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
       if (nativePort) {
         nativePort.disconnect();
         nativePort = null;
@@ -239,6 +289,8 @@ api.runtime.onMessage.addListener((message, sender, respond) => {
       return connect();
     }
     if (message.type === "configure" && ui) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
       if (
         ![
           "helium",
@@ -339,4 +391,10 @@ api.contextMenus.onClicked.addListener((info, tab) => {
       (error) => update({ error: error.message }),
     );
 });
+interceptor = new globalThis.GetANNYDownloadInterceptor({
+  api,
+  request,
+  onError: (error) => update({ error: error.message }),
+});
+interceptor.start();
 connect().catch((error) => update({ error: error.message }));

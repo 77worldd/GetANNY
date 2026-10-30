@@ -9,6 +9,7 @@ const version = require("../package.json").version;
 const assets = path.join(root, "release-assets");
 const files = [
   "background.js",
+  "download-interceptor.js",
   "content.js",
   "injector.js",
   "config.js",

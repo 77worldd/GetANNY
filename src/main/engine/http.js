@@ -2,6 +2,22 @@ const http = require("node:http");
 const https = require("node:https");
 const { validateUrl } = require("./utils");
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+// Bounded keep-alive agents reuse probe/transfer and sequential-download
+// connections without retaining an unbounded pool per history item.
+const AGENTS = {
+  "http:": new http.Agent({
+    keepAlive: true,
+    maxSockets: 64,
+    maxFreeSockets: 4,
+    scheduling: "lifo",
+  }),
+  "https:": new https.Agent({
+    keepAlive: true,
+    maxSockets: 64,
+    maxFreeSockets: 4,
+    scheduling: "lifo",
+  }),
+};
 
 function httpError(status, detail = "") {
   const error = new Error(`HTTP ${status}${detail ? `: ${detail}` : ""}`);
@@ -29,6 +45,10 @@ async function request(
       const req = transport.request(
         parsed,
         {
+          agent:
+            requestOptions.ca || requestOptions.cert || requestOptions.key
+              ? undefined
+              : AGENTS[parsed.protocol],
           ...requestOptions,
           method,
           signal,

@@ -3,6 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { fixtureServer, checksum, waitFor } = require("../tests/helpers");
 const { mediaFixture } = require("../tests/media-fixture");
+const themeCatalog = require("../src/shared/themes.json");
 const { launchOptions } = require("./browser-launch");
 const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
 (async () => {
@@ -140,6 +141,26 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
       path: path.join(output, "media-1320.png"),
       fullPage: true,
     });
+    await page.getByRole("tab", { name: "Description", exact: true }).click();
+    await expect(page.locator(".video-description")).toContainText(
+      "Full integration description",
+    );
+    await page.getByRole("tab", { name: /Thumbnails/ }).click();
+    const thumbnail = page.locator(".thumbnail-card").first();
+    await expect(thumbnail.locator("img")).toBeVisible();
+    await expect
+      .poll(() =>
+        thumbnail.locator("img").evaluate((image) => image.naturalWidth),
+      )
+      .toBeGreaterThan(0);
+    await thumbnail
+      .getByRole("button", { name: "Download", exact: true })
+      .click();
+    await page.getByRole("tab", { name: /Subtitles/ }).click();
+    await expect(page.locator(".subtitle-row")).toContainText("en");
+    await page.getByRole("button", { name: "SRT", exact: true }).click();
+    await page.getByRole("tab", { name: /Video & Audio/ }).click();
+    await page.getByLabel("Include subtitles as a separate download").check();
     await page
       .getByRole("button", { name: "Download video", exact: true })
       .click();
@@ -151,12 +172,50 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
         (await invoke("download:get-all")).some(
           (item) =>
             item.kind === "media" &&
+            item.media?.type !== "subtitle" &&
             item.url === media.server.url + "/watch.html" &&
             item.status === "completed",
         ),
-      25000,
+      45000,
       "real media job completion",
     );
+    await waitFor(
+      async () => {
+        const downloads = await invoke("download:get-all");
+        const captions = downloads.filter(
+          (item) => item.kind === "media" && item.media?.type === "subtitle",
+        );
+        const thumbnails = downloads.filter(
+          (item) => item.kind === "file" && item.category === "Images",
+        );
+        return (
+          captions.length >= 2 &&
+          captions.every((item) => item.status === "completed") &&
+          thumbnails.some((item) => item.status === "completed")
+        );
+      },
+      45000,
+      "independent and alongside subtitles plus thumbnail",
+    );
+    const completedMedia = await invoke("download:get-all");
+    const srt = completedMedia.find(
+      (item) =>
+        item.media?.type === "subtitle" && item.filename.endsWith(".srt"),
+    );
+    if (
+      !srt ||
+      !(await fs.readFile(srt.filePath, "utf8")).includes(
+        "GetANNY caption integration",
+      )
+    )
+      throw new Error("Independent SRT output is missing or invalid");
+    await expect(
+      page
+        .locator(
+          ".download-row.status-completed .file-icon.video.has-preview img",
+        )
+        .first(),
+    ).toBeVisible({ timeout: 20000 });
     await nav("Settings").click();
     await page
       .getByLabel("Maximum simultaneous downloads", { exact: true })
@@ -172,26 +231,29 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
     await page
       .getByRole("button", { name: "Application", exact: true })
       .click();
-    await page
-      .getByLabel("Color theme", { exact: true })
-      .selectOption("midnight");
-    await expect(page.locator("html")).toHaveAttribute(
-      "data-theme",
-      "midnight",
-    );
     await page.screenshot({
       path: path.join(output, "settings-1320.png"),
       fullPage: true,
     });
+    await nav("Themes").click();
     // Verify actual CSS tokens, not a screenshot-based accessibility claim.
     // Small muted labels must remain readable even on selected/raised surfaces.
     for (const [theme, colorScheme] of [
-      ["midnight", "dark"],
+      ...Object.values(themeCatalog).map((entry) => [entry.id, entry.mode]),
       ["system", "light"],
-      ["graphite", "dark"],
+      ["system", "dark"],
     ]) {
       await page.emulateMedia({ colorScheme });
-      await page.getByLabel("Color theme", { exact: true }).selectOption(theme);
+      await page.locator(".theme-quick-button").click();
+      await page
+        .getByRole("menuitemradio", {
+          name:
+            theme === "system"
+              ? "System"
+              : themeCatalog.find((entry) => entry.id === theme).name,
+          exact: true,
+        })
+        .click();
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       const failures = await page.evaluate(() => {
         const style = getComputedStyle(document.documentElement);
@@ -236,10 +298,33 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
         );
       if (theme === "system")
         await page.screenshot({
-          path: path.join(output, "settings-system-light-1320.png"),
+          path: path.join(output, `settings-system-${colorScheme}-1320.png`),
           fullPage: true,
         });
     }
+    await nav("Themes").click();
+    await expect(page.locator(".theme-card")).toHaveCount(
+      Object.keys(themeCatalog).length,
+    );
+    await page
+      .getByRole("button", { name: "Apply Nord theme", exact: true })
+      .click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "nord");
+    await page.locator(".theme-quick-button").click();
+    await page
+      .getByRole("menuitemradio", { name: "Ocean", exact: true })
+      .click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "ocean");
+    await page.getByRole("button", { name: "Light", exact: true }).click();
+    await expect(page.locator(".theme-card")).toHaveCount(
+      Object.values(themeCatalog).filter((entry) => entry.mode === "light")
+        .length,
+    );
+    await page.getByRole("button", { name: "All themes", exact: true }).click();
+    await page.screenshot({
+      path: path.join(output, "themes-1320.png"),
+      fullPage: true,
+    });
     await nav("All downloads").click();
     const activeName = `Live transfer verification ${Date.now()}.bin`;
     await add(fixture.url + "/file.bin", activeName);
@@ -255,6 +340,7 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
         "Media studio",
         "Browser integration",
         "Settings",
+        "Themes",
       ]) {
         await nav(name).click();
         await page.waitForTimeout(60);
@@ -313,10 +399,12 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
         "HTTP UI pause/resume and hash verification",
         "HTTP 404 failure view",
         "Actual empty-file completion shows verified zero bytes, not unknown size",
-        "Real yt-dlp format analysis and video download",
+        "Real yt-dlp metadata, thumbnails, independent SRT, alongside VTT and video downloads",
+        "Completed-video lazy preview renders from the bounded cache",
         "Validated settings affect backend and theme",
-        "Graphite/Midnight/system-light text tokens meet 4.5:1 on normal, raised and selected surfaces",
-        "Responsive pages at 1320,1024,760,480 pixels",
+        "All theme palettes and both system modes meet 4.5:1 text-token contrast on normal, raised and selected surfaces",
+        "Themes gallery filtering and top-left quick switcher persist selections",
+        "Responsive pages including Themes at 1320,1024,760,480 pixels",
         "Keyboard Escape and focusable dialogs",
         "No uncaught renderer errors",
       ],

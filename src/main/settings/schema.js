@@ -1,4 +1,5 @@
 const path = require("node:path");
+const THEMES = require("../../shared/themes.json").map((theme) => theme.id);
 const BOOLEAN_KEYS = [
   "autoStartDownloads",
   "resumeOnStartup",
@@ -76,7 +77,7 @@ function validateSetting(key, value) {
     )
       throw new Error("Select an absolute download folder path.");
   } else if (key === "theme") {
-    if (!["graphite", "midnight", "system"].includes(value))
+    if (![...THEMES, "system"].includes(value))
       throw new Error("Choose a supported theme.");
   } else if (key === "preferredBrowser") {
     if (!BROWSERS.includes(value))

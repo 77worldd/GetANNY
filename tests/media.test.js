@@ -3,7 +3,11 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
-const { normalizeFormats } = require("../src/main/media/formats");
+const {
+  normalizeFormats,
+  normalizeThumbnails,
+  normalizeSubtitles,
+} = require("../src/main/media/formats");
 const { MediaDetector } = require("../src/main/media/MediaDetector");
 const { YtDlpWrapper } = require("../src/main/media/YtDlpWrapper");
 const { MediaEngine } = require("../src/main/media/MediaEngine");
@@ -93,12 +97,78 @@ test("direct generic media with unreported codecs remains downloadable without c
   assert.equal(format.mergeAudio, false);
   assert.equal(format.hasAudio, false);
 });
+test("thumbnail and subtitle catalogs retain legitimate metadata and reject unsafe URLs", () => {
+  const thumbnails = normalizeThumbnails({
+    thumbnail: "https://img.example.test/maxres.jpg",
+    thumbnails: [
+      { url: "javascript:alert(1)", width: 9999 },
+      {
+        url: "https://img.example.test/small.webp",
+        width: 320,
+        height: 180,
+        ext: "webp",
+      },
+      { url: "https://img.example.test/maxres.jpg", width: 1280, height: 720 },
+    ],
+  });
+  assert.equal(thumbnails.length, 2);
+  assert.equal(thumbnails[0].width, 1280);
+  assert.equal(thumbnails[1].ext, "webp");
+  const subtitles = normalizeSubtitles({
+    subtitles: {
+      en: [
+        {
+          ext: "vtt",
+          url: "https://media.example.test/en.vtt",
+          name: "English",
+        },
+        { ext: "srt", url: "file:///etc/passwd" },
+      ],
+    },
+    automatic_captions: {
+      fr: [
+        {
+          ext: "json3",
+          url: "https://media.example.test/fr.json3",
+          name: "French auto",
+        },
+      ],
+    },
+  });
+  assert.deepEqual(
+    subtitles.map((track) => [track.id, track.formats]),
+    [
+      ["manual:en", ["vtt"]],
+      ["automatic:fr", ["json3"]],
+    ],
+  );
+  assert.equal(subtitles[1].automatic, true);
+});
 test("media selections are validated against a recent analysis, not arbitrary renderer commands", async () => {
   const detector = new MediaDetector({
     wrapper: {
       getFormats: async () => ({
         title: "test",
+        description: "Full description",
+        tags: ["audio", "test"],
         formats: [{ formatId: "140", group: "audio", ext: "m4a" }],
+        thumbnails: [
+          {
+            id: "thumbnail-0",
+            url: "https://img.example.test/a.jpg",
+            label: "1280 × 720",
+            ext: "jpg",
+            httpHeaders: { Referer: "https://example.test/" },
+          },
+        ],
+        subtitles: [
+          {
+            id: "manual:en",
+            language: "en",
+            automatic: false,
+            formats: ["vtt"],
+          },
+        ],
       }),
       availability: async () => ({ ytdlp: true, ffmpeg: true }),
     },
@@ -108,6 +178,33 @@ test("media selections are validated against a recent analysis, not arbitrary re
     detector.selection({ analysisId: result.analysisId, formatId: "140" }).media
       .audioOnly,
     true,
+  );
+  assert.equal(result.description, "Full description");
+  assert.deepEqual(result.tags, ["audio", "test"]);
+  const subtitle = detector.subtitleSelection({
+    analysisId: result.analysisId,
+    languageId: "manual:en",
+    format: "srt",
+  });
+  assert.deepEqual(subtitle.media.subtitle, {
+    language: "en",
+    automatic: false,
+    format: "srt",
+    sourceFormats: ["vtt"],
+  });
+  const thumbnail = detector.thumbnailSelection({
+    analysisId: result.analysisId,
+    thumbnailId: "thumbnail-0",
+  });
+  assert.equal(thumbnail.filename, "test [1280 × 720].jpg");
+  assert.equal(thumbnail.headers.Referer, "https://example.test/");
+  assert.throws(
+    () =>
+      detector.thumbnailSelection({
+        analysisId: result.analysisId,
+        thumbnailId: "missing",
+      }),
+    /available/,
   );
   assert.throws(
     () =>
@@ -208,6 +305,53 @@ for (const page of ["watch.html", "listen.html", "adaptive.mpd"]) {
   );
 }
 
+test(
+  "REAL metadata and independent subtitles: description, thumbnail and VTT → SRT output",
+  { timeout: 45000 },
+  async (t) => {
+    const fixture = await mediaFixture(t);
+    if (!fixture) return;
+    const { wrapper, server, dir } = fixture;
+    const info = await wrapper.getFormats(`${server.url}/watch.html`);
+    assert.match(info.description, /Full integration description/);
+    assert.ok(
+      info.thumbnails.some((image) => image.url.endsWith("/poster.jpg")),
+    );
+    const subtitle = info.subtitles.find(
+      (track) => track.language === "en" && !track.automatic,
+    );
+    assert.ok(subtitle, JSON.stringify(info.subtitles));
+    let completed;
+    const engine = new MediaEngine(
+      {
+        id: "real-subtitle",
+        url: `${server.url}/watch.html`,
+        savePath: path.join(dir, "captions"),
+        media: {
+          type: "subtitle",
+          title: "Caption integration",
+          subtitle: {
+            language: "en",
+            automatic: false,
+            format: "srt",
+            sourceFormats: subtitle.formats,
+          },
+        },
+        timeout: 30000,
+      },
+      wrapper,
+    );
+    engine.on("complete", (_id, value) => (completed = value));
+    engine.on("error", () => {});
+    await engine.start();
+    assert.equal(engine.status, "completed");
+    assert.ok(completed?.filePath.endsWith(".srt"));
+    const content = await fs.readFile(completed.filePath, "utf8");
+    assert.match(content, /GetANNY caption integration/);
+    assert.match(content, /00:00:00,000 --> 00:00:01,500/);
+    assert.ok(completed.totalSize > 0);
+  },
+);
 test("adaptive progress never reports the first stream as the entire download", async (t) => {
   const dir = await temporary(t);
   const output = path.join(dir, "Adaptive [progress].mp4");
