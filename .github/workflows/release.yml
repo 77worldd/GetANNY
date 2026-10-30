@@ -186,7 +186,6 @@ jobs:
           $tag = "v$version"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) { throw "Release $tag already exists. Never silently replace an existing release." }
-          $assets = Get-ChildItem release-assets -File | ForEach-Object { $_.FullName }
           $notesFile = Join-Path $env:RUNNER_TEMP 'GetANNY-release-notes.md'
           @(
             (Get-Content docs/RELEASE_NOTES.md -Raw),
@@ -202,5 +201,22 @@ jobs:
             (Get-Content release-assets/SHA256SUMS.txt -Raw),
             '```'
           ) -join "`n" | Set-Content $notesFile
-          gh release create $tag @assets --target '${{ github.sha }}' --prerelease --title "GetANNY $version · Windows release candidate" --notes-file $notesFile
-          if ($LASTEXITCODE -ne 0) { throw 'GitHub release publication failed.' }
+          # Never expose a partially uploaded release if GitHub or the network
+          # fails mid-transfer. Leave a draft for investigation instead.
+          gh release create $tag --draft --target '${{ github.sha }}' --prerelease --title "GetANNY $version · Windows release candidate" --notes-file $notesFile
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub draft creation failed.' }
+          $labeledAssets = Get-ChildItem release-assets -File | ForEach-Object { "$($_.FullName)#$($_.Name)" }
+          gh release upload $tag @labeledAssets
+          if ($LASTEXITCODE -ne 0) { throw 'Asset upload failed; release remains a draft.' }
+          $releaseFile = Join-Path $env:RUNNER_TEMP 'GetANNY-draft.json'
+          $releaseJson = gh api "repos/${{ github.repository }}/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect draft; release remains a draft.' }
+          $matching = @($releaseJson | ConvertFrom-Json | Where-Object { $_.tag_name -ceq $tag })
+          if ($matching.Count -ne 1) { throw 'Expected exactly one matching draft release.' }
+          $matching[0] | ConvertTo-Json -Depth 30 | Set-Content $releaseFile
+          node scripts/verify-release-assets.js $releaseFile release-assets $tag '${{ github.sha }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Asset verification failed; release remains a draft.' }
+          gh release edit $tag --draft=false
+          if ($LASTEXITCODE -ne 0) { throw 'Draft promotion failed; inspect the release state.' }
+          $ref = gh api "repos/${{ github.repository }}/git/ref/tags/$tag" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $ref.object.sha -ne '${{ github.sha }}') { throw 'Published tag verification failed.' }
