@@ -109,7 +109,8 @@ $defaultData = Join-Path $env:APPDATA 'getanny'
 $exeDir = Join-Path $installRoot 'exe-app'
 $exeData = Join-Path $installRoot 'exe-data'
 Write-Host 'Checking the unpacked browser-setup helper before NSIS installation...'
-Run-Checked (Join-Path $root 'dist\win-unpacked\GetANNY.exe') @('--setup-browser-hosts','--quiet') 90000
+$setupReport = Join-Path $results 'setup-helper.json'
+Run-Checked (Join-Path $root 'dist\win-unpacked\GetANNY.exe') @('--setup-browser-hosts','--quiet','--report',"`"$setupReport`"") 90000
 Write-Host 'Installing the actual NSIS EXE package...'
 Run-Checked $exePackage @('/S','/currentuser',"/D=$exeDir")
 $installedExe = Join-Path $exeDir 'GetANNY.exe'

@@ -266,8 +266,10 @@ async function createServices({
     );
     return { websocket, browsers };
   }
-  async function prepareBrowser(id) {
+  async function prepareBrowser(id, onProgress = async () => {}) {
+    await onProgress("extension-prepare", { browserId: id });
     const extension = await extensionInstaller.install(id);
+    await onProgress("native-register", { browserId: id });
     const host = await nativeMessagingHost.register(id);
     return {
       ...extension,
@@ -277,19 +279,32 @@ async function createServices({
       instructions: extension.instructions,
     };
   }
-  async function setupInstalledBrowsers() {
+  async function setupInstalledBrowsers(onProgress = async () => {}) {
     const result = [];
-    for (const browser of await browserDetector.detect()) {
+    await onProgress("browser-detect");
+    const detected = await browserDetector.detect();
+    await onProgress("browser-detected", {
+      installed: detected
+        .filter((browser) => browser.installed)
+        .map((browser) => browser.id),
+    });
+    for (const browser of detected) {
       if (!browser.installed) continue;
       try {
         result.push({
           browserId: browser.id,
-          ...(await prepareBrowser(browser.id)),
+          ...(await prepareBrowser(browser.id, onProgress)),
         });
+        await onProgress("browser-prepared", { browserId: browser.id });
       } catch (error) {
         result.push({ browserId: browser.id, error: error.message });
+        await onProgress("browser-error", {
+          browserId: browser.id,
+          error: error.message,
+        });
       }
     }
+    await onProgress("write-setup-report");
     await fs.writeFile(
       path.join(userDataPath, "browser-setup-report.json"),
       JSON.stringify(result, null, 2),

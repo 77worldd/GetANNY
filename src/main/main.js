@@ -121,7 +121,30 @@ async function createWindow() {
     win.minimize();
   }
 }
+async function recordOperationStage(stage, detail = {}) {
+  if (!setupOnly && !unregisterOnly) return;
+  const index = process.argv.indexOf("--report");
+  const report = index >= 0 ? process.argv[index + 1] : null;
+  if (!report) return;
+  const file = path.resolve(report);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(
+    file,
+    JSON.stringify(
+      {
+        passed: stage === "complete",
+        operation: setupOnly ? "setup" : "unregister",
+        stage,
+        date: new Date().toISOString(),
+        ...detail,
+      },
+      null,
+      2,
+    ),
+  );
+}
 async function init() {
+  await recordOperationStage("init");
   const userDataPath = app.getPath("userData");
   const binPath = app.isPackaged
     ? path.join(process.resourcesPath, "bin")
@@ -152,8 +175,10 @@ async function init() {
     },
     onBrowserRequest: () => showWindow(),
   });
+  await recordOperationStage("services-created");
   if (unregisterOnly) {
     const result = await services.nativeMessagingHost.unregisterAll();
+    await recordOperationStage("hosts-unregistered");
     await fs.rm(path.join(userDataPath, "extensions"), {
       recursive: true,
       force: true,
@@ -163,6 +188,7 @@ async function init() {
     if (["win32", "darwin"].includes(process.platform))
       app.setLoginItemSettings({ openAtLogin: false });
     await services.close();
+    await recordOperationStage("services-closed");
     await fs.writeFile(
       path.join(userDataPath, "browser-uninstall-report.json"),
       JSON.stringify(
@@ -177,12 +203,20 @@ async function init() {
         2,
       ),
     );
+    await recordOperationStage("complete", { succeeded: result.removed });
     app.exit(result.removed ? 0 : 1);
     return;
   }
   if (setupOnly) {
-    const result = await services.setupInstalledBrowsers();
+    const result = await services.setupInstalledBrowsers(recordOperationStage);
+    await recordOperationStage("browsers-prepared", {
+      browsers: result.length,
+    });
     await services.close();
+    await recordOperationStage("services-closed");
+    await recordOperationStage("complete", {
+      succeeded: !result.some((value) => value.error),
+    });
     app.exit(result.some((value) => value.error) ? 1 : 0);
     return;
   }
@@ -277,6 +311,9 @@ else {
     .then(init)
     .catch(async (error) => {
       log.error(error);
+      await recordOperationStage("error", { error: error.message }).catch(
+        () => {},
+      );
       if (unregisterOnly)
         await fs
           .writeFile(
