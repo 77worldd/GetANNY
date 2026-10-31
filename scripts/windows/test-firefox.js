@@ -77,7 +77,6 @@ const exec = promisify(execFile);
       );
     for (const [key, value] of Object.entries({
       firstRunCompleted: true,
-      confirmBrowserDownloads: false,
       defaultDownloadPath: path.join(work, "downloads"),
     }))
       await invoke("settings:set", { key, value });

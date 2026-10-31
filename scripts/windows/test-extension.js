@@ -117,10 +117,6 @@ const exec = promisify(execFile);
       );
     await invoke("settings:set", { key: "firstRunCompleted", value: true });
     await invoke("settings:set", {
-      key: "confirmBrowserDownloads",
-      value: false,
-    });
-    await invoke("settings:set", {
       key: "defaultDownloadPath",
       value: path.join(work, "browser-downloads"),
     });
