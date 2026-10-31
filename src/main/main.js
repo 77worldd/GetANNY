@@ -16,6 +16,12 @@ const { shouldRevealOnActivation } = require("./tray-window");
 const { createMenu } = require("./menu");
 const { Logger } = require("./utils/logger");
 const { validateUrl } = require("./engine/utils");
+const {
+  clearDesktopExitMarker,
+  desktopExitMarkerPath,
+  isDesktopExitMarked,
+  markDesktopExited,
+} = require("./browser-integration/DesktopExitMarker");
 const log = new Logger("Main");
 let win,
   services,
@@ -319,7 +325,18 @@ else {
   app.on("second-instance", showWindow);
   app
     .whenReady()
-    .then(init)
+    .then(async () => {
+      const markerPath = desktopExitMarkerPath(app.getPath("userData"));
+      const fromBrowser = process.argv.includes("--from-browser");
+      if (fromBrowser && isDesktopExitMarked(markerPath)) {
+        log.info("Browser launch ignored because GetANNY was explicitly closed.");
+        app.exit(0);
+        return;
+      }
+      if (!fromBrowser && !setupOnly && !unregisterOnly && !selfTest)
+        clearDesktopExitMarker(markerPath);
+      await init();
+    })
     .catch(async (error) => {
       log.error(error);
       await recordOperationStage("error", { error: error.message }).catch(
@@ -350,13 +367,15 @@ else {
     event.preventDefault();
     if (services.closing) return;
     services.closing = true;
+    if (!selfTest && !setupOnly && !unregisterOnly)
+      markDesktopExited(desktopExitMarkerPath(app.getPath("userData")));
     services
       .close()
       .catch((error) => log.error("Shutdown:", error))
       .finally(() => {
         shutdownFinished = true;
         tray?.destroy();
-        app.quit();
+        app.exit(0);
       });
   });
   app.on("window-all-closed", () => {

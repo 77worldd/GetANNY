@@ -93,6 +93,7 @@ class NativeMessagingHost {
           executable: this.appPath,
           script: this.sourceHost,
           appPath: this.isPackaged ? this.appPath : null,
+          desktopExitMarker: path.join(this.base, "desktop-exit.json"),
         },
         null,
         2,

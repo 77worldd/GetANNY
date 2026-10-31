@@ -7,6 +7,7 @@
 - Added the completed-download count to the persistent live status bar and removed duplicated transfer totals from each download view.
 - Refined browser connection status, compacted settings controls, and rebuilt theme previews to show an application frame, list and status strip.
 - Fixed tray interaction so a visible window hides on tray click, a hidden or minimized window restores on click or explicit Show, and OS activation does not undo close-to-tray.
+- Quit now shuts down the desktop services and prevents a browser native-host reconnect from relaunching GetANNY; opening the app manually clears that stop state.
 - Kept download, browser, settings and theme actions wired to their existing services and state.
 
 ## 2.1.2 — Setup, subtitles and interface polish

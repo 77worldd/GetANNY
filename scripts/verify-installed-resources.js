@@ -11,6 +11,7 @@ module.exports = async (context) => {
     "bin/FFmpeg-LICENSE.txt",
     "bin/FFmpeg-SOURCE.txt",
     "native-host/native-host.js",
+    "native-host/DesktopExitMarker.js",
     "native-host/node_modules/ws/index.js",
     "native-host/node_modules/ws/lib/websocket.js",
     "extension/chromium/manifest.json",

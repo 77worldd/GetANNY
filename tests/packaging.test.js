@@ -21,6 +21,7 @@ test("Windows packaging rejects existing but checksum-invalid tools", async (t) 
   const root = await temporary(t);
   for (const file of [
     "src/main/browser-integration/native-host.js",
+    "src/main/browser-integration/DesktopExitMarker.js",
     "src/shared/themes.json",
     "node_modules/ws/index.js",
     "node_modules/ws/package.json",
@@ -134,6 +135,7 @@ test("afterPack verifies the real SQLite N-API layout and torrent binary; missin
     "bin/FFmpeg-LICENSE.txt",
     "bin/FFmpeg-SOURCE.txt",
     "native-host/native-host.js",
+    "native-host/DesktopExitMarker.js",
     "native-host/node_modules/ws/index.js",
     "native-host/node_modules/ws/lib/websocket.js",
     "extension/chromium/manifest.json",

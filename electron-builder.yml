@@ -18,6 +18,8 @@ extraResources:
   # Native CLI entrypoint must be a real file, not an ASAR virtual path.
   - from: src/main/browser-integration/native-host.js
     to: native-host/native-host.js
+  - from: src/main/browser-integration/DesktopExitMarker.js
+    to: native-host/DesktopExitMarker.js
   - from: node_modules/ws/
     to: native-host/node_modules/ws/
     filter: ["package.json", "index.js", "lib/**/*.js"]

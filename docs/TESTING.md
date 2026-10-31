@@ -1,6 +1,6 @@
 # 2.1.3 verification status
 
-Local verification on 31 October 2026: **102/102 backend tests passed**, including real yt-dlp/FFmpeg media and transfer lifecycle tests. The live Chromium preview passed **13 UI checks**, produced 22 screenshots at 1320/1024/760/480 px, and reported no uncaught renderer errors. The renderer and all eight browser extension packages build successfully. These local results do not certify installed Windows packages or every supported browser.
+Local verification on 31 October 2026: **103/103 backend tests passed**, including real yt-dlp/FFmpeg media, transfer lifecycle tests and the persisted tray-quit/native-host reconnect regression. The live Chromium preview passed **13 UI checks**, produced 22 screenshots at 1320/1024/760/480 px, and reported no uncaught renderer errors. The renderer and all eight browser extension packages build successfully. These local results do not certify installed Windows packages or every supported browser.
 
 `npm audit --audit-level=high` exits successfully; the current dependency tree reports **15 moderate advisories** in transitive electron-builder tooling and no high or critical advisories. The official Windows release remains conditional on the exact source commit passing the Windows installation, native host, browser, uninstall, checksum and packaging gates below. The release's generated `MEASURED_RESULTS.md` is the authority for that Windows outcome.
 

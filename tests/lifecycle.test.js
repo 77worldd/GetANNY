@@ -10,6 +10,9 @@ const {
   WebSocketServer,
 } = require("../src/main/browser-integration/WebSocketServer");
 const { CHROMIUM_ID } = require("../src/main/browser-integration/catalog");
+const {
+  isDesktopExitMarked,
+} = require("../src/main/browser-integration/DesktopExitMarker");
 const { temporary, waitFor } = require("./helpers");
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -32,6 +35,12 @@ test(
     const {
       runNativeHost,
     } = require("../src/main/browser-integration/native-host");
+    const userDataPath = await temporary(t);
+    const desktopExitMarker = path.join(
+      userDataPath,
+      "native-messaging",
+      "desktop-exit.json",
+    );
     const bridge = new WebSocketServer({ port: 0, token: "c".repeat(64) });
     await new Promise((resolve, reject) => {
       bridge.server.once("listening", resolve);
@@ -57,6 +66,7 @@ test(
           port,
           token: "c".repeat(64),
           appPath: "unit-test-application-only",
+          desktopExitMarker,
         },
         input,
         output,
@@ -86,6 +96,7 @@ test(
     await waitFor(() =>
       connected.messages.some((message) => message.type === "transport-error"),
     );
+    await waitFor(() => isDesktopExitMarked(desktopExitMarker));
     await delay(1700);
     assert.equal(
       launched.mock.calls.length,
@@ -93,6 +104,21 @@ test(
       "an explicitly closed desktop must not be auto-relaunched",
     );
     connected.host.close();
+
+    const replacementHost = makeHost();
+    await waitFor(() =>
+      replacementHost.messages.some(
+        (message) => message.type === "transport-error",
+      ),
+    );
+    await delay(1700);
+    assert.equal(
+      launched.mock.calls.length,
+      0,
+      "a newly connected browser host must respect the persisted desktop quit",
+    );
+    replacementHost.host.close();
+    await fs.rm(desktopExitMarker, { force: true });
 
     const cold = makeHost();
     await waitFor(() => launched.mock.calls.length === 1, 4000, "cold launch");

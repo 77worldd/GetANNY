@@ -1,6 +1,11 @@
 const fs = require("node:fs");
 const { spawn } = require("node:child_process");
 const { WebSocket } = require("ws");
+const {
+  clearDesktopExitMarker,
+  isDesktopExitMarked,
+  markDesktopExited,
+} = require("./DesktopExitMarker");
 
 function runNativeHost({
   config,
@@ -42,6 +47,7 @@ function runNativeHost({
     authenticated = false;
     socket = new WebSocket(`ws://127.0.0.1:${config.port || 29615}`);
     socket.on("open", () => {
+      clearDesktopExitMarker(config.desktopExitMarker);
       hadDesktop = true;
       socket.send(
         JSON.stringify({
@@ -73,6 +79,7 @@ function runNativeHost({
     socket.on("close", () => {
       authenticated = false;
       if (closed) return;
+      if (hadDesktop) markDesktopExited(config.desktopExitMarker);
       send({
         type: "transport-error",
         success: false,
@@ -85,7 +92,12 @@ function runNativeHost({
       const delay = Math.min(30000, 1500 * 2 ** reconnectAttempt++);
       timer = setTimeout(() => {
         if (closed) return;
-        if (!launched && !hadDesktop && config.appPath) {
+        if (
+          !launched &&
+          !hadDesktop &&
+          config.appPath &&
+          !isDesktopExitMarked(config.desktopExitMarker)
+        ) {
           launched = true;
           const env = { ...process.env };
           delete env.ELECTRON_RUN_AS_NODE;

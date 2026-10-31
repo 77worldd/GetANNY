@@ -5,6 +5,7 @@ module.exports = async (context) => {
   const platform = context.electronPlatformName;
   const required = [
     "src/main/browser-integration/native-host.js",
+    "src/main/browser-integration/DesktopExitMarker.js",
     "src/shared/themes.json",
     "node_modules/ws/index.js",
     "node_modules/ws/package.json",

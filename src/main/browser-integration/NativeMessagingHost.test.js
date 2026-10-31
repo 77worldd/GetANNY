@@ -19,6 +19,13 @@ test("native host uses a real executable launcher and standard manifest fields, 
   });
   const result = await host.register("chrome");
   const manifest = JSON.parse(await fs.readFile(result.path, "utf8"));
+  const bridgeConfig = JSON.parse(
+    await fs.readFile(path.join(host.base, "bridge-config.json"), "utf8"),
+  );
+  assert.equal(
+    bridgeConfig.desktopExitMarker,
+    path.join(host.base, "desktop-exit.json"),
+  );
   assert.ok(manifest.path.endsWith("getanny-native-host"));
   assert.equal(manifest.args, undefined);
   assert.deepEqual(manifest.allowed_origins, [

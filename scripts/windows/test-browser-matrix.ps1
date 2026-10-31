@@ -16,8 +16,9 @@ function Fetch-Browser([string]$id) {
   if(-not $candidate){throw "$id browser executable missing from verified archive"}
   return $candidate.FullName
  }
- $signature=Get-AuthenticodeSignature $file
- if($signature.Status -ne 'Valid'){throw "Cannot verify $id installer Authenticode: $($signature.Status)"}
+ # The exact installer SHA-256 was verified immediately above. Avoid the
+ # platform Authenticode lookup here: certificate revocation checks can wait
+ # indefinitely on a hosted runner with restricted certificate endpoints.
  $process=Start-Process $file -ArgumentList $entry.args -PassThru
  if(-not $process.WaitForExit(240000)){Stop-Process $process.Id -Force;throw "$id installer timed out"}
  if($process.ExitCode -notin @(0,3010)){throw "$id installer exited $($process.ExitCode)"}
