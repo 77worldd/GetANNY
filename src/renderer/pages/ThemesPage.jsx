@@ -28,15 +28,31 @@ function Preview({ theme }) {
           <span style={{ background: c["--text"] }} />
           <i style={{ background: c["--accent"] }} />
         </div>
+        <div className="theme-preview-toolbar">
+          <i style={{ background: c["--raised"] }} />
+          <i style={{ background: c["--raised"] }} />
+          <i style={{ background: c["--raised"] }} />
+        </div>
         <div
           className="theme-preview-panel"
           style={{ background: c["--panel"], borderColor: c["--line"] }}
         >
-          <span style={{ background: c["--raised"] }} />
-          <span style={{ background: c["--raised"] }} />
-          <div style={{ background: c["--accent-soft"] }}>
-            <i style={{ background: c["--accent"] }} />
-          </div>
+          {[0, 1, 2].map((row) => (
+            <div className="theme-preview-row" key={row}>
+              <i style={{ background: row === 0 ? c["--accent"] : c["--muted"] }} />
+              <span style={{ background: c["--text"] }} />
+              <b style={{ background: c["--raised"] }} />
+            </div>
+          ))}
+        </div>
+        <div
+          className="theme-preview-status"
+          style={{ background: c["--sidebar"], borderColor: c["--line"] }}
+        >
+          <i style={{ background: c["--accent"] }} />
+          <span style={{ background: c["--muted"] }} />
+          <span style={{ background: c["--muted"] }} />
+          <div style={{ background: c["--muted"] }} />
         </div>
       </div>
     </div>
@@ -72,7 +88,6 @@ export default function ThemesPage() {
       <PageHeader
         eyebrow={t("themes.eyebrow")}
         title={t("themes.title")}
-        description={t("themes.description")}
       >
         <span className="theme-count">
           <LuPalette /> {t("themes.count", { count: themes.length })}
@@ -134,7 +149,7 @@ export default function ThemesPage() {
             onClick={() => choose(theme.id)}
             disabled={!!saving}
             aria-pressed={selected === theme.id}
-            aria-label={`${saving === theme.id ? t("common.applying") : t("common.apply")} ${theme.name}`}
+            aria-label={`${saving === theme.id ? t("common.applying") : t("common.apply")} ${theme.name} theme`}
           >
             <Preview theme={theme} />
             <span className="theme-card-info">
@@ -145,7 +160,6 @@ export default function ThemesPage() {
                   {theme.mode}
                 </small>
               </span>
-              <span className="theme-description">{theme.description}</span>
               <span className="theme-card-footer">
                 <span className="theme-swatches" aria-hidden>
                   {[

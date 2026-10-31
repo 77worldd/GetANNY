@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.3 — Workspace and tray refinement
+
+- Consolidated download search, type filters, pause, sort and history actions into one compact toolbar. The sidebar now holds the single primary New download action.
+- Removed redundant Back controls and marketing subtitles from primary pages; displayed the New download shortcut now matches the host operating system.
+- Added the completed-download count to the persistent live status bar and removed duplicated transfer totals from each download view.
+- Refined browser connection status, compacted settings controls, and rebuilt theme previews to show an application frame, list and status strip.
+- Fixed tray interaction so a visible window hides on tray click, a hidden or minimized window restores on click or explicit Show, and OS activation does not undo close-to-tray.
+- Kept download, browser, settings and theme actions wired to their existing services and state.
+
 ## 2.1.2 — Setup, subtitles and interface polish
 
 - The first-run browser setup is now remembered: a verified extension handshake marks setup complete and later launches open the download library directly. The setup screen only appears again when opened from the sidebar.

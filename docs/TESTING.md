@@ -1,12 +1,16 @@
-# rc.3 verification status
+# 2.1.3 verification status
 
-The rc.3 source adds scheduling, service-worker handoff recovery, a portable target and a distribution bundle. Until the Windows CI run for the exact rc.3 commit passes, none of those packaged artifacts or Windows/browser lifecycle gates is certified. The portable target requires its own packaged self-test and is limited to paired WebSocket browser integration while running. The historical results below refer to earlier source revisions.
+Local verification on 31 October 2026: **102/102 backend tests passed**, including real yt-dlp/FFmpeg media and transfer lifecycle tests. The live Chromium preview passed **13 UI checks**, produced 22 screenshots at 1320/1024/760/480 px, and reported no uncaught renderer errors. The renderer and all eight browser extension packages build successfully. These local results do not certify installed Windows packages or every supported browser.
 
-# Test evidence and release gates
+`npm audit --audit-level=high` exits successfully; the current dependency tree reports **15 moderate advisories** in transitive electron-builder tooling and no high or critical advisories. The official Windows release remains conditional on the exact source commit passing the Windows installation, native host, browser, uninstall, checksum and packaging gates below. The release's generated `MEASURED_RESULTS.md` is the authority for that Windows outcome.
+
+Historical rc.3 note: that snapshot is superseded by the 2.1.3 verification above.
+
+# Historical test evidence and release gates
 
 This file distinguishes executed tests from intended CI gates and manual work. No simulated transfer results are used as download evidence.
 
-## Current 2.0.0-rc.2 evidence
+## Historical 2.0.0-rc.2 evidence
 
 - Upgrade baseline: `98c4ae7891d20a05dd46e72fcc37c89d72eeb273`. Initial validated upgrade source: `c160fe87df658c4f74cddcf010cc78c82430d80b`.
 - Latest full Linux source suite at that source: **79/79 passed, 0 failed, 0 skipped, 50.23 seconds**. This includes real yt-dlp extraction, direct media, adaptive DASH merging, managed media restart/resume, independent VTT→SRT conversion and real FFmpeg preview extraction. The local development tools came from PyPI/npm registries because GitHub release storage is blocked here; Windows packaging still requires the separately pinned SHA-256-verified tools.

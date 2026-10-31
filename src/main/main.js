@@ -12,6 +12,7 @@ const path = require("node:path");
 const fs = require("node:fs/promises");
 const { setupIpcHandlers } = require("./ipc-handlers");
 const { createTray } = require("./tray");
+const { shouldRevealOnActivation } = require("./tray-window");
 const { createMenu } = require("./menu");
 const { Logger } = require("./utils/logger");
 const { validateUrl } = require("./engine/utils");
@@ -20,6 +21,7 @@ let win,
   services,
   tray,
   exiting = false,
+  hiddenToTray = false,
   shutdownFinished = false;
 if (process.platform === "win32") app.setAppUserModelId("com.getanny.app");
 const selfTest = process.argv.includes("--self-test");
@@ -34,6 +36,7 @@ function send(channel, data) {
 }
 function showWindow() {
   if (win) {
+    hiddenToTray = false;
     if (win.isMinimized()) win.restore();
     win.show();
     win.focus();
@@ -94,9 +97,16 @@ async function createWindow() {
   });
   win.on("maximize", () => send("window:state", { maximized: true }));
   win.on("unmaximize", () => send("window:state", { maximized: false }));
+  win.on("hide", () => {
+    hiddenToTray = true;
+  });
+  win.on("show", () => {
+    hiddenToTray = false;
+  });
   win.on("close", (event) => {
     if (!exiting && services.settings.get("closeToTray") && tray && !selfTest) {
       event.preventDefault();
+      hiddenToTray = true;
       win.hide();
     }
   });
@@ -353,6 +363,7 @@ else {
     if (process.platform !== "darwin") app.quit();
   });
   app.on("activate", () => {
+    if (!shouldRevealOnActivation(hiddenToTray)) return;
     if (win) showWindow();
     else if (services) createWindow().catch((error) => log.error(error));
   });

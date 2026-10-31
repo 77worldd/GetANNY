@@ -9,15 +9,15 @@
 
 **Reliable downloads. Clear control.** A Windows-first Electron download manager with a React workspace, persistent SQLite history, verified HTTP range transfers, yt-dlp media downloads, and authenticated browser integration.
 
-> **Current source: 2.1.2.** This release introduces the official GetANNY identity: the supplied eagle/shield mark and wordmark are used unchanged across the application, Windows icons, installers and browser extensions, and the entire palette has been rebuilt around that monochrome artwork. A Windows build is not a certified release until its installer, portable and browser gates have passed; see [testing evidence and remaining gates](docs/TESTING.md).
+> **Current source: 2.1.3.** This release refines the desktop workspace, adds live completion telemetry, improves theme previews, and fixes close-to-tray behavior. The official artwork remains consistent across the application and Windows packages. See [testing evidence and remaining gates](docs/TESTING.md).
 
 ## Get the Windows app
 
-### Official GetANNY 2.1.2 release
+### Official GetANNY 2.1.3 release
 
-The [**GetANNY 2.1.1 GitHub Release**](https://github.com/p4yy/GetANNY/releases/tag/v2.1.1) contains the real Windows installers, the portable build, eight browser packages, the complete distribution bundle, guides, source provenance and SHA-256 checksums.
+The [**GetANNY 2.1.3 GitHub Release**](https://github.com/p4yy/GetANNY/releases/tag/v2.1.3) contains the Windows installers, portable build, eight browser packages, complete distribution bundle, guides, build evidence and SHA-256 checksums.
 
-**Direct downloads:** [GetANNY Setup.exe](https://github.com/p4yy/GetANNY/releases/download/v2.1.1/GetANNY-2.1.1-Setup.exe) · [GetANNY Setup.msi](https://github.com/p4yy/GetANNY/releases/download/v2.1.1/GetANNY-2.1.1-Setup.msi) · [GetANNY Portable.exe](https://github.com/p4yy/GetANNY/releases/download/v2.1.1/GetANNY-2.1.1-Portable.exe) · [Windows bundle ZIP](https://github.com/p4yy/GetANNY/releases/download/v2.1.1/GetANNY-2.1.1-Windows-Bundle.zip) · [SHA256SUMS.txt](https://github.com/p4yy/GetANNY/releases/download/v2.1.1/SHA256SUMS.txt).
+**Direct downloads:** [GetANNY Setup.exe](https://github.com/p4yy/GetANNY/releases/download/v2.1.3/GetANNY%20Setup.exe) · [GetANNY Setup.msi](https://github.com/p4yy/GetANNY/releases/download/v2.1.3/GetANNY%20Setup.msi) · [GetANNY Portable.exe](https://github.com/p4yy/GetANNY/releases/download/v2.1.3/GetANNY%20Portable.exe) · [Windows bundle ZIP](https://github.com/p4yy/GetANNY/releases/download/v2.1.3/GetANNY-v2.1.3-Windows.zip) · [SHA256SUMS.txt](https://github.com/p4yy/GetANNY/releases/download/v2.1.3/SHA256SUMS.txt).
 
 Use **one installer format**, not both simultaneously. Windows 10/11 x64 is required.
 

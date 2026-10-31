@@ -1,47 +1,26 @@
-# GetANNY 2.1.1 — Workflow, interception and localization release
+# GetANNY 2.1.3 — Workspace and tray refinement
 
-This release completes the download-manager workflows that were still rough around the edges, and adds a real multilingual interface.
+GetANNY 2.1.3 tightens the desktop download workspace and corrects tray window behavior while preserving the existing download and browser workflows.
 
-## Browser interception now takes over
+## Downloads workspace
 
-File downloads started in a supported browser are paused, handed to the desktop engine, queued and started automatically. The paused browser copy is erased only after GetANNY confirms it owns the transfer, so the browser does not keep downloading in parallel and you no longer need to find the download in GetANNY and press Start. Disconnects and service-worker restarts reconcile through persisted transfer IDs, and duplicates are rejected.
+- One primary **New download** action stays at the top of the sidebar. Search, file-type filters, Pause all, sort and Clear history share a compact toolbar above the list.
+- The footer reports active or ready status, queued jobs, live transfer speed, completed downloads and the installed app version.
+- Redundant transfer totals and primary-view Back controls have been removed. The displayed shortcut matches the host OS, and the existing CmdOrCtrl+N binding is unchanged.
 
-Media pages still open in Media studio because a format must be chosen. That is a deliberate choice, not an interception failure.
+## Browser integration and themes
 
-## Cleaner downloads
+- Browser bridge status is shown beside the page actions with its actual connection state and reported local endpoint. Setup remains a numbered three-step flow.
+- Theme cards preview the application sidebar, header, toolbar, download rows and status strip using each theme’s colors.
+- Settings controls use compact right-aligned inputs where appropriate. Existing preference storage and actions are unchanged.
 
-- Torrent output uses the torrent's real name, sanitized for Windows, instead of a UUID folder. Existing UUID-named folders are migrated when a torrent resumes.
-- HTTP chunk and partial files are written to a private per-transfer work folder outside your download destination. Only the finished, verified file appears in the destination, and resume data is kept until the transfer completes or is cancelled.
-- Clearing download history never removes downloaded files.
+## System tray
 
-## Downloads and navigation
+- Clicking the tray icon hides a visible window and restores/focuses a hidden or minimized window. The explicit **Show GetANNY** menu action always reveals it.
+- Closing the window to the tray is no longer undone by an OS activation event. Explicit user actions, browser requests and notifications can still reveal the window.
 
-- Native multiple selection with Ctrl-click, Shift-click, select all, long-press on touch, and Escape to exit.
-- Clear history offers selected items, completed downloads, failed downloads, or all history, with a confirmation that names the scope.
-- A single Back control returns from a detail sheet or workspace subsection without reloading and preserves filters.
+## Distribution and verification
 
-## Studio and Media
+The Windows release includes the NSIS installer, MSI, portable executable, eight browser extension ZIPs, the staged distribution bundle, installation guides, measured Windows test evidence and SHA-256 checksums. This build is unsigned unless the release evidence says otherwise; an icon is not a signature. Firefox packages remain unsigned development ZIPs and require Mozilla signing for permanent installation.
 
-- The active link is shown in its own field with a subtle X button that clears the link and the related analysis state immediately.
-
-## Languages
-
-- Complete interface translations for English, Arabic, French and Spanish.
-- Language switcher beside the theme control; changes apply immediately and persist.
-- Arabic switches the interface to right-to-left, with browser metadata, URLs and file names kept left-to-right and readable.
-
-The localization layer is centralized and falls back to English, so additional languages can be added without touching components. This release does **not** yet ship complete translations for every language on IDM's list; four locales are complete, and the remaining languages are future work rather than machine-translated placeholders.
-
-## Branding
-
-The floating video-page button now uses the official GetANNY eagle/shield mark and wordmark instead of a generic download glyph.
-
-## Packages
-
-Windows EXE (NSIS), MSI, portable build, eight browser packages, one complete Windows bundle ZIP, documentation and SHA-256 checksums.
-
-**Unsigned:** no code-signing certificate was available. Verify checksums before running. Firefox packages are unsigned development ZIPs. Reload or reinstall the browser extension after updating so the automatic interception changes take effect.
-
-## Verification
-
-All 97 automated tests pass, including real yt-dlp/FFmpeg lifecycle tests, browser handoff and reconciliation tests, private temp storage, torrent naming migration, history scopes and settings migration. The renderer production build succeeds. Windows packages are assembled from freshly built output with verified ZIP contents and checksums.
+Local verification for this source: 102 backend tests passed, including real yt-dlp/FFmpeg media and transfer lifecycle checks. The live Chromium preview passed 13 UI checks at 1320, 1024, 760 and 480 px, with 22 screenshots and no renderer errors. These results do not substitute for installed-app and browser gates; see `MEASURED_RESULTS.md` attached to the release for the exact Windows CI outcome.

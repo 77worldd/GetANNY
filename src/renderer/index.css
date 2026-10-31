@@ -4880,3 +4880,230 @@ html.theme-transition *::after {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+/* Compact, single-row download controls with an overflow-safe filter group. */
+.page {
+  padding-top: 16px;
+}
+.page-header {
+  margin-bottom: 16px;
+}
+.library-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 7px 12px;
+}
+.library-toolbar .search-input {
+  flex: 0 1 190px;
+  max-width: 210px;
+}
+.library-toolbar .category-tabs {
+  display: flex;
+  align-items: center;
+  flex: 1 1 250px;
+  min-width: 80px;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.library-toolbar .category-tabs button {
+  padding: 9px 0 8px;
+}
+.statusbar > div {
+  min-width: 0;
+}
+.statusbar > div:last-child {
+  justify-content: flex-end;
+}
+
+/* Settings inputs stay compact and align consistently at the end of each row. */
+.setting-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.setting-control select {
+  max-width: min(200px, 45vw);
+}
+.setting-control input[type="time"] {
+  width: 120px;
+  max-width: 100%;
+  text-align: right;
+}
+.number-control {
+  width: 120px;
+  max-width: 100%;
+  min-width: 0;
+}
+.number-control input {
+  width: 100%;
+  min-width: 0;
+}
+
+/* The theme card shows the app chrome, list rows and persistent status strip. */
+.theme-preview {
+  height: 124px;
+}
+.theme-preview-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 7px 8px 0;
+}
+.theme-preview-title {
+  height: 11px;
+  flex-shrink: 0;
+  margin-bottom: 6px;
+}
+.theme-preview-title span {
+  width: 38%;
+  height: 5px;
+}
+.theme-preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 13px;
+  padding: 2px 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: 3px 3px 0 0;
+  flex-shrink: 0;
+}
+.theme-preview-toolbar i {
+  width: 15px;
+  height: 4px;
+  border-radius: 2px;
+}
+.theme-preview-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 3px;
+  flex: 1;
+  min-height: 0;
+  padding: 4px 5px;
+  border-top: 0;
+  border-radius: 0;
+}
+.theme-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  height: 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.theme-preview-row i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  opacity: 0.8;
+}
+.theme-preview-row span {
+  width: 46%;
+  height: 3px;
+  border-radius: 3px;
+  opacity: 0.55;
+}
+.theme-preview-row b {
+  width: 19%;
+  height: 4px;
+  margin-left: auto;
+  border-radius: 2px;
+}
+.theme-preview-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 10px;
+  margin: 0 -8px;
+  padding: 0 5px;
+  border-top: 1px solid;
+  flex-shrink: 0;
+}
+.theme-preview-status i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+.theme-preview-status span {
+  width: 17%;
+  height: 3px;
+  border-radius: 3px;
+}
+.theme-preview-status div {
+  width: 23%;
+  height: 3px;
+  margin-left: auto;
+  border-radius: 3px;
+}
+.bridge-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--secondary);
+  font-size: 9px;
+  white-space: nowrap;
+}
+.bridge-status-pill strong {
+  color: var(--text);
+  font-weight: 550;
+}
+.bridge-status-pill .bridge-name {
+  color: var(--muted);
+}
+.bridge-status-pill .mono {
+  padding-left: 7px;
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 8px;
+}
+.bridge-status-pill.error,
+.bridge-status-pill.error strong {
+  border-color: var(--red);
+  color: var(--red);
+}
+.bridge-status-pill.error .live-dot {
+  background: var(--red);
+  box-shadow: none;
+}
+
+@media (max-width: 1180px) {
+  .library-toolbar {
+    flex-wrap: wrap;
+  }
+  .library-toolbar .category-tabs {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .library-toolbar .toolbar-actions {
+    margin-left: auto;
+  }
+}
+@media (max-width: 760px) {
+  .page {
+    padding: 14px 16px 20px;
+  }
+  .library-toolbar .search-input {
+    flex: 1 1 140px;
+    max-width: none;
+  }
+  .library-toolbar .toolbar-actions {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  .bridge-status-pill .mono {
+    display: none;
+  }
+}

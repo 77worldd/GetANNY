@@ -109,8 +109,42 @@ export default function BrowserPage() {
       <PageHeader
         eyebrow={t("browser.eyebrow")}
         title={t("browser.title")}
-        description={t("browser.description")}
       >
+        <span
+          className={`bridge-status-pill ${
+            info?.websocket.error
+              ? "error"
+              : info?.websocket.clients > 0
+                ? "connected"
+                : info?.websocket.running && info?.websocket.enabled
+                  ? "listening"
+                  : "offline"
+          }`}
+          role="status"
+        >
+          <span className="bridge-name">{t("browser.bridge")}</span>
+          <span
+            className={`live-dot ${info?.websocket.clients > 0 ? "live" : ""}`}
+          />
+          <strong>
+            {info?.websocket.error
+              ? t("browser.error")
+              : info?.websocket.clients > 0
+                ? t("browser.verifiedMany", {
+                    count: info.websocket.clients,
+                  })
+                : info?.websocket.running && info?.websocket.enabled
+                  ? t("browser.listening")
+                  : info?.websocket.enabled === false
+                    ? t("browser.disabled")
+                    : info
+                      ? t("browser.offline")
+                      : t("browser.checking")}
+          </strong>
+          <span className="mono">
+            127.0.0.1:{info?.websocket.port ?? "—"}
+          </span>
+        </span>
         <Button
           icon={LuRefreshCw}
           busy={refreshing}
@@ -174,35 +208,6 @@ export default function BrowserPage() {
         </div>
       )}
       {error && <ErrorBanner>{error}</ErrorBanner>}
-      <div className="bridge-health">
-        <div>
-          <span
-            className={`live-dot ${info?.websocket.running && info?.websocket.enabled ? "live" : ""}`}
-          />
-          <span>{t("browser.bridge")}</span>
-          <strong>
-            {info
-              ? info.websocket.running && info.websocket.enabled
-                ? t("browser.listening")
-                : info.websocket.enabled
-                  ? t("browser.offline")
-                  : t("browser.disabled")
-              : t("browser.checking")}
-          </strong>
-        </div>
-        <span className="mono">127.0.0.1:{info?.websocket.port || 29615}</span>
-        <div>
-          <LuShieldCheck />
-          <span>
-            {t(
-              info?.websocket.clients === 1
-                ? "browser.verifiedOne"
-                : "browser.verifiedMany",
-              { count: info?.websocket.clients || 0 },
-            )}
-          </span>
-        </div>
-      </div>
       {info?.websocket.error && (
         <ErrorBanner>{info.websocket.error}</ErrorBanner>
       )}

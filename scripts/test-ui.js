@@ -59,9 +59,7 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
     await page.getByRole("button", { name: "I’ll set this up later" }).click();
     await nav("All downloads").click();
     async function add(url, filename) {
-      await page
-        .getByRole("button", { name: "New download", exact: true })
-        .click();
+      await nav("New download").click();
       await page.getByLabel("Download link", { exact: true }).fill(url);
       await page.getByLabel("File name", { exact: true }).fill(filename);
       await page
@@ -278,7 +276,7 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
       ["system", "dark"],
     ]) {
       await page.emulateMedia({ colorScheme });
-      await page.locator(".theme-quick-button").click();
+      await page.locator('.theme-quick-button[aria-label*="Change theme"]').click();
       await page
         .getByRole("menuitemradio", {
           name:
@@ -344,7 +342,7 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
       .getByRole("button", { name: "Apply Nord theme", exact: true })
       .click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "nord");
-    await page.locator(".theme-quick-button").click();
+    await page.locator('.theme-quick-button[aria-label*="Change theme"]').click();
     await page
       .getByRole("menuitemradio", { name: "Ocean", exact: true })
       .click();
@@ -400,9 +398,7 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
     await page.setViewportSize({ width: 1320, height: 860 });
     await nav("All downloads").click();
     // Keyboard dialog trap, Escape, and no accidental submission by Browse/Cancel.
-    await page
-      .getByRole("button", { name: "New download", exact: true })
-      .click();
+    await nav("New download").click();
     await page
       .getByLabel("Download link", { exact: true })
       .fill(fixture.url + "/file.bin");
@@ -420,9 +416,7 @@ const base = process.env.GETANNY_PREVIEW_URL || "http://127.0.0.1:5173";
     ).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(
-      page.getByRole("button", { name: "New download", exact: true }),
-    ).toBeFocused();
+    await expect(nav("New download")).toBeFocused();
     if (errors.length) throw new Error(errors.join("\n"));
     const report = {
       passed: true,

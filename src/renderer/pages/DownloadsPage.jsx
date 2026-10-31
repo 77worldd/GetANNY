@@ -19,7 +19,6 @@ import {
   LuX,
   LuInfo,
   LuCopy,
-  LuDownload,
   LuFileArchive,
   LuFileText,
   LuFile,
@@ -33,7 +32,6 @@ import {
   LuCircleAlert,
   LuMagnet,
   LuSquareCheck,
-  LuArrowLeft,
   LuMinus,
 } from "react-icons/lu";
 import { api, errorMessage } from "../api";
@@ -46,13 +44,7 @@ import {
 } from "../components/ui";
 import useDownloadStore from "../stores/useDownloadStore";
 import useUIStore from "../stores/useUIStore";
-import {
-  active,
-  bytes,
-  duration,
-  percent,
-  shortHost,
-} from "../utils/format";
+import { active, bytes, duration, percent, shortHost } from "../utils/format";
 import { useI18n } from "../i18n/useI18n";
 const icons = {
   Archives: LuFileArchive,
@@ -63,12 +55,12 @@ const icons = {
   Images: LuImage,
 };
 const titleKeys = {
-  all: ["downloads.all.title", "downloads.all.description"],
-  active: ["downloads.active.title", "downloads.active.description"],
-  completed: ["downloads.completed.title", "downloads.completed.description"],
-  paused: ["downloads.paused.title", "downloads.paused.description"],
-  failed: ["downloads.failed.title", "downloads.failed.description"],
-  torrent: ["downloads.torrent.title", "downloads.torrent.description"],
+  all: "downloads.all.title",
+  active: "downloads.active.title",
+  completed: "downloads.completed.title",
+  paused: "downloads.paused.title",
+  failed: "downloads.failed.title",
+  torrent: "downloads.torrent.title",
 };
 function ContextMenu({ position, actions, onClose, label }) {
   const ref = useRef();
@@ -605,7 +597,11 @@ function DownloadRow({
   );
 }
 const MemoDownloadRow = React.memo(DownloadRow);
-export default function DownloadsPage({ filter, active: visible = true }) {
+export default function DownloadsPage({
+  filter,
+  active: visible = true,
+  platform,
+}) {
   const { t } = useI18n();
   const downloads = useDownloadStore((state) => state.downloads);
   const [search, setSearch] = useState(""),
@@ -617,9 +613,7 @@ export default function DownloadsPage({ filter, active: visible = true }) {
     [historyMenu, setHistoryMenu] = useState(null);
   const anchor = useRef(null);
   const selectionMode = selected.size > 0;
-  const [titleKey, descriptionKey] = titleKeys[filter] || titleKeys.all;
-  const title = t(titleKey),
-    description = t(descriptionKey);
+  const title = t(titleKeys[filter] || titleKeys.all);
   const base = useMemo(
     () =>
       downloads.filter(
@@ -809,12 +803,6 @@ export default function DownloadsPage({ filter, active: visible = true }) {
     danger: scope === "all",
     run: () => clearScope(scope),
   }));
-  const transferring = downloads.filter(active),
-    speed = transferring.reduce(
-      (sum, item) =>
-        sum + (item.status === "downloading" ? item.speed || 0 : 0),
-      0,
-    );
   const pauseAll = async () => {
     setBulkBusy(true);
     try {
@@ -840,49 +828,7 @@ export default function DownloadsPage({ filter, active: visible = true }) {
       <PageHeader
         eyebrow={t("downloads.eyebrow")}
         title={title}
-        description={description}
-      >
-        <Button
-          icon={LuPlus}
-          variant="primary"
-          onClick={() =>
-            useUIStore
-              .getState()
-              .setAddModal(filter === "torrent" ? { torrent: true } : {})
-          }
-        >
-          {filter === "torrent"
-            ? t("downloads.addTorrent")
-            : t("downloads.newDownload")}
-        </Button>
-      </PageHeader>
-      <div className="transfer-summary">
-        <div>
-          <span className={`live-dot ${transferring.length ? "live" : ""}`} />
-          <strong>{transferring.length}</strong>
-          <span>{t("downloads.transferring")}</span>
-        </div>
-        <div>
-          <LuDownload />
-          <strong>{speed > 0 ? `${bytes(speed)}/s` : "—"}</strong>
-          <span>{t("downloads.currentSpeed")}</span>
-        </div>
-        <div>
-          <LuCheck />
-          <strong>
-            {downloads.filter((item) => item.status === "completed").length}
-          </strong>
-          <span>{t("downloads.completedCount")}</span>
-        </div>
-        <span className="summary-label">
-          {t(
-            downloads.length === 1
-              ? "downloads.libraryCountOne"
-              : "downloads.libraryCountMany",
-            { count: downloads.length },
-          )}
-        </span>
-      </div>
+      />
       <div className="library-panel">
         <div className="library-toolbar">
           <div className="search-input">
@@ -901,6 +847,42 @@ export default function DownloadsPage({ filter, active: visible = true }) {
                 <LuX />
               </IconButton>
             )}
+          </div>
+          <div
+            className="category-tabs"
+            role="group"
+            aria-label={t("downloads.filterType")}
+          >
+            {[
+              ["All files", "downloads.allFiles"],
+              ["Video", "downloads.category.video"],
+              ["Audio", "downloads.category.audio"],
+              ["Archives", "downloads.category.archives"],
+              ["Documents", "downloads.category.documents"],
+              ["Applications", "downloads.category.applications"],
+              ["Images", "downloads.category.images"],
+              ["Other", "downloads.category.other"],
+            ]
+              .filter(
+                ([name]) =>
+                  [
+                    "All files",
+                    "Video",
+                    "Audio",
+                    "Archives",
+                    "Documents",
+                  ].includes(name) || base.some((item) => item.category === name),
+              )
+              .map(([name, key]) => (
+                <button
+                  className={category === name ? "selected" : ""}
+                  key={name}
+                  onClick={() => setCategory(name)}
+                >
+                  {t(key)}
+                  {name === "All files" && <span>{base.length}</span>}
+                </button>
+              ))}
           </div>
           <div className="toolbar-actions">
             <Button
@@ -942,42 +924,6 @@ export default function DownloadsPage({ filter, active: visible = true }) {
               {t("downloads.clearHistory")}
             </Button>
           </div>
-        </div>
-        <div
-          className="category-tabs"
-          role="group"
-          aria-label={t("downloads.filterType")}
-        >
-          {[
-            ["All files", "downloads.allFiles"],
-            ["Video", "downloads.category.video"],
-            ["Audio", "downloads.category.audio"],
-            ["Archives", "downloads.category.archives"],
-            ["Documents", "downloads.category.documents"],
-            ["Applications", "downloads.category.applications"],
-            ["Images", "downloads.category.images"],
-            ["Other", "downloads.category.other"],
-          ]
-            .filter(
-              ([name]) =>
-                [
-                  "All files",
-                  "Video",
-                  "Audio",
-                  "Archives",
-                  "Documents",
-                ].includes(name) || base.some((item) => item.category === name),
-            )
-            .map(([name, key]) => (
-              <button
-                className={category === name ? "selected" : ""}
-                key={name}
-                onClick={() => setCategory(name)}
-              >
-                {t(key)}
-                {name === "All files" && <span>{base.length}</span>}
-              </button>
-            ))}
         </div>
         {selectionMode && (
           <div className="selection-bar" role="status">
@@ -1088,8 +1034,8 @@ export default function DownloadsPage({ filter, active: visible = true }) {
               <span className="keyboard-hint">
                 {filter === "all" && (
                   <>
-                    {t("downloads.quickAdd")} <kbd>Ctrl</kbd>
-                    <kbd>N</kbd>
+                    {t("downloads.quickAdd")}{" "}
+                    <kbd>{platform === "darwin" ? "⌘N" : "Ctrl + N"}</kbd>
                   </>
                 )}
               </span>

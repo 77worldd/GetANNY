@@ -23,8 +23,6 @@ import {
   LuWifiOff,
   LuLoaderCircle,
   LuRefreshCw,
-  LuArrowLeft,
-  LuArrowRight,
 } from "react-icons/lu";
 import { api, errorMessage } from "./api";
 import { useIPC } from "./hooks/useIPC";
@@ -52,7 +50,7 @@ const navigation = [
   ["failed", LuCircleAlert, "nav.failed"],
 ];
 const downloadTabs = navigation.map(([id]) => id);
-function Sidebar({ bridge, version }) {
+function Sidebar({ bridge, version, platform }) {
   const { t } = useI18n();
   const tab = useUIStore((state) => state.activeTab),
     setTab = useUIStore((state) => state.setActiveTab);
@@ -89,7 +87,7 @@ function Sidebar({ bridge, version }) {
           onClick={() => useUIStore.getState().setAddModal({})}
         >
           {t("shell.newDownload")}
-          <kbd>⌘ / Ctrl N</kbd>
+          <kbd>{platform === "darwin" ? "⌘N" : "Ctrl + N"}</kbd>
         </Button>
       </div>
       <nav aria-label="Main navigation">
@@ -166,6 +164,9 @@ function StatusBar({ version }) {
   const { t } = useI18n();
   const downloads = useDownloadStore((state) => state.downloads);
   const transferring = downloads.filter(active);
+  const completed = downloads.filter(
+    (item) => item.status === "completed",
+  ).length;
   const speed = transferring.reduce(
     (sum, item) => sum + (item.status === "downloading" ? item.speed || 0 : 0),
     0,
@@ -180,13 +181,18 @@ function StatusBar({ version }) {
         <span className="status-separator">/</span>
         <span>
           {t("shell.queued", {
-            count: downloads.filter((item) => item.status === "queued").length,
+          count: downloads.filter((item) =>
+            ["queued", "retrying"].includes(item.status),
+          ).length,
           })}
         </span>
       </div>
       <div>
         <LuArrowDown />
         {speed > 0 ? `${bytes(speed)}/s` : "0 B/s"}
+        <span className="status-separator">/</span>
+        <LuCircleCheck />
+        <span>{completed} {t("downloads.completedCount")}</span>
         <span className="status-separator">/</span>
         <span>
           {t("shell.storedLocally")} · {version}
@@ -225,9 +231,7 @@ export default function App() {
     addModal = useUIStore((state) => state.addModal),
     setAddModal = useUIStore((state) => state.setAddModal),
     detailId = useUIStore((state) => state.details),
-    requests = useUIStore((state) => state.browserRequests),
-    tabHistory = useUIStore((state) => state.tabHistory),
-    goBack = useUIStore((state) => state.goBack);
+    requests = useUIStore((state) => state.browserRequests);
   const settings = useSettingsStore((state) => state.settings);
   const [visited, setVisited] = useState(() => new Set(["all"]));
   useEffect(() => {
@@ -401,26 +405,12 @@ export default function App() {
       {boot ? (
         <>
           <div className="app-body">
-            <Sidebar bridge={bridge} version={boot.version} />
+            <Sidebar
+              bridge={bridge}
+              version={boot.version}
+              platform={boot.platform}
+            />
             <main className="main-content" id="main-content">
-              {(tabHistory.length > 0 || detailId) && (
-                <div className="context-bar">
-                  <button
-                    type="button"
-                    className="back-button"
-                    title={t("shell.backTitle")}
-                    onClick={() => {
-                      // A detail sheet is the deepest view; back closes it
-                      // before returning to the previous section.
-                      if (detailId) useUIStore.getState().setDetails(null);
-                      else goBack();
-                    }}
-                  >
-                    {rtl ? <LuArrowRight /> : <LuArrowLeft />}
-                    <span>{t("shell.back")}</span>
-                  </button>
-                </div>
-              )}
               {!api.desktop && (
                 <div className="preview-strip">
                   <LuMonitor />
@@ -464,7 +454,11 @@ export default function App() {
                       key={id}
                       aria-hidden={tab !== id}
                     >
-                      <DownloadsPage filter={id} active={tab === id} />
+                      <DownloadsPage
+                        filter={id}
+                        active={tab === id}
+                        platform={boot.platform}
+                      />
                     </div>
                   ),
               )}
@@ -474,7 +468,11 @@ export default function App() {
                   hidden={tab !== "torrent"}
                   aria-hidden={tab !== "torrent"}
                 >
-                  <DownloadsPage filter="torrent" active={tab === "torrent"} />
+                  <DownloadsPage
+                    filter="torrent"
+                    active={tab === "torrent"}
+                    platform={boot.platform}
+                  />
                 </div>
               )}
               {(visited.has("media") || tab === "media") && (

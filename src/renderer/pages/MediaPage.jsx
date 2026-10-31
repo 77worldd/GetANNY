@@ -142,7 +142,6 @@ export default function MediaPage({ tools }) {
       <PageHeader
         eyebrow={t("media.eyebrow")}
         title={t("media.title")}
-        description={t("media.description")}
       >
         <span className={`engine-label ${tools.ytdlp ? "ready" : ""}`}>
           <span className="status-dot" />

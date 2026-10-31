@@ -139,7 +139,6 @@ export default function SettingsPage({ capabilities, version }) {
       <PageHeader
         eyebrow={t("settings.eyebrow")}
         title={t("settings.title")}
-        description={t("settings.description")}
       >
         <span className="save-indicator">
           {saving ? (
